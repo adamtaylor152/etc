@@ -6,6 +6,9 @@ import { businessId, db } from "@/server/db";
 import { env } from "@/server/env";
 import { money } from "@/server/money";
 
+// Prices come from the database, so render per request (never prerendered at build time, when the DB may be empty).
+export const dynamic = "force-dynamic";
+
 export const metadata = { title: { absolute: "Book · etc. snow shovelling & odd jobs" }, robots: { index: true, follow: true } };
 
 export default async function Book() {
