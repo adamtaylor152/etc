@@ -1,6 +1,6 @@
 // Sidebar + Create menu entries. Add items here as pages land.
 import {
-  Activity, Phone, UserPlus, Banknote, CalendarDays, FileText, Hammer, Home, Inbox, LineChart, MapPinned, MessageSquare, Receipt, Settings, Snowflake, Users,
+  Activity, ListTodo, Phone, UserPlus, Banknote, CalendarDays, FileText, Hammer, Home, Inbox, LineChart, MapPinned, MessageSquare, Receipt, Settings, Snowflake, Users,
   type LucideIcon,
 } from "lucide-react";
 
@@ -10,6 +10,7 @@ export const NAV: NavItem[][] = [
   [
     { href: "/", label: "Home", icon: Home },
     { href: "/schedule", label: "Schedule", icon: CalendarDays },
+    { href: "/tasks", label: "Tasks", icon: ListTodo },
     { href: "/clients", label: "Clients", icon: Users },
   ],
   [
@@ -37,6 +38,7 @@ export const CREATE: CreateItem[] = [
   { href: "/clients/new", label: "Client", icon: UserPlus, color: "text-navy" },
   { href: "/quotes/new", label: "Quote", icon: FileText, color: "text-rose-700" },
   { href: "/jobs/new", label: "Job", icon: Hammer, color: "text-emerald-700" },
+  { href: "/tasks/new", label: "Task", icon: ListTodo, color: "text-navy" },
   { href: "/messages/new", label: "Text message", icon: MessageSquare, color: "text-blue" },
   { href: "/calls/new", label: "Log a call", icon: Phone, color: "text-violet-700" },
   { href: "/snow", label: "Storm", icon: Snowflake, color: "text-sky-700" },

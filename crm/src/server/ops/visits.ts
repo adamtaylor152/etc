@@ -136,3 +136,20 @@ export async function deleteVisit(user: Actor, visitId: string) {
   if (v.state === "COMPLETED" || v.charges.length) throw new TransitionError("Completed visits can't be deleted; reopen it first");
   await db.visit.delete({ where: { id: visitId } });
 }
+
+/** Calendar drag with times (week/day view): date + optional start/end; no time = anytime that day. */
+export async function rescheduleVisitTimed(user: Actor, visitId: string, m: { date: string | null; startAt?: Date | null; endAt?: Date | null }) {
+  await scheduleTx(user, visitId, m.date);
+  await db.visit.update({ where: { id: visitId }, data: { startAt: m.startAt ?? null, endAt: m.endAt ?? null, anytime: !m.startAt } });
+  kickOutbox();
+}
+
+/** Who's on a visit. */
+export async function setVisitAssignees(user: Actor, visitId: string, userIds: string[]) {
+  await db.visit.findFirstOrThrow({ where: { id: visitId, businessId: user.businessId } });
+  const ok = await db.user.findMany({ where: { id: { in: userIds }, businessId: user.businessId }, select: { id: true } });
+  await db.$transaction([
+    db.visitAssignee.deleteMany({ where: { visitId } }),
+    db.visitAssignee.createMany({ data: ok.map((u) => ({ visitId, userId: u.id })) }),
+  ]);
+}

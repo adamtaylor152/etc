@@ -249,11 +249,16 @@ model User {
   business    Business  @relation(fields: [businessId], references: [id])
   email       String
   name        String?
+  phone       String?
+  color       String    @default("#1d6fd8") // their colour on the schedule
+  hourlyCostCents Int   @default(0) // what an hour of their time costs (job profit)
   role        UserRole  @default(OWNER)
   active      Boolean   @default(true)
   lastLoginAt DateTime?
   createdAt   DateTime  @default(now())
   sessions    Session[]
+  visitAssignments VisitAssignee[]
+  taskAssignments  TaskAssignee[]
 
   @@unique([businessId, email])
 }
@@ -638,6 +643,7 @@ model Visit {
   enRouteAt              DateTime?
   arrivedAt              DateTime?
   completedAt            DateTime?
+  assignees              VisitAssignee[]
   completedById          String?
   completedLat           Float?
   completedLng           Float?
@@ -990,4 +996,55 @@ model CallLog {
   createdAt   DateTime      @default(now())
 
   @@index([businessId, clientId, startedAt])
+}
+
+model VisitAssignee {
+  visitId String
+  visit   Visit  @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  userId  String
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([visitId, userId])
+  @@index([userId])
+}
+
+enum TaskKind {
+  TASK // a to-do, optionally for a client/job
+  EVENT // a block on the calendar (day off, supply run)
+}
+
+/** Basic tasks and calendar events. Repeating ones are materialized as a series (seriesId) up to a year out. */
+model Task {
+  id           String    @id @default(cuid())
+  businessId   String
+  kind         TaskKind  @default(TASK)
+  title        String
+  instructions String?
+  clientId     String?
+  propertyId   String?
+  jobId        String?
+  date         DateTime? @db.Date
+  startAt      DateTime?
+  endAt        DateTime?
+  allDay       Boolean   @default(true)
+  repeat       String? // "DAILY" | "WEEKLY" | "BIWEEKLY" | "MONTHLY" (series template)
+  seriesId     String?
+  completedAt  DateTime?
+  createdById  String?
+  createdAt    DateTime  @default(now())
+  assignees    TaskAssignee[]
+
+  @@index([businessId, date])
+  @@index([businessId, clientId])
+  @@index([seriesId])
+}
+
+model TaskAssignee {
+  taskId String
+  task   Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, userId])
+  @@index([userId])
 }

@@ -62,3 +62,15 @@ describe("Telnyx call records", () => {
     expect(cdrToCall({ id: "4", direction: "inbound", cli: "+15550000000", cld: "+18254794500", call_sec: 5 }, ours)).toBeNull();
   });
 });
+
+import { seriesDates } from "@/server/ops/tasks";
+describe("task repeats", () => {
+  it("builds daily, weekly, every-2-weeks and monthly series, capped at a year", () => {
+    expect(seriesDates("2026-12-01", null)).toEqual(["2026-12-01"]);
+    expect(seriesDates("2026-12-01", "WEEKLY", "2026-12-22")).toEqual(["2026-12-01", "2026-12-08", "2026-12-15", "2026-12-22"]);
+    expect(seriesDates("2026-12-01", "BIWEEKLY", "2026-12-31")).toEqual(["2026-12-01", "2026-12-15", "2026-12-29"]);
+    expect(seriesDates("2027-01-31", "MONTHLY", "2027-04-30")).toEqual(["2027-01-31", "2027-02-28", "2027-03-31", "2027-04-30"]);
+    expect(seriesDates("2026-12-01", "DAILY").length).toBe(120);
+    expect(seriesDates("2026-12-01", "WEEKLY").length).toBe(53);
+  });
+});

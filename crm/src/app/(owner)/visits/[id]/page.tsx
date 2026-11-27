@@ -1,3 +1,5 @@
+import { assignPeople } from "../../schedule-actions";
+import { team } from "@/server/schedule";
 // Field view: what Silas sees standing in the driveway. Big buttons, everything on one screen.
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -28,7 +30,7 @@ export default async function VisitPage({ params, searchParams }: PageProps<"/vi
   const v = await db.visit.findFirst({
     where: { id, businessId: bid },
     include: {
-      job: { include: { client: true, lineItems: true } }, property: { include: { community: true } }, snowEvent: true, charges: true,
+      job: { include: { client: true, lineItems: true } }, property: { include: { community: true } }, snowEvent: true, charges: true, assignees: true,
       attachments: { where: { deletedAt: null }, orderBy: { createdAt: "asc" } },
     },
   });
@@ -52,6 +54,7 @@ export default async function VisitPage({ params, searchParams }: PageProps<"/vi
 
   const hidden = (to: string) => <><input type="hidden" name="id" value={v.id} /><input type="hidden" name="to" value={to} /><input type="hidden" name="back" value={here} /></>;
 
+  const people = await team(v.businessId);
   return (
     <div className="mx-auto max-w-xl">
       <Flash error={sp.error} />
@@ -78,6 +81,13 @@ export default async function VisitPage({ params, searchParams }: PageProps<"/vi
       )}
 
 
+      <Card title="Who's on it" className="my-4">
+        <form action={assignPeople} className="flex flex-wrap items-center gap-3">
+          <input type="hidden" name="kind" value="visit" /><input type="hidden" name="id" value={v.id} /><input type="hidden" name="back" value={`/visits/${v.id}`} />
+          {people.map((p) => <label key={p.id} className="flex items-center gap-1.5 text-sm"><input type="checkbox" name="userId" value={p.id} defaultChecked={v.assignees.some((a) => a.userId === p.id)} className="size-4" /><span className="size-2.5 rounded-full" style={{ background: p.color }} />{p.name}</label>)}
+          <button className="rounded-lg border border-line px-3 py-1.5 text-sm font-semibold hover:bg-tint">Save</button>
+        </form>
+      </Card>
       <Card title="Before & after" className="my-4">
         <div className="grid grid-cols-2 gap-2">
           <PhotoUploader endpoint="/api/uploads" fields={{ visitId: v.id, kind: "BEFORE" }} label="Before" geo />
