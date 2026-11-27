@@ -4,7 +4,10 @@
 import { db } from "./db";
 import { env } from "./env";
 import { reminderDue } from "./billing/invoice";
-import { dateOnly, todayLocal, toDbDate, TZ } from "./dates";
+import { addDays, dateOnly, todayLocal, toDbDate, TZ } from "./dates";
+import { forecast, snowByDay } from "./forecast";
+import { parseSettings } from "./settings";
+import { plansTriggered } from "./snow/select";
 import { enqueue, processOutbox } from "./email/outbox";
 
 const TICK_MS = 60_000;
@@ -32,6 +35,30 @@ const LOCK_HOURLY = 724_001;
 async function hourly() {
   const hour = Number(new Intl.DateTimeFormat("en-CA", { timeZone: TZ, hour: "numeric", hourCycle: "h23" }).format(new Date()));
   if (hour >= 8 && hour < 20) await invoiceReminders(); // no reminder emails at night
+  if (hour >= 7 && hour < 22) await snowAlert();
+}
+
+/** Email owners once per snowy day when the forecast (today + tomorrow) meets at least one plan's trigger. */
+async function snowAlert() {
+  const biz = await db.business.findUnique({ where: { slug: env.businessSlug } });
+  if (!biz || !parseSettings(biz.settings).snowAlert) return;
+  const periods = await forecast();
+  if (!periods) return;
+  const today = todayLocal();
+  const days = snowByDay(periods).filter((d) => d.day === today || d.day === addDays(today, 1));
+  const season = await db.season.findFirst({ where: { businessId: biz.id, startsOn: { lte: toDbDate(today) }, endsOn: { gte: toDbDate(today) } } });
+  if (!season || !days.length) return;
+  const plans = await db.job.findMany({ where: { businessId: biz.id, kind: "SNOW_PLAN", seasonId: season.id, closedAt: null, planPausedAt: null }, select: { id: true, triggerCm: true, planPausedAt: true, closedAt: true } });
+  const peak = Math.max(...days.map((d) => d.cm));
+  const hit = plansTriggered(plans, Math.floor(peak), season.defaultTriggerCm).length;
+  if (!hit) return;
+  const first = days.find((d) => d.cm >= 1)!.day;
+  for (const to of env.ownerEmails) {
+    await enqueue(db, {
+      businessId: biz.id, template: "owner.snow_alert", to, priority: 3, dedupeKey: `snow-alert:${first}:${to}`,
+      props: { days: days.filter((d) => d.cm >= 0.5).map((d) => ({ label: d.day === today ? "Today" : "Tomorrow", cm: d.cm })), plans: hit },
+    });
+  }
 }
 
 async function invoiceReminders() {

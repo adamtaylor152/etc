@@ -12,6 +12,7 @@ const NAV = [
   { href: "/jobs", label: "Jobs", icon: "✓", phone: true },
   { href: "/clients", label: "Clients", icon: "☺", phone: true },
   { href: "/invoices", label: "Invoices", icon: "$", phone: false },
+  { href: "/settings", label: "Settings", icon: "⚙", phone: false },
 ];
 
 export default async function OwnerLayout({ children }: LayoutProps<"/">) {

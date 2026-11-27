@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { Suspense } from "react";
+import { SnowBanner } from "@/components/snow-banner";
 import { JobBadge, RequestBadge } from "@/components/status";
 import { Card, Empty, PageHeader } from "@/components/ui";
 import { prettyDate, prettyDateTime, todayLocal } from "@/server/dates";
@@ -26,6 +28,7 @@ export default async function Dashboard() {
   return (
     <>
       <PageHeader title="Today" sub={prettyDate(today)} />
+      <Suspense fallback={null}><SnowBanner businessId={bid} /></Suspense>
       <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[
           ["New requests", newRequests.length, "/requests"],
