@@ -17,11 +17,12 @@ export const smsFrom = () => toE164(process.env.TELNYX_FROM) ?? "";
 /** Keep texts short; carriers split long ones (and bill per segment). */
 export const clip = (s: string, max = 300) => (s.length > max ? s.slice(0, max - 1) + "…" : s);
 
-export async function sendSms(to: string, body: string): Promise<string> {
+/** Sends an SMS, or an MMS when mediaUrls is given (public URLs Telnyx fetches; we hand it signed links). */
+export async function sendSms(to: string, body: string, mediaUrls: string[] = []): Promise<string> {
   const res = await fetch("https://api.telnyx.com/v2/messages", {
     method: "POST",
     headers: { Authorization: `Bearer ${process.env.TELNYX_API_KEY}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ from: smsFrom(), to, text: body, ...(process.env.TELNYX_MESSAGING_PROFILE_ID ? { messaging_profile_id: process.env.TELNYX_MESSAGING_PROFILE_ID } : {}) }),
+    body: JSON.stringify({ from: smsFrom(), to, text: body, ...(mediaUrls.length ? { media_urls: mediaUrls } : {}), ...(process.env.TELNYX_MESSAGING_PROFILE_ID ? { messaging_profile_id: process.env.TELNYX_MESSAGING_PROFILE_ID } : {}) }),
     signal: AbortSignal.timeout(15_000),
   });
   const data = (await res.json().catch(() => ({}))) as { data?: { id?: string }; errors?: { detail?: string; title?: string }[] };
@@ -45,7 +46,7 @@ export function verifyTelnyx(rawBody: string, signatureB64: string | null, times
 }
 
 export type TelnyxEvent =
-  | { kind: "received"; id: string; from: string; to: string; text: string }
+  | { kind: "received"; id: string; from: string; to: string; text: string; type: string; media: { url: string; contentType: string }[] }
   | { kind: "status"; id: string; status: string; error: string | null }
   | { kind: "other" };
 
@@ -53,12 +54,14 @@ export type TelnyxEvent =
 export function parseTelnyxEvent(body: unknown): TelnyxEvent {
   const d = (body as { data?: { event_type?: string; payload?: Record<string, unknown> } })?.data;
   const p = d?.payload as {
-    id?: string; text?: string; from?: { phone_number?: string }; to?: { phone_number?: string; status?: string }[];
+    id?: string; text?: string; type?: string; media?: { url?: string; content_type?: string }[]; from?: { phone_number?: string }; to?: { phone_number?: string; status?: string }[];
     errors?: { detail?: string; title?: string }[];
   } | undefined;
   if (!d || !p?.id) return { kind: "other" };
   if (d.event_type === "message.received") {
-    return { kind: "received", id: p.id, from: toE164(p.from?.phone_number) ?? p.from?.phone_number ?? "", to: toE164(p.to?.[0]?.phone_number) ?? "", text: p.text ?? "" };
+    return { kind: "received", id: p.id, from: toE164(p.from?.phone_number) ?? p.from?.phone_number ?? "", to: toE164(p.to?.[0]?.phone_number) ?? "", text: p.text ?? "",
+      type: (p.type ?? "SMS").toUpperCase(),
+      media: (p.media ?? []).filter((m) => m.url?.startsWith("https://")).map((m) => ({ url: m.url!, contentType: m.content_type ?? "application/octet-stream" })) };
   }
   if (d.event_type === "message.sent" || d.event_type === "message.finalized") {
     return { kind: "status", id: p.id, status: p.to?.[0]?.status ?? "sent", error: p.errors?.[0]?.detail ?? p.errors?.[0]?.title ?? null };

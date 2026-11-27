@@ -1,6 +1,7 @@
 // In-process 60s tick. No queue library: state lives in Postgres, so restarts lose nothing.
 // The outbox is already safe across containers (SKIP LOCKED). Automations added later (reminders, snow alerts)
 // run inside `exclusive()`, a transaction-scoped advisory lock, plus per-message dedupe keys.
+import { retryTextMedia } from "./ops/texts";
 import { db } from "./db";
 import { env } from "./env";
 import { reminderDue } from "./billing/invoice";
@@ -25,6 +26,7 @@ export function startScheduler() {
 let lastHourly = 0;
 export async function tick() {
   await processOutbox();
+  await retryTextMedia();
   if (Date.now() - lastHourly > 3_600_000) {
     lastHourly = Date.now();
     await exclusive(LOCK_HOURLY, hourly);
