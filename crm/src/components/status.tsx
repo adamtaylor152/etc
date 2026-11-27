@@ -1,4 +1,4 @@
-import type { RequestStatus, SnowEventStatus } from "@/generated/prisma/client";
+import type { QuoteStatus, RequestStatus, SnowEventStatus } from "@/generated/prisma/client";
 import { JOB_STATUS_LABEL, VISIT_STATUS_LABEL, type JobStatus, type VisitStatus } from "@/server/status/job";
 import { Badge, type Tone } from "./ui";
 
@@ -29,3 +29,8 @@ const INVOICE: Record<InvoiceView, [string, Tone]> = {
 };
 export const InvoiceBadge = ({ s }: { s: InvoiceView }) => <Badge tone={INVOICE[s][1]}>{INVOICE[s][0]}</Badge>;
 export const INVOICE_LABEL = Object.fromEntries(Object.entries(INVOICE).map(([k, [l]]) => [k, l])) as Record<InvoiceView, string>;
+
+export const QUOTE: Record<QuoteStatus, [string, Tone]> = {
+  DRAFT: ["Draft", "gray"], AWAITING_RESPONSE: ["Awaiting response", "blue"], CHANGES_REQUESTED: ["Changes requested", "amber"],
+  APPROVED: ["Approved", "green"], CONVERTED: ["Converted to job", "green"], ARCHIVED: ["Archived", "gray"],
+};

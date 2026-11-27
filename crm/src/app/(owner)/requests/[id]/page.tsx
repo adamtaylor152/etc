@@ -64,7 +64,8 @@ export default async function RequestPage({ params, searchParams }: PageProps<"/
               <ul className="divide-y divide-line">
                 {r.jobs.map((j) => <li key={j.id}><Link href={`/jobs/${j.id}`} className="block py-2.5 font-semibold text-blue">Job #{j.number}: {j.title}</Link></li>)}
               </ul>
-            ) : <p className="text-sm text-ink-soft">Needs a quote. Quotes arrive in a later milestone; for now, reply to the customer from the booking email.</p>}
+            ) : <p className="text-sm text-ink-soft">This needs a quote.</p>}
+            <Link href={`/quotes/new?request=${r.id}`} className="mt-3 inline-flex min-h-11 items-center rounded-full border-2 border-blue bg-blue px-5 text-sm font-semibold text-white">Create quote</Link>
           </Card>
         </div>
         <Timeline notes={notes} events={events} target={{ requestId: r.id, clientId: r.clientId }} path={`/requests/${r.id}`} />

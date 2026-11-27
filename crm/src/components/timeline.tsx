@@ -13,6 +13,8 @@ const LABEL: Record<string, string> = {
   "payment.received": "Payment received", "payment.deleted": "Payment removed",
   "storm.created": "Storm created", "storm.started": "Storm started", "storm.depth": "Storm depth changed", "storm.push": "Another push added",
   "storm.finished": "Storm finished", "storm.cancelled": "Storm cancelled",
+  "quote.created": "Quote created", "quote.sent": "Quote sent", "quote.approved": "Quote approved", "quote.changes_requested": "Client asked for changes",
+  "quote.converted": "Quote converted to a job",
   "visit.scheduled": "Visit reopened", "visit.cancelled": "Visit cancelled", "visit.scheduled_for": "Visit rescheduled",
 };
 
