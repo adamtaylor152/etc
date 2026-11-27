@@ -310,6 +310,7 @@ model Client {
   tags             String[]
   notes            String?
   marketingOptOut  Boolean        @default(false)
+  smsOptIn         Boolean        @default(false) // client agreed to text updates (CRTC/CASL: opt-in, STOP honoured)
   emailBouncedAt   DateTime?
   archivedAt       DateTime?
   createdAt        DateTime       @default(now())

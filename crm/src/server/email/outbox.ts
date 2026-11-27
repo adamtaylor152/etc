@@ -5,6 +5,8 @@ import nodemailer, { type Transporter } from "nodemailer";
 import type { EmailMessage, Prisma } from "@/generated/prisma/client";
 import { db, type Db } from "../db";
 import { env } from "../env";
+import { clip, sendSms, smsEnabled, toE164 } from "../sms";
+import { smsTemplates, type SmsTemplateName } from "./sms-templates";
 import { templates, type PropsOf, type TemplateName } from "./templates";
 
 const MAX_ATTEMPTS = 6;
@@ -47,6 +49,7 @@ export async function renderMessage(m: Pick<EmailMessage, "template" | "props" |
 }
 
 async function sendOne(m: EmailMessage) {
+  if (m.template.startsWith("sms.")) return sendText(m);
   const tx = mailer();
   if (!tx) {
     console.info(`mail not configured, skipped: ${m.subject} -> ${m.to}`);
@@ -107,4 +110,37 @@ async function drain() {
 /** Fire-and-forget after a commit so mail goes out now instead of on the next tick. */
 export function kickOutbox() {
   processOutbox().catch((e) => console.error("outbox", e));
+}
+
+// ---------- texts ----------
+async function sendText(m: EmailMessage) {
+  if (!smsEnabled()) {
+    await db.emailMessage.update({ where: { id: m.id }, data: { status: "SUPPRESSED", lastError: "sms not configured" } });
+    return;
+  }
+  try {
+    const t = smsTemplates[m.template as SmsTemplateName];
+    if (!t) throw new Error(`unknown sms template ${m.template}`);
+    const sid = await sendSms(m.to, clip(await t(m.props as never, { businessId: m.businessId })));
+    await db.emailMessage.update({ where: { id: m.id }, data: { status: "SENT", sentAt: new Date(), providerMessageId: sid, lastError: null } });
+  } catch (e) {
+    const failed = m.attempts >= MAX_ATTEMPTS;
+    await db.emailMessage.update({
+      where: { id: m.id },
+      data: { status: failed ? "FAILED" : "QUEUED", lastError: String(e).slice(0, 1000), nextAttemptAt: new Date(Date.now() + Math.min(2 ** m.attempts, 120) * 60_000) },
+    });
+  }
+}
+
+/** Queue a text for a client who opted in. No-op otherwise. */
+export async function enqueueSms<T extends SmsTemplateName>(tx: Db, m: {
+  businessId: string; template: T; client: { id: string; phone: string | null; smsOptIn: boolean }; props: Parameters<(typeof smsTemplates)[T]>[0]; dedupeKey: string; entityType?: string; entityId?: string; sendAfter?: Date;
+}) {
+  const to = toE164(m.client.phone);
+  if (!m.client.smsOptIn || !to) return null;
+  const data = {
+    businessId: m.businessId, template: m.template, to, cc: [], subject: m.template, props: m.props as Prisma.InputJsonValue,
+    priority: 3, dedupeKey: m.dedupeKey, clientId: m.client.id, entityType: m.entityType, entityId: m.entityId, nextAttemptAt: m.sendAfter ?? new Date(),
+  };
+  return tx.emailMessage.upsert({ where: { businessId_dedupeKey: { businessId: m.businessId, dedupeKey: m.dedupeKey } }, create: data, update: {} });
 }

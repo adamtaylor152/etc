@@ -12,6 +12,7 @@ export const SettingsSchema = z.object({
   dailyDigest: z.boolean().default(false),          // 6am summary email to owners
   quoteFollowUp: z.boolean().default(true),         // nudge unanswered quotes after 3 days
   visitReminders: z.boolean().default(true),        // day-before reminder for scheduled (non-snow) visits
+  smsUpdates: z.boolean().default(true),            // texts (on my way, all done, storm day) to clients who opted in; needs Twilio keys
 });
 export type Settings = z.infer<typeof SettingsSchema>;
 
@@ -32,4 +33,5 @@ export const SETTING_LABELS: Record<keyof Settings, [string, string]> = {
   dailyDigest: ["6am daily digest", "Today’s visits, late work, unbilled charges and failed emails."],
   quoteFollowUp: ["Quote follow-up", "One reminder 3 days after sending if the client hasn’t answered."],
   visitReminders: ["Visit reminders", "Day-before reminder for scheduled visits (not snow)."],
+  smsUpdates: ["Text updates", "Texts “on the way”, “all done” (with photos link) and storm days to clients who said yes to texts. Needs Twilio keys."],
 };

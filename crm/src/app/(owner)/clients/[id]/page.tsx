@@ -58,13 +58,14 @@ export default async function ClientPage({ params, searchParams }: PageProps<"/c
                 <Field label="Phone"><Input name="phone" type="tel" defaultValue={c.phone ?? ""} /></Field>
                 <Field label="Tags" hint="Comma-separated, e.g. senior, corner lot"><Input name="tags" defaultValue={c.tags.join(", ")} /></Field>
                 <div className="sm:col-span-2"><Field label="Notes"><Textarea name="notes" rows={3} defaultValue={c.notes ?? ""} /></Field></div>
+                <label className="flex items-center gap-2 text-sm sm:col-span-2"><input type="checkbox" name="smsOptIn" defaultChecked={c.smsOptIn} className="size-5" /> Texts OK (client said yes to text updates)</label>
                 <label className="flex items-center gap-2 text-sm sm:col-span-2"><input type="checkbox" name="marketingOptOut" defaultChecked={c.marketingOptOut} className="size-5" /> No marketing emails (reviews, renewals)</label>
                 <div className="sm:col-span-2"><Button>Save</Button></div>
               </form>
             </Card>
           ) : (
             <Card title="Contact">
-              <Dl rows={[["Email", c.email], ["Phone", c.phone], ["Payment", c.preferredPayment === "ETRANSFER" ? "e-Transfer" : c.preferredPayment === "CASH" ? "Cash" : c.preferredPayment], ["Source", c.source.replaceAll("_", " ").toLowerCase()], ["Notes", c.notes]]} />
+              <Dl rows={[["Email", c.email], ["Phone", c.phone ? `${c.phone}${c.smsOptIn ? " · texts OK" : ""}` : null], ["Payment", c.preferredPayment === "ETRANSFER" ? "e-Transfer" : c.preferredPayment === "CASH" ? "Cash" : c.preferredPayment], ["Source", c.source.replaceAll("_", " ").toLowerCase()], ["Notes", c.notes]]} />
             </Card>
           )}
           <Card title="Properties">

@@ -9,7 +9,7 @@ import { signedMediaPath } from "@/server/media";
 import { money } from "@/server/money";
 import { mintToken, peekToken } from "@/server/tokens";
 import { renewalSeason } from "@/server/ops/jobs";
-import { hubPausePlan, hubRenewPlan, hubRequestWork } from "./actions";
+import { hubPausePlan, hubRenewPlan, hubRequestWork, hubSetTexts } from "./actions";
 
 export const metadata = { title: { absolute: "Your etc. page" } };
 
@@ -51,6 +51,7 @@ export default async function Hub({ params, searchParams }: PageProps<"/hub/[tok
       <h1 className="font-display text-3xl font-bold">Hi {c.firstName}!</h1>
       {owing > 0 && <Card className="border-blue/30"><p className="font-semibold">{money(owing)} owing. Pay from an invoice below.</p></Card>}
 
+      {sp.texts && <p className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 font-medium text-emerald-800">Text updates {sp.texts === "on" ? "turned on" : "turned off"}.</p>}
       {sp.renewed && <p className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 font-medium text-emerald-800">You&apos;re renewed. See you after the next snowfall!</p>}
       {canRenew && (
         <Card title={`Renew your snow plan for ${renewTo!.name}?`} className="border-blue/30">
@@ -110,6 +111,14 @@ export default async function Hub({ params, searchParams }: PageProps<"/hub/[tok
         </Card>
       )}
 
+      {c.phone && (
+        <Card title="Text updates">
+          <p className="text-sm">{c.smsOptIn ? `We text ${c.phone} when we're on the way and when the job's done.` : `Want a text at ${c.phone} when we're on the way and when the job's done?`}</p>
+          <form action={hubSetTexts} className="mt-3">{hidden}<input type="hidden" name="on" value={c.smsOptIn ? "0" : "1"} />
+            <button className="min-h-11 rounded-full border-2 border-line bg-white px-5 font-semibold">{c.smsOptIn ? "Stop texts" : "Yes, text me"}</button>
+          </form>
+        </Card>
+      )}
       <Card title="Need something else?">
         <form action={hubRequestWork} className="space-y-3">{hidden}
           <textarea name="notes" rows={3} required maxLength={2000} placeholder="e.g. Could you clean out the gutters and power wash the deck in spring?" className="w-full rounded-xl border border-line p-3" />

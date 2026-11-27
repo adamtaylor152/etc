@@ -5,7 +5,7 @@ import { dueDate } from "../billing/invoice";
 import { todayLocal, toDbDate } from "../dates";
 import { invoiceUnbilled } from "./invoices";
 import { db, type Tx } from "../db";
-import { enqueue, kickOutbox } from "../email/outbox";
+import { enqueue, enqueueSms, kickOutbox } from "../email/outbox";
 import { env } from "../env";
 import { logActivity } from "../records";
 import { getSettings } from "../settings";
@@ -75,6 +75,15 @@ function transitionTx(user: Actor, visitId: string, to: VisitState, extra: Trans
           dedupeKey: `visit:${visitId}:done`, sendAfter: new Date(Date.now() + 5 * 60_000), clientId: client.id, entityType: "Visit", entityId: visitId,
         });
       }
+    }
+    if ((to === "EN_ROUTE" || to === "COMPLETED") && (await getSettings(tx, user.businessId)).smsUpdates) {
+      const client = await tx.client.findUniqueOrThrow({ where: { id: v.job.clientId } });
+      await enqueueSms(tx, {
+        businessId: user.businessId, client, props: { visitId }, entityType: "Visit", entityId: visitId,
+        ...(to === "EN_ROUTE"
+          ? { template: "sms.on_my_way" as const, dedupeKey: `visit:${visitId}:sms-omw` }
+          : { template: "sms.visit_done" as const, dedupeKey: `visit:${visitId}:sms-done`, sendAfter: new Date(Date.now() + 5 * 60_000) }),
+      });
     }
     if (to === "EN_ROUTE" && (await getSettings(tx, user.businessId)).onMyWayEmail) {
       const client = await tx.client.findUniqueOrThrow({ where: { id: v.job.clientId } });

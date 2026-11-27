@@ -1,7 +1,7 @@
 // Storm operations (Aspire-style snow events). "Start storm" creates a visit for every every-snowfall plan
 // whose trigger the storm meets. Everything here is safe to re-run: visits are unique per (job, storm, push).
 import type { Prisma, SnowEvent } from "@/generated/prisma/client";
-import { enqueue } from "../email/outbox";
+import { enqueue, enqueueSms } from "../email/outbox";
 import { env } from "../env";
 import { forecast } from "../forecast";
 import { getSettings } from "../settings";
@@ -72,6 +72,12 @@ export async function startStorm(user: Actor, id: string, cm: number) {
     const created = await generate(tx, ev, cm, 1, day);
     // Keep what the forecast said, for "you said it would snow" conversations.
     if (periods && !ev.forecastSnapshot) await tx.snowEvent.update({ where: { id }, data: { forecastSnapshot: periods.slice(0, 48) as unknown as Prisma.InputJsonValue } });
+    if ((await getSettings(tx, user.businessId)).smsUpdates) {
+      const plans = await tx.visit.findMany({ where: { snowEventId: id, pushNumber: 1, job: { kind: "SNOW_PLAN" } }, include: { job: { include: { client: true } } } });
+      for (const v of plans) {
+        await enqueueSms(tx, { businessId: user.businessId, template: "sms.storm_heads_up", client: v.job.client, props: { visitId: v.id }, dedupeKey: `storm:${id}:sms:${v.job.clientId}`, entityType: "SnowEvent", entityId: id });
+      }
+    }
     if ((await getSettings(tx, user.businessId)).stormHeadsUp) {
       const visits = await tx.visit.findMany({ where: { snowEventId: id, pushNumber: 1, job: { kind: "SNOW_PLAN" } }, include: { job: { include: { client: true } } } });
       for (const v of visits) {

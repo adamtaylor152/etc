@@ -61,3 +61,11 @@ export async function hubRenewPlan(f: FormData) {
   await tellOwners(client.businessId, `${client.firstName} renewed their snow plan`, `${client.firstName} ${client.lastName} renewed every-snowfall service from their client page.`, `/jobs/${job.id}`);
   redirect(`/hub/${token}?renewed=1`);
 }
+
+/** Client turns text updates on/off for themselves. */
+export async function hubSetTexts(f: FormData) {
+  const { token, client } = await hubClient(f);
+  const on = f.get("on") === "1";
+  await db.client.update({ where: { id: client.id }, data: { smsOptIn: on } });
+  redirect(`/hub/${token}?texts=${on ? "on" : "off"}`);
+}
