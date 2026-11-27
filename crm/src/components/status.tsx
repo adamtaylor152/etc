@@ -24,13 +24,13 @@ export const STORM: Record<SnowEventStatus, [string, Tone]> = {
 
 import type { InvoiceView } from "@/server/billing/invoice";
 const INVOICE: Record<InvoiceView, [string, Tone]> = {
-  DRAFT: ["Draft", "gray"], AWAITING_PAYMENT: ["Awaiting payment", "blue"], PARTIAL: ["Partly paid", "amber"], PAST_DUE: ["Past due", "red"],
+  DRAFT: ["Draft", "gray"], AWAITING_PAYMENT: ["Awaiting payment", "amber"], PARTIAL: ["Partly paid", "amber"], PAST_DUE: ["Past due", "red"],
   PAID: ["Paid", "green"], BAD_DEBT: ["Written off", "gray"], VOID: ["Void", "gray"],
 };
 export const InvoiceBadge = ({ s }: { s: InvoiceView }) => <Badge tone={INVOICE[s][1]}>{INVOICE[s][0]}</Badge>;
 export const INVOICE_LABEL = Object.fromEntries(Object.entries(INVOICE).map(([k, [l]]) => [k, l])) as Record<InvoiceView, string>;
 
 export const QUOTE: Record<QuoteStatus, [string, Tone]> = {
-  DRAFT: ["Draft", "gray"], AWAITING_RESPONSE: ["Awaiting response", "blue"], CHANGES_REQUESTED: ["Changes requested", "amber"],
+  DRAFT: ["Draft", "gray"], AWAITING_RESPONSE: ["Awaiting response", "amber"], CHANGES_REQUESTED: ["Changes requested", "red"],
   APPROVED: ["Approved", "green"], CONVERTED: ["Converted to job", "green"], ARCHIVED: ["Archived", "gray"],
 };

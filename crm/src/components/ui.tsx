@@ -20,10 +20,10 @@ export function PageHeader({ title, sub, actions }: { title: ReactNode; sub?: Re
 
 export function Card({ children, className = "", title, actions }: { children: ReactNode; className?: string; title?: ReactNode; actions?: ReactNode }) {
   return (
-    <section className={`rounded-2xl border border-line bg-white p-4 sm:p-5 ${className}`}>
+    <section className={`rounded-lg border border-line bg-white p-4 shadow-card sm:p-5 ${className}`}>
       {(title || actions) && (
         <div className="mb-3 flex items-center justify-between gap-2">
-          {title && <h2 className="font-display text-lg font-bold">{title}</h2>}
+          {title && <h2 className="text-base font-bold">{title}</h2>}
           {actions}
         </div>
       )}
@@ -42,8 +42,15 @@ const TONES = {
 } as const;
 export type Tone = keyof typeof TONES;
 
+const DOT: Record<Tone, string> = { gray: "bg-ink-soft/60", blue: "bg-blue", green: "bg-emerald-600", amber: "bg-amber-500", red: "bg-red-600", navy: "bg-white" };
+
+/** Status label (Jobber-style pill: coloured dot + text on a tinted surface). */
 export function Badge({ children, tone = "gray" }: { children: ReactNode; tone?: Tone }) {
-  return <span className={`inline-flex items-center whitespace-nowrap rounded-full border px-2.5 py-0.5 text-xs font-semibold ${TONES[tone]}`}>{children}</span>;
+  return (
+    <span className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-0.5 text-xs font-semibold ${TONES[tone]}`}>
+      <span className={`size-1.5 rounded-full ${DOT[tone]}`} aria-hidden />{children}
+    </span>
+  );
 }
 
 const BTN = {
@@ -52,7 +59,7 @@ const BTN = {
   danger: "bg-white text-red-700 border-red-200 hover:bg-red-50",
 };
 type Variant = keyof typeof BTN;
-const btn = (v: Variant, extra = "") => `inline-flex min-h-11 items-center justify-center gap-2 rounded-full border-2 px-5 text-sm font-semibold transition disabled:opacity-50 ${BTN[v]} ${extra}`;
+const btn = (v: Variant, extra = "") => `inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border px-4 text-sm font-semibold transition disabled:opacity-50 ${BTN[v]} ${extra}`;
 
 export function Button({ variant = "primary", className = "", ...p }: ComponentProps<"button"> & { variant?: Variant }) {
   return <button {...p} className={btn(variant, className)} />;
@@ -72,7 +79,7 @@ export function Field({ label, children, hint }: { label: string; children: Reac
   );
 }
 
-export const inputCls = "w-full min-h-11 rounded-xl border border-line bg-white px-3 py-2 text-base outline-none focus:border-blue focus:ring-2 focus:ring-blue/20";
+export const inputCls = "w-full min-h-10 rounded-lg border border-line bg-white px-3 py-2 text-base outline-none focus:border-blue focus:ring-2 focus:ring-blue/20";
 
 export function Input(p: ComponentProps<"input">) {
   return <input {...p} className={`${inputCls} ${p.className ?? ""}`} />;
@@ -83,7 +90,7 @@ export function Textarea(p: ComponentProps<"textarea">) {
 }
 
 export function Empty({ children }: { children: ReactNode }) {
-  return <p className="rounded-xl border border-dashed border-line p-6 text-center text-sm text-ink-soft">{children}</p>;
+  return <p className="rounded-lg border border-dashed border-line p-6 text-center text-sm text-ink-soft">{children}</p>;
 }
 
 /** Label/value list for detail pages. */
@@ -102,11 +109,11 @@ export function Dl({ rows }: { rows: [string, ReactNode][] }) {
 
 export function Tabs({ items, active }: { items: { href: string; label: string; count?: number }[]; active: string }) {
   return (
-    <nav className="mb-4 flex gap-1 overflow-x-auto">
+    <nav className="mb-4 flex gap-1 overflow-x-auto border-b border-line">
       {items.map((t) => (
-        <Link key={t.href} href={t.href}
-          className={`whitespace-nowrap rounded-full px-4 py-2 text-sm font-semibold ${t.label === active ? "bg-navy text-white" : "bg-white text-ink-soft hover:text-navy"}`}>
-          {t.label}{t.count != null && <span className="ml-1.5 opacity-70">{t.count}</span>}
+        <Link key={t.href} href={t.href} aria-current={t.label === active ? "page" : undefined}
+          className={`-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm font-semibold ${t.label === active ? "border-blue text-navy" : "border-transparent text-ink-soft hover:text-navy"}`}>
+          {t.label}{t.count != null && <span className="ml-1.5 rounded-full bg-tint px-1.5 text-xs text-ink-soft">{t.count}</span>}
         </Link>
       ))}
     </nav>

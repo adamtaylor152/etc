@@ -7,13 +7,15 @@
   --color-ink-soft: #4a5672;
   --color-line: #dfe5ef;
   --color-tint: #f4f7fc;
+  --shadow-card: 0 1px 4px rgba(20, 33, 61, .08), 0 4px 12px rgba(20, 33, 61, .04);
   --font-sans: var(--font-inter);
   --font-display: var(--font-rubik);
 }
 
 body {
-  background: #eef2f8;
+  background: #f1f3f7;
   color: var(--color-navy);
+  font-size: 14px;
 }
 
 @media print {
