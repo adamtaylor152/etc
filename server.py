@@ -8,6 +8,7 @@ Env:
   OWNER_EMAIL       where new-booking notices go
   MAIL_FROM         From: address for all mail (default OWNER_EMAIL)
   ETRANSFER_EMAIL   shown to customers who pick e-Transfer (default OWNER_EMAIL)
+  PRIMARY_HOST      main domain (etccrew.ca); requests for any other host are redirected there
   HELP_EMAIL        public contact address; customers' replies go here (default help@etccrew.ca)
   SMTP_HOST, SMTP_PORT (587), SMTP_USER, SMTP_PASSWORD, SMTP_TLS (starttls|ssl|none, default starttls)
   WEATHER_USER_AGENT  sent to MET Norway, which asks for an app name + contact, e.g. "etc-website/1.0 you@domain"
@@ -37,6 +38,7 @@ OWNER_EMAIL = os.environ.get("OWNER_EMAIL", "")
 MAIL_FROM = os.environ.get("MAIL_FROM", OWNER_EMAIL)
 ETRANSFER_EMAIL = os.environ.get("ETRANSFER_EMAIL", OWNER_EMAIL)
 PHONE = "403-656-8200"
+PRIMARY_HOST = os.environ.get("PRIMARY_HOST", "")  # e.g. etccrew.ca: every other domain 301s here
 HELP_EMAIL = os.environ.get("HELP_EMAIL", "help@etccrew.ca")  # public contact; customer replies go here
 
 SERVICES = {
@@ -272,6 +274,13 @@ class Handler(SimpleHTTPRequestHandler):
         path = self.path.split("?", 1)[0]
         if path == "/healthz":
             return self.reply(200, {"ok": True})
+        host = (self.headers.get("Host") or "").split(":")[0].lower()
+        if PRIMARY_HOST and host != PRIMARY_HOST:  # etcyyc.com, www.etccrew.ca, ... -> https://etccrew.ca
+            self.send_response(301)
+            self.send_header("Location", f"https://{PRIMARY_HOST}{self.path}")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
         if path == "/api/forecast":
             try:
                 return self.reply(200, body=forecast())

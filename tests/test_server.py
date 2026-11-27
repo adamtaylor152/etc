@@ -132,4 +132,20 @@ for _ in range(2):
     assert json.load(urllib.request.urlopen(BASE + "/api/forecast"))[2]["p"] == 9
 assert calls == ["etc-website/1.0"]  # second request came from cache
 
+# Other domains redirect to the primary one; health check never does.
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *a, **kw): return None
+
+
+server.PRIMARY_HOST = "etccrew.ca"
+opener = urllib.request.build_opener(NoRedirect)
+try:
+    opener.open(urllib.request.Request(BASE + "/book.html?plan=every", headers={"Host": "www.etcyyc.com"}))
+    raise AssertionError("expected a redirect")
+except urllib.error.HTTPError as e:
+    assert e.code == 301 and e.headers["Location"] == "https://etccrew.ca/book.html?plan=every", (e.code, e.headers["Location"])
+assert opener.open(urllib.request.Request(BASE + "/", headers={"Host": "etccrew.ca"})).status == 200
+assert opener.open(urllib.request.Request(BASE + "/healthz", headers={"Host": "127.0.0.1"})).status == 200
+server.PRIMARY_HOST = ""
+
 print("ok")
