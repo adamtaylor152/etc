@@ -38,4 +38,6 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm test
+      # Build with no reachable database, like the Docker build: catches pages that query at build time.
       - run: pnpm build
+        env: { DATABASE_URL: "postgresql://nobody:x@127.0.0.1:1/none" }
