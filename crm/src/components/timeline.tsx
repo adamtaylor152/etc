@@ -9,6 +9,10 @@ const LABEL: Record<string, string> = {
   "job.created": "Job created", "job.closed": "Job closed", "job.reopened": "Job reopened",
   "plan.created": "Snow plan started", "plan.updated": "Snow plan changed", "plan.paused": "Snow plan paused", "plan.resumed": "Snow plan resumed",
   "visit.en_route": "On the way", "visit.in_progress": "Arrived", "visit.completed": "Visit done", "visit.skipped": "Visit skipped",
+  "invoice.created": "Invoice created", "invoice.sent": "Invoice sent", "invoice.voided": "Invoice voided",
+  "payment.received": "Payment received", "payment.deleted": "Payment removed",
+  "storm.created": "Storm created", "storm.started": "Storm started", "storm.depth": "Storm depth changed", "storm.push": "Another push added",
+  "storm.finished": "Storm finished", "storm.cancelled": "Storm cancelled",
   "visit.scheduled": "Visit reopened", "visit.cancelled": "Visit cancelled", "visit.scheduled_for": "Visit rescheduled",
 };
 

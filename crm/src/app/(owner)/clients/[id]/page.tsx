@@ -4,6 +4,7 @@ import { JobBadge, RequestBadge } from "@/components/status";
 import { Timeline } from "@/components/timeline";
 import { Badge, Button, Card, Dl, Empty, Field, Input, PageHeader, Textarea } from "@/components/ui";
 import { prettyDateTime } from "@/server/dates";
+import { money } from "@/server/money";
 import { businessId, db } from "@/server/db";
 import { clientName, jobsWithStatus } from "@/server/queries";
 import { updateClient } from "../../actions";
@@ -14,7 +15,10 @@ export default async function ClientPage({ params, searchParams }: PageProps<"/c
   const bid = await businessId();
   const c = await db.client.findFirst({
     where: { id, businessId: bid },
-    include: { properties: { include: { community: true }, orderBy: { createdAt: "asc" } }, requests: { orderBy: { createdAt: "desc" } } },
+    include: {
+      properties: { include: { community: true }, orderBy: { createdAt: "asc" } }, requests: { orderBy: { createdAt: "desc" } },
+      invoices: { where: { status: { not: "VOID" } }, orderBy: { number: "desc" } },
+    },
   });
   if (!c) notFound();
   const [jobs, notes, events] = await Promise.all([
@@ -76,6 +80,15 @@ export default async function ClientPage({ params, searchParams }: PageProps<"/c
                 ))}
               </ul>
             ) : <Empty>No jobs yet.</Empty>}
+          </Card>
+          <Card title="Invoices" actions={<span className="text-sm font-semibold">{money(c.invoices.filter((i) => i.status === "AWAITING_PAYMENT").reduce((a, i) => a + i.totalCents - i.amountPaidCents, 0))} owing</span>}>
+            {c.invoices.length ? (
+              <ul className="divide-y divide-line">
+                {c.invoices.map((i) => (
+                  <li key={i.id}><Link href={`/invoices/${i.id}`} className="flex justify-between gap-3 py-2.5 text-sm"><span className="font-semibold">#{i.number} {i.subject}</span><span>{money(i.totalCents)} · {i.status === "PAID" ? "Paid" : i.status === "DRAFT" ? "Draft" : i.status === "BAD_DEBT" ? "Written off" : "Unpaid"}</span></Link></li>
+                ))}
+              </ul>
+            ) : <Empty>No invoices yet.</Empty>}
           </Card>
           <Card title="Requests">
             <ul className="divide-y divide-line">

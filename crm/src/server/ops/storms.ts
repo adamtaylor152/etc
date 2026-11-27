@@ -7,6 +7,7 @@ import { logActivity, nextNumber } from "../records";
 import { plansTriggered } from "../snow/select";
 import { seasonFor } from "../booking/create";
 import { TransitionError } from "../status/visit";
+import { invoiceUnbilled } from "./invoices";
 
 type Actor = { id: string; businessId: string };
 
@@ -108,6 +109,12 @@ export async function finishStorm(user: Actor, id: string) {
     const ev = await load(tx, user, id);
     if (ev.status !== "ACTIVE") throw new TransitionError("Only an active storm can be finished");
     await tx.snowEvent.update({ where: { id }, data: { status: "COMPLETED", completedAt: new Date(), snowEndedAt: new Date() } });
+    // Plans bill once per storm: one draft invoice per client, reviewed and sent from Billing.
+    const clients = await tx.visitCharge.findMany({
+      where: { businessId: user.businessId, invoiceLineItemId: null, visit: { snowEventId: id, job: { kind: "SNOW_PLAN", invoiceSchedule: "PER_SNOW_EVENT" } } },
+      select: { visit: { select: { job: { select: { clientId: true } } } } },
+    });
+    for (const clientId of new Set(clients.map((c) => c.visit.job.clientId))) await invoiceUnbilled(user, { clientId, snowEventId: id }, tx);
     await logActivity(tx, { businessId: user.businessId, type: "storm.finished", entityType: "SnowEvent", entityId: id, actorType: "USER", actorUserId: user.id, snowEventId: id });
   });
 }

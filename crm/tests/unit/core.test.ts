@@ -74,3 +74,11 @@ describe("communities", () => {
   });
   it("outside the city is null", () => expect(findCommunity(shapes, 49.28, -123.12)).toBeNull());
 });
+
+import { localDayStart } from "@/server/dates";
+describe("localDayStart", () => {
+  it("is Calgary midnight", () => {
+    expect(localDayStart("2026-01-15").toISOString()).toBe("2026-01-15T07:00:00.000Z"); // MST
+    expect(localDayStart("2026-07-01").toISOString()).toBe("2026-07-01T06:00:00.000Z"); // MDT
+  });
+});

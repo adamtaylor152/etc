@@ -11,6 +11,7 @@ import { businessId, db } from "@/server/db";
 import { money } from "@/server/money";
 import { clientName, jobsWithStatus } from "@/server/queries";
 import { visitStatus } from "@/server/status/job";
+import { invoiceCreate } from "../../billing-actions";
 import { jobClose, planPause, planUpdate, visitAdd, visitDelete, visitSchedule } from "../../work-actions";
 
 export default async function JobPage({ params, searchParams }: PageProps<"/jobs/[id]">) {
@@ -24,6 +25,7 @@ export default async function JobPage({ params, searchParams }: PageProps<"/jobs
     include: {
       lineItems: { orderBy: { sortOrder: "asc" } }, season: true, request: true, property: { include: { community: true } },
       visits: { orderBy: [{ scheduledDate: { sort: "desc", nulls: "first" } }, { createdAt: "desc" }], include: { charges: true, snowEvent: true } },
+      invoices: { orderBy: { number: "desc" } },
     },
   });
   const [notes, events, photos] = await Promise.all([
@@ -131,7 +133,23 @@ export default async function JobPage({ params, searchParams }: PageProps<"/jobs
             <div className="mt-3 max-w-xs"><PhotoUploader endpoint="/api/uploads" fields={{ jobId: job.id, kind: "OTHER" }} label="Add photos" camera={false} /></div>
           </Card>
 
-          <Card title="Charges" actions={unbilled.length > 0 && <span className="text-sm font-semibold text-amber-800">{money(unbilled.reduce((a, c) => a + c.totalCents, 0))} not invoiced</span>}>
+          <Card title="Charges & invoices" actions={<div className="flex items-center gap-2">
+            {unbilled.length > 0 && <span className="text-sm font-semibold text-amber-800">{money(unbilled.reduce((a, c) => a + c.totalCents, 0))} not invoiced</span>}
+            {(unbilled.length > 0 || (job.billingType === "FIXED_PRICE" && !job.invoices.some((i) => i.status !== "VOID"))) && (
+              <form action={invoiceCreate}>
+                <input type="hidden" name="clientId" value={job.clientId} /><input type="hidden" name="jobId" value={job.id} /><input type="hidden" name="back" value={here} />
+                {job.billingType === "FIXED_PRICE" && <input type="hidden" name="fixed" value="1" />}
+                <Button>Create invoice</Button>
+              </form>
+            )}
+          </div>}>
+            {job.invoices.length > 0 && (
+              <ul className="mb-3 divide-y divide-line rounded-xl border border-line px-3">
+                {job.invoices.map((i) => (
+                  <li key={i.id}><Link href={`/invoices/${i.id}`} className="flex justify-between gap-2 py-2 text-sm"><span className="font-semibold text-blue">Invoice #{i.number}</span><span>{money(i.totalCents)} · {i.status === "PAID" ? "Paid" : i.status === "DRAFT" ? "Draft" : i.status === "VOID" ? "Void" : "Unpaid"}</span></Link></li>
+                ))}
+              </ul>
+            )}
             {charges.length ? (
               <table className="w-full text-sm">
                 <tbody className="divide-y divide-line">
