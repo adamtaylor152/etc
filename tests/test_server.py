@@ -108,7 +108,7 @@ assert msgs[1]["Reply-To"] == "help@etccrew.ca" and "help@etccrew.ca" in msgs[1]
 
 # Forecast: hourly then 6-hourly periods, no double counting, served from cache.
 fake = {"properties": {"timeseries": [
-    {"time": "2026-12-01T00:00:00Z", "data": {"next_1_hours": {"summary": {"symbol_code": "lightsnow"}, "details": {"precipitation_amount": 0.4}},
+    {"time": "2026-12-01T00:00:00Z", "data": {"instant": {"details": {"air_temperature": -7.4}}, "next_1_hours": {"summary": {"symbol_code": "lightsnow"}, "details": {"precipitation_amount": 0.4}},
                                                "next_6_hours": {"summary": {"symbol_code": "snow"}, "details": {"precipitation_amount": 3}}}},
     {"time": "2026-12-01T01:00:00Z", "data": {"next_6_hours": {"summary": {"symbol_code": "snow"}, "details": {"precipitation_amount": 2}}}},
     {"time": "2026-12-01T06:00:00Z", "data": {"next_6_hours": {"summary": {"symbol_code": "cloudy"}, "details": {"precipitation_amount": 0}}}},
@@ -116,9 +116,9 @@ fake = {"properties": {"timeseries": [
     {"time": "2026-12-01T12:00:00Z", "data": {"instant": {}}},
 ]}}
 assert server.trim_forecast(fake) == [
-    {"t": "2026-12-01T00:00:00Z", "h": 1, "s": "lightsnow", "p": 0.4},
-    {"t": "2026-12-01T01:00:00Z", "h": 6, "s": "snow", "p": 2},
-    {"t": "2026-12-01T07:00:00Z", "h": 6, "s": "snow", "p": 9},
+    {"t": "2026-12-01T00:00:00Z", "h": 1, "s": "lightsnow", "p": 0.4, "a": -7.4},
+    {"t": "2026-12-01T01:00:00Z", "h": 6, "s": "snow", "p": 2, "a": None},
+    {"t": "2026-12-01T07:00:00Z", "h": 6, "s": "snow", "p": 9, "a": None},
 ]
 
 

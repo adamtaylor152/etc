@@ -214,7 +214,7 @@ _forecast, _forecast_lock = {"at": 0.0, "body": None}, threading.Lock()
 
 
 def trim_forecast(raw):
-    """Non-overlapping periods: hourly near-term, 6-hourly later. [{t, h, s(symbol), p(mm water)}]"""
+    """Non-overlapping periods: hourly near-term, 6-hourly later. [{t, h, s(symbol), p(mm water), a(air °C)}]"""
     out, covered = [], None
     for e in raw["properties"]["timeseries"]:
         t = datetime.fromisoformat(e["time"])
@@ -224,7 +224,8 @@ def trim_forecast(raw):
             if key in e["data"]:
                 d = e["data"][key]
                 out.append({"t": e["time"], "h": hrs, "s": d["summary"]["symbol_code"],
-                            "p": d.get("details", {}).get("precipitation_amount", 0)})
+                            "p": d.get("details", {}).get("precipitation_amount", 0),
+                            "a": e["data"].get("instant", {}).get("details", {}).get("air_temperature")})  # °C at period start
                 covered = t + timedelta(hours=hrs)
                 break
     return out

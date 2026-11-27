@@ -400,6 +400,7 @@
  ]
 }
 </script>
+<script src="forecast.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@500;700;800&family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
@@ -590,9 +591,13 @@
   .forecast { margin: 6px auto 28px; max-width: 760px; }
   .forecast-title { font-weight: 700; margin-bottom: 14px; }
   .snow-days { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; }
-  .snow-day { background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.18); border-radius: 16px; padding: 16px 18px 14px; min-width: 130px; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .snow-day { background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.18); border-radius: 16px; padding: 16px 18px 14px; min-width: 150px; display: flex; flex-direction: column; align-items: center; gap: 1px; }
+  .snow-day .flakes { display: flex; gap: 2px; color: var(--sky); margin-bottom: 6px; }
   .snow-day .dow { font-family: var(--display); font-weight: 700; font-size: 1.5rem; }
-  .snow-day .amt { color: #b9c3d8; font-size: .92rem; margin-bottom: 10px; }
+  .snow-day .md { font-size: .92rem; }
+  .snow-day .amt { font-family: var(--display); font-weight: 700; font-size: 1.25rem; margin-top: 8px; color: #fff; }
+  .snow-day .lvl { color: var(--sky); font-size: .8rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
+  .snow-day .temp { color: #b9c3d8; font-size: .9rem; margin: 4px 0 12px; }
   .snow-day .btn { padding: 8px 18px; font-size: .92rem; }
   .forecast-credit { font-size: .78rem; color: #8592ad; margin: 14px 0 0; }
   footer { padding: 30px 0 100px; font-size: .9rem; color: var(--ink-soft); text-align: center; }
@@ -858,11 +863,7 @@
     <div class="wrap">
       <h2>Snow in the forecast?</h2>
       <p class="muted">Get on the list now. Every driveway gets Silas one step closer.</p>
-      <div class="forecast" id="forecast" hidden>
-        <p class="forecast-title" id="forecast-title"></p>
-        <div class="snow-days" id="snow-days"></div>
-        <p class="forecast-credit">Calgary forecast from MET Norway, updated every 30 min.</p>
-      </div>
+      <div class="forecast" id="forecast" hidden></div>
       <a class="phone-big" href="tel:+14036568200">403-656-8200</a>
       <p class="muted cta-email">or email <a href="mailto:help@etccrew.ca">help@etccrew.ca</a></p>
       <div class="ctas">
@@ -874,7 +875,7 @@
 </main>
 
 <footer>
-  <div class="wrap">etc. · Snow shovelling &amp; odd jobs · <a href="tel:+14036568200">403-656-8200</a> · <a href="mailto:help@etccrew.ca">help@etccrew.ca</a><br>Thanks for helping a neighbour build a career.</div>
+  <div class="wrap">etc. · Snow shovelling &amp; odd jobs · <a href="tel:+14036568200">403-656-8200</a> · <a href="mailto:help@etccrew.ca">help@etccrew.ca</a><br>Thanks for helping a neighbour build a career.<br><small>Weather data from <a href="https://www.met.no/en">MET Norway</a> (CC BY 4.0).</small></div>
 </footer>
 
 <div class="callbar">
@@ -943,43 +944,7 @@
   }
 </script>
 <script>
-  // Snow days from /api/forecast (server caches MET Norway). Each day gets a Book link that pre-fills the date.
-  (async () => {
-    const TZ = "America/Edmonton";
-    const box = document.getElementById("forecast");
-    try {
-      const res = await fetch("/api/forecast");
-      if (!res.ok) return; // section just stays hidden
-      const days = new Map();
-      for (const p of await res.json()) {
-        if (!p.s.includes("snow")) continue; // lightsnow, heavysnow, snowshowers_day, ...
-        const day = new Date(p.t).toLocaleDateString("en-CA", { timeZone: TZ }); // YYYY-MM-DD, Calgary time
-        days.set(day, (days.get(day) || 0) + p.p); // ponytail: 1 mm of water ≈ 1 cm of snow (10:1 rule)
-      }
-      const today = new Date().toLocaleDateString("en-CA", { timeZone: TZ });
-      const snowy = [...days].filter(([d, cm]) => d >= today && cm >= 0.5).sort();
-      const title = document.getElementById("forecast-title");
-      if (!snowy.length) {
-        title.textContent = "No snow in Calgary's 10-day forecast. Sign up for every snowfall and you're covered when it comes.";
-      } else {
-        title.textContent = `❄️ Snow is coming to Calgary on ${snowy.length === 1 ? "this day" : "these days"}:`;
-        document.getElementById("snow-days").replaceChildren(...snowy.map(([d, cm]) => {
-          const date = new Date(d + "T12:00");
-          const card = document.createElement("div");
-          card.className = "snow-day";
-          card.innerHTML = `<span class="dow"></span><span></span><span class="amt"></span><a class="btn btn-primary">Book</a>`;
-          const [dow, md, amt, link] = card.children;
-          dow.textContent = date.toLocaleDateString("en-CA", { weekday: "short" });
-          md.textContent = date.toLocaleDateString("en-CA", { month: "short", day: "numeric" });
-          amt.textContent = cm < 1 ? "Light snow" : `~${Math.round(cm)} cm`;
-          link.href = `book.html?date=${d}`;
-          link.setAttribute("aria-label", `Book a shovel for ${date.toLocaleDateString("en-CA", { weekday: "long", month: "long", day: "numeric" })}`);
-          return card;
-        }));
-      }
-      box.hidden = false;
-    } catch { /* forecast is a nice-to-have; never break the page */ }
-  })();
+  etcForecast(document.getElementById("forecast")); // forecast.js: snow-day cards with Book links
 
   // Before & after sliders
   (() => {

@@ -83,6 +83,21 @@
   .linkish { background: none; border: 0; padding: 0; font: inherit; color: var(--brand-dark); text-decoration: underline; cursor: pointer; }
   .remember { display: flex; gap: 10px; align-items: center; margin-top: 16px; font-size: .95rem; cursor: pointer; }
   .remember input { accent-color: var(--brand); width: 18px; height: 18px; }
+  /* snow forecast (forecast.js) */
+  .forecast { margin: 6px 0 22px; }
+  .forecast-title { font-weight: 700; margin: 0 0 10px; }
+  .snow-days { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 4px; }
+  .snow-day { flex: none; background: var(--paper); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; min-width: 132px; display: flex; flex-direction: column; align-items: center; gap: 1px; }
+  .snow-day.picked { border-color: var(--brand); background: #eef5fe; }
+  .snow-day .flakes { display: flex; gap: 2px; color: var(--brand); margin-bottom: 4px; }
+  .snow-day .dow { font-family: var(--display); font-weight: 700; font-size: 1.15rem; }
+  .snow-day .md { font-size: .85rem; color: var(--ink-soft); }
+  .snow-day .amt { font-family: var(--display); font-weight: 700; margin-top: 6px; }
+  .snow-day .lvl { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--brand); }
+  .snow-day .temp { font-size: .82rem; color: var(--ink-soft); margin: 2px 0 8px; }
+  .snow-day .btn { padding: 6px 12px; font-size: .82rem; }
+  .forecast-credit { font-size: .78rem; color: var(--ink-soft); margin: 8px 0 0; }
+  .credit { font-size: .75rem; color: var(--ink-soft); text-align: center; margin-top: 18px; }
   .every-note { background: var(--ice); border-radius: 12px; padding: 12px 14px; margin: 0 0 18px; font-size: .95rem; }
   .every-note[hidden], .field[hidden] { display: none; }
   .error { color: var(--brand-dark); font-weight: 600; font-size: .95rem; margin: 0 0 12px; min-height: 1.4em; }
@@ -110,6 +125,8 @@
 <main class="wrap">
   <h1>Book Silas &amp; the crew</h1>
   <p class="muted">Takes about a minute. All prices include tax. You pay after the job, by cash or e-Transfer.</p>
+
+  <div class="forecast" id="forecast" hidden></div>
 
   <div class="progress" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
   <div class="step-label" id="step-label" aria-live="polite"></div>
@@ -229,8 +246,10 @@
       <button type="button" class="btn btn-primary" id="next">Next</button>
     </div>
   </form>
+  <p class="credit">Weather data from <a href="https://www.met.no/en">MET Norway</a> (CC BY 4.0).</p>
 </main>
 
+<script src="forecast.js"></script>
 <script src="/config.js"></script>
 <script>
   const form = document.getElementById("wizard");
@@ -407,6 +426,17 @@
     $("remember").checked = false;
     form.elements.name.focus();
   });
+
+  // Snow-day cards: "Pick this day" books a one-time shovel for that date.
+  etcForecast($("forecast"), { pick(day, card) {
+    $("svc-shovel").checked = true;
+    form.plan.value = "One-time visit";
+    syncShovel();
+    form.date.value = day;
+    document.querySelectorAll(".snow-day.picked").forEach(c => { c.classList.remove("picked"); c.querySelector(".btn").textContent = "Pick this day"; });
+    card.classList.add("picked");
+    card.querySelector(".btn").textContent = "✓ Picked";
+  } });
 
   show(0);
 
