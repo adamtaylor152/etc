@@ -56,6 +56,8 @@ OWNER_EMAIL=<where Silas/Dad want booking notices>
 ETRANSFER_EMAIL=<the e-Transfer address>
 ```
 
+Incoming mail: Cloudflare Email Routing forwards `help@etccrew.ca` to the owner's inbox and manages the MX/SPF records. When adding Brevo, merge its SPF into the existing record instead of adding a second one: `v=spf1 include:_spf.mx.cloudflare.net include:spf.brevo.com ~all`.
+
 Any other SMTP provider (Mailjet, SMTP2GO, Resend…) works the same way; only these variables change.
 
 ## Looking at bookings
