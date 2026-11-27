@@ -6,6 +6,10 @@ import { Button, Card, Textarea } from "./ui";
 const LABEL: Record<string, string> = {
   "booking.received": "Booked online", "booking.imported": "Imported from the old booking system",
   "request.archived": "Request archived", "request.unarchived": "Request unarchived",
+  "job.created": "Job created", "job.closed": "Job closed", "job.reopened": "Job reopened",
+  "plan.created": "Snow plan started", "plan.updated": "Snow plan changed", "plan.paused": "Snow plan paused", "plan.resumed": "Snow plan resumed",
+  "visit.en_route": "On the way", "visit.in_progress": "Arrived", "visit.completed": "Visit done", "visit.skipped": "Visit skipped",
+  "visit.scheduled": "Visit reopened", "visit.cancelled": "Visit cancelled", "visit.scheduled_for": "Visit rescheduled",
 };
 
 /** Notes + activity merged newest-first, with a note box. */

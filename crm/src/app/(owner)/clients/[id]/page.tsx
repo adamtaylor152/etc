@@ -31,6 +31,8 @@ export default async function ClientPage({ params, searchParams }: PageProps<"/c
         actions={<>
           {tel && <a href={tel} className="inline-flex min-h-11 items-center rounded-full border-2 border-blue bg-blue px-5 text-sm font-semibold text-white">Call</a>}
           <a href={`mailto:${c.email}`} className="inline-flex min-h-11 items-center rounded-full border-2 border-line bg-white px-5 text-sm font-semibold">Email</a>
+          <Link href={`/jobs/new?client=${id}`} className="inline-flex min-h-11 items-center rounded-full border-2 border-line bg-white px-5 text-sm font-semibold">New job</Link>
+          <Link href={`/jobs/new?client=${id}&kind=plan`} className="inline-flex min-h-11 items-center rounded-full border-2 border-line bg-white px-5 text-sm font-semibold">Snow plan</Link>
           <Link href={editing ? `/clients/${id}` : `/clients/${id}?edit=1`} className="inline-flex min-h-11 items-center rounded-full border-2 border-line bg-white px-5 text-sm font-semibold">{editing ? "Cancel" : "Edit"}</Link>
         </>}
       />

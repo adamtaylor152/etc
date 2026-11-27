@@ -1,4 +1,4 @@
-import type { RequestStatus } from "@/generated/prisma/client";
+import type { RequestStatus, SnowEventStatus } from "@/generated/prisma/client";
 import { JOB_STATUS_LABEL, VISIT_STATUS_LABEL, type JobStatus, type VisitStatus } from "@/server/status/job";
 import { Badge, type Tone } from "./ui";
 
@@ -17,3 +17,7 @@ const REQUEST: Record<RequestStatus, [string, Tone]> = {
 export const JobBadge = ({ s }: { s: JobStatus }) => <Badge tone={JOB_TONE[s]}>{JOB_STATUS_LABEL[s]}</Badge>;
 export const VisitBadge = ({ s }: { s: VisitStatus }) => <Badge tone={VISIT_TONE[s]}>{VISIT_STATUS_LABEL[s]}</Badge>;
 export const RequestBadge = ({ s }: { s: RequestStatus }) => <Badge tone={REQUEST[s][1]}>{REQUEST[s][0]}</Badge>;
+
+export const STORM: Record<SnowEventStatus, [string, Tone]> = {
+  FORECAST: ["Forecast", "blue"], ACTIVE: ["Active", "navy"], COMPLETED: ["Finished", "green"], CANCELLED: ["Cancelled", "gray"],
+};
