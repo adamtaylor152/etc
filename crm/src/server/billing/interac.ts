@@ -32,3 +32,15 @@ export function matchInvoice(n: InteracNotice, open: Candidate[]): Candidate | n
   const byAmountAndName = open.filter((c) => c.balanceCents === n.amountCents && c.clientName.toLowerCase().includes(last));
   return byAmountAndName.length === 1 ? byAmountAndName[0] : null;
 }
+
+/**
+ * What kind of Interac email this is. Only "payment" notices (someone sent money, with an amount) touch invoices;
+ * Autodeposit set-up/confirmation emails and anything else are left to the forwarded copy in the owner inbox.
+ */
+export function classifyInterac(subject: string, body: string): "payment" | "setup" | "other" {
+  const text = `${subject}\n${body}`;
+  if (/auto-?deposit/i.test(text) && /(confirm|verify|regist|activ|set ?up)/i.test(text) && !/sent you \$|has sent you \$/i.test(text)) return "setup";
+  const n = parseInterac(subject, body);
+  if (n.amountCents != null && /(sent you|has sent you|e-?Transfer from|you('ve| have) received)/i.test(text)) return "payment";
+  return "other";
+}

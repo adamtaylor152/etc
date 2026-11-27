@@ -10,7 +10,7 @@ import { env } from "../env";
 import { money } from "../money";
 import { recordPayment } from "../ops/invoices";
 import { clientName } from "../queries";
-import { matchInvoice, parseInterac } from "./interac";
+import { classifyInterac, matchInvoice, parseInterac } from "./interac";
 
 type Resolver = NonNullable<NonNullable<Parameters<typeof dkimVerify>[1]>["resolver"]>;
 
@@ -36,6 +36,8 @@ async function tellOwners(bid: string, title: string, body: string) {
 
 /** Shared by both inbound routes: match the notice to an invoice and record it, or hand it to the owners. */
 export async function handleInteracNotice(subject: string, text: string, deposited: boolean) {
+  const kind = classifyInterac(subject, text);
+  if (kind !== "payment") return { ignored: kind === "setup" ? "Autodeposit set-up email (owner has the forwarded copy)" : "not a payment notice" };
   const bid = await businessId();
   const n = parseInterac(subject, text);
   if (n.interacRef && await db.payment.findFirst({ where: { businessId: bid, reference: `Interac ${n.interacRef}` } })) return { duplicate: true };
