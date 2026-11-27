@@ -106,7 +106,8 @@
   .svc-group { background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius); padding: 26px 28px; }
   .svc-group h3 { display: flex; align-items: center; gap: 10px; }
   .svc-group h3 .ico { font-size: 1.4rem; }
-  .svc { padding: 12px 0; border-top: 1px solid var(--line); }
+  .svc { padding: 12px 0; border-top: 1px solid var(--line); display: grid; grid-template-columns: 44px 1fr; column-gap: 14px; }
+  .svc::before { content: attr(data-i) / ""; grid-row: span 2; display: grid; place-items: center; width: 44px; height: 44px; border-radius: 12px; background: var(--ice); font-size: 1.35rem; }
   .svc:first-of-type { border-top: 0; }
   .svc b { display: block; }
   .svc span { color: var(--ink-soft); font-size: .95rem; }
@@ -272,33 +273,33 @@
       <div class="svc-groups">
         <div class="svc-group">
           <h3><span class="ico">❄️</span> Winter</h3>
-          <div class="svc"><b>Residential snow removal</b><span>Driveways, walkways and entrances, cleared after every snowfall.</span></div>
-          <div class="svc"><b>Commercial snow removal</b><span>Storefronts, small lots and pathways kept safe for customers and staff.</span></div>
-          <div class="svc"><b>Ice management</b><span>Pet-safe melt applied to stop slips and refreezing.</span></div>
-          <div class="svc"><b>Roof snow removal <span class="tag">with Dad</span></b><span>Taking weight off the roof to help prevent ice dams and leaks.</span></div>
+          <div class="svc" data-i="🏡"><b>Residential snow removal</b><span>Driveways, walkways and entrances, cleared after every snowfall.</span></div>
+          <div class="svc" data-i="🏢"><b>Commercial snow removal</b><span>Storefronts, small lots and pathways kept safe for customers and staff.</span></div>
+          <div class="svc" data-i="🧂"><b>Ice management</b><span>Pet-safe melt applied to stop slips and refreezing.</span></div>
+          <div class="svc" data-i="🏠"><b>Roof snow removal <span class="tag">with Dad</span></b><span>Taking weight off the roof to help prevent ice dams and leaks.</span></div>
         </div>
 
         <div class="svc-group">
           <h3><span class="ico">🧹</span> Clean-up &amp; hauling</h3>
-          <div class="svc"><b>Garbage &amp; recycling bin cleaning</b><span>Scrubbed and rinsed so they stop smelling.</span></div>
-          <div class="svc"><b>Window cleaning</b><span>Streak-free, inside or out.</span></div>
-          <div class="svc"><b>Leaf &amp; yard clutter removal</b><span>Raked, bagged and gone.</span></div>
-          <div class="svc"><b>Trash &amp; junk removal</b><span>Garage, basement or yard — we haul it away.</span></div>
+          <div class="svc" data-i="🗑️"><b>Garbage &amp; recycling bin cleaning</b><span>Scrubbed and rinsed so they stop smelling.</span></div>
+          <div class="svc" data-i="🪟"><b>Window cleaning</b><span>Streak-free, inside or out.</span></div>
+          <div class="svc" data-i="🍂"><b>Leaf &amp; yard clutter removal</b><span>Raked, bagged and gone.</span></div>
+          <div class="svc" data-i="🚚"><b>Trash &amp; junk removal</b><span>Garage, basement or yard — we haul it away.</span></div>
         </div>
 
         <div class="svc-group">
           <h3><span class="ico">💦</span> Washing</h3>
-          <div class="svc"><b>Driveway, walkway &amp; concrete</b><span>Pressure washing that lifts dirt, algae and oil stains.</span></div>
-          <div class="svc"><b>Deck &amp; fence cleaning</b><span>Gentle washing for wood, vinyl and composite — ready to stain if you want.</span></div>
-          <div class="svc"><b>House &amp; siding soft wash</b><span>Low-pressure wash for vinyl, stucco and painted exteriors.</span></div>
-          <div class="svc"><b>Rust stain removal</b><span>Treats rust marks on concrete and metal.</span></div>
-          <div class="svc"><b>Building washing</b><span>Small commercial and multi-unit exteriors, quoted on site.</span></div>
+          <div class="svc" data-i="🚿"><b>Driveway, walkway &amp; concrete</b><span>Pressure washing that lifts dirt, algae and oil stains.</span></div>
+          <div class="svc" data-i="🪵"><b>Deck &amp; fence cleaning</b><span>Gentle washing for wood, vinyl and composite — ready to stain if you want.</span></div>
+          <div class="svc" data-i="🫧"><b>House &amp; siding soft wash</b><span>Low-pressure wash for vinyl, stucco and painted exteriors.</span></div>
+          <div class="svc" data-i="🧽"><b>Rust stain removal</b><span>Treats rust marks on concrete and metal.</span></div>
+          <div class="svc" data-i="🏬"><b>Building washing</b><span>Small commercial and multi-unit exteriors, quoted on site.</span></div>
         </div>
 
         <div class="svc-group">
           <h3><span class="ico">🔨</span> Fix-ups</h3>
-          <div class="svc"><b>Fence repair <span class="tag">with Dad</span></b><span>Loose boards, leaning posts and broken gates.</span></div>
-          <div class="svc"><b>Something else?</b><span>That's what the "etc." is for. Call and ask — if we can't do it well, we'll tell you.</span></div>
+          <div class="svc" data-i="🔧"><b>Fence repair <span class="tag">with Dad</span></b><span>Loose boards, leaning posts and broken gates.</span></div>
+          <div class="svc" data-i="🙋"><b>Something else?</b><span>That's what the "etc." is for. Call and ask — if we can't do it well, we'll tell you.</span></div>
         </div>
       </div>
     </div>
