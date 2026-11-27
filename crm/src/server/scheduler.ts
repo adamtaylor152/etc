@@ -36,6 +36,21 @@ async function hourly() {
   const hour = Number(new Intl.DateTimeFormat("en-CA", { timeZone: TZ, hour: "numeric", hourCycle: "h23" }).format(new Date()));
   if (hour >= 8 && hour < 20) await invoiceReminders(); // no reminder emails at night
   if (hour >= 7 && hour < 22) await snowAlert();
+  if (hour >= 9 && hour < 19) await quoteFollowUps();
+}
+
+/** One nudge, 3 days after sending, for quotes still waiting on the client. */
+async function quoteFollowUps() {
+  const cutoff = new Date(Date.now() - 3 * 86_400_000);
+  const quotes = await db.quote.findMany({ where: { status: "AWAITING_RESPONSE", sentAt: { lte: cutoff } }, include: { client: true } });
+  for (const q of quotes) {
+    const biz = await db.business.findUniqueOrThrow({ where: { id: q.businessId } });
+    if (!parseSettings(biz.settings).quoteFollowUp || q.client.emailBouncedAt) continue;
+    await enqueue(db, {
+      businessId: q.businessId, template: "quote.follow_up", to: q.client.email, replyTo: env.helpEmail, priority: 6, props: { quoteId: q.id },
+      dedupeKey: `quote:${q.id}:followup`, clientId: q.clientId, entityType: "Quote", entityId: q.id,
+    });
+  }
 }
 
 /** Email owners once per snowy day when the forecast (today + tomorrow) meets at least one plan's trigger. */

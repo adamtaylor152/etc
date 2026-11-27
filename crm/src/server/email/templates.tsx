@@ -4,6 +4,7 @@ import type { ReactElement } from "react";
 import { BookingConfirmation, OwnerNewBooking, type BookingEmailProps } from "@/emails/booking";
 import { OwnerLogin } from "@/emails/login";
 import { InvoiceSent, OwnerPaymentReceived, PaymentReceipt, type InvoiceEmailData } from "@/emails/invoice";
+import { HubLink, OwnerNotice, QuoteApproved, QuoteSent, type QuoteEmailData } from "@/emails/quote";
 import { OnMyWay, OwnerSnowAlert, StormHeadsUp } from "@/emails/snow";
 import { OwnerPhotosUploaded, PhotoUploadRequest, VisitDone } from "@/emails/visit";
 import { invoiceTotals } from "../billing/invoice";
@@ -167,6 +168,47 @@ const ownerSnowAlert: Template<{ days: { label: string; cm: number }[]; plans: n
   },
 };
 
+async function quoteData(quoteId: string, businessId: string): Promise<QuoteEmailData> {
+  const q = await db.quote.findUniqueOrThrow({ where: { id: quoteId }, include: { client: true, lineItems: { orderBy: { sortOrder: "asc" } } } });
+  const raw = await mintToken(db, businessId, "QUOTE", { quoteId: q.id, clientId: q.clientId });
+  return {
+    name: clientName(q.client), number: q.number, title: q.title ?? "Your quote", message: q.message, validUntil: q.validUntil ? prettyDate(dateOnly(q.validUntil)) : null,
+    total: money(q.totalCents), lines: q.lineItems.map((l) => ({ name: Number(l.quantity) !== 1 ? `${l.name} × ${Number(l.quantity)}` : l.name, amount: money(l.totalCents), optional: l.isOptional })),
+    url: `${env.appUrl}/q/${raw}`, site: env.siteUrl, phone: env.phone,
+  };
+}
+
+const quoteSent: Template<{ quoteId: string }> = {
+  subject: () => "Your quote from etc.",
+  async render(p, ctx) { return <QuoteSent d={await quoteData(p.quoteId, ctx.businessId)} />; },
+};
+const quoteFollowUp: Template<{ quoteId: string }> = {
+  subject: () => "Any questions about your etc. quote?",
+  async render(p, ctx) { return <QuoteSent d={await quoteData(p.quoteId, ctx.businessId)} followUp />; },
+};
+const quoteApproved: Template<{ quoteId: string }> = {
+  subject: () => "Quote approved. Thanks from etc.!",
+  async render(p, ctx) { return <QuoteApproved d={await quoteData(p.quoteId, ctx.businessId)} />; },
+};
+
+const ownerNotice: Template<{ title: string; body: string; path: string }> = {
+  subject: (p) => p.title,
+  async render(p, ctx) {
+    const user = await db.user.findFirst({ where: { businessId: ctx.businessId, email: ctx.to.toLowerCase(), active: true } });
+    const url = user ? `${env.appUrl}/auth/go?t=${await mintToken(db, ctx.businessId, "OWNER_DEEP_LINK", { userId: user.id, redirectPath: p.path })}` : `${env.appUrl}${p.path}`;
+    return <OwnerNotice title={p.title} body={p.body} url={url} />;
+  },
+};
+
+const hubLink: Template<{ clientId: string }> = {
+  subject: () => "Your etc. page (visits, photos, invoices)",
+  async render(p, ctx) {
+    const c = await db.client.findUniqueOrThrow({ where: { id: p.clientId } });
+    const raw = await mintToken(db, ctx.businessId, "CLIENT_HUB", { clientId: c.id });
+    return <HubLink name={clientName(c)} url={`${env.appUrl}/hub/${raw}`} site={env.siteUrl} phone={env.phone} />;
+  },
+};
+
 export const templates = {
   "owner.login": ownerLogin,
   "owner.new_booking": ownerNewBooking,
@@ -181,6 +223,11 @@ export const templates = {
   "visit.on_my_way": visitOnMyWay,
   "storm.heads_up": stormHeadsUp,
   "owner.snow_alert": ownerSnowAlert,
+  "quote.sent": quoteSent,
+  "quote.follow_up": quoteFollowUp,
+  "quote.approved": quoteApproved,
+  "owner.notice": ownerNotice,
+  "hub.link": hubLink,
 } as const;
 
 export type TemplateName = keyof typeof templates;

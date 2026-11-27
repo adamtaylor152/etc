@@ -1,0 +1,116 @@
+"use server";
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import { z } from "zod";
+import { requireOwner } from "@/server/auth";
+import { db } from "@/server/db";
+import { enqueue, kickOutbox } from "@/server/email/outbox";
+import { env } from "@/server/env";
+import { archiveQuote, convertQuote, createQuote, markQuoteApproved, sendQuote, updateQuote, type QuoteLineInput } from "@/server/ops/quotes";
+import { TransitionError } from "@/server/status/visit";
+import { mintToken } from "@/server/tokens";
+
+const s = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
+const back = (f: FormData, fallback: string) => { const p = s(f, "back"); return p.startsWith("/") && !p.startsWith("//") ? p : fallback; };
+
+/** Indexed rows: line_0_name, line_0_qty, line_0_price, line_0_optional, line_0_selected... Blank names are skipped. */
+function parseLines(f: FormData): QuoteLineInput[] {
+  const out: QuoteLineInput[] = [];
+  for (let i = 0; i < 40; i++) {
+    const name = s(f, `line_${i}_name`);
+    if (!name) continue;
+    out.push({
+      name: name.slice(0, 200), description: s(f, `line_${i}_desc`).slice(0, 500),
+      quantity: z.coerce.number().positive().max(10_000).parse(s(f, `line_${i}_qty`) || "1"),
+      unitPriceCents: Math.round(z.coerce.number().min(0).max(100_000).parse(s(f, `line_${i}_price`) || "0") * 100),
+      isOptional: f.get(`line_${i}_optional`) === "on", isSelected: f.get(`line_${i}_selected`) === "on",
+    });
+  }
+  return out;
+}
+
+async function guard(f: FormData, fallback: string, fn: () => Promise<unknown>) {
+  try {
+    await fn();
+  } catch (e) {
+    if (e instanceof TransitionError || e instanceof z.ZodError) {
+      const to = back(f, fallback);
+      redirect(`${to}${to.includes("?") ? "&" : "?"}error=${encodeURIComponent(e instanceof z.ZodError ? "Check the prices and quantities" : e.message)}`);
+    }
+    throw e;
+  }
+}
+
+export async function quoteCreate(f: FormData) {
+  const user = await requireOwner();
+  const q = await createQuote(user, {
+    clientId: s(f, "clientId"), propertyId: s(f, "propertyId") || null, requestId: s(f, "requestId") || null,
+    title: z.string().min(1).max(150).parse(s(f, "title")), message: s(f, "message").slice(0, 3000), lines: parseLines(f),
+  });
+  revalidatePath("/", "layout");
+  redirect(`/quotes/${q.id}`);
+}
+
+export async function quoteUpdate(f: FormData) {
+  const user = await requireOwner();
+  const id = s(f, "id");
+  await guard(f, `/quotes/${id}`, () => updateQuote(user, id, {
+    title: z.string().min(1).max(150).parse(s(f, "title")), message: s(f, "message").slice(0, 3000),
+    validUntil: s(f, "validUntil") || null, discountCents: Math.round(z.coerce.number().min(0).max(100_000).parse(s(f, "discount") || "0") * 100),
+    lines: parseLines(f),
+  }));
+  if (f.get("send") === "1") await guard(f, `/quotes/${id}`, () => sendQuote(user, id));
+  revalidatePath("/", "layout");
+  redirect(`/quotes/${id}${f.get("send") === "1" ? "?sent=1" : "?saved=1"}`);
+}
+
+export async function quoteSend(f: FormData) {
+  const user = await requireOwner();
+  const id = s(f, "id");
+  await guard(f, `/quotes/${id}`, () => sendQuote(user, id));
+  revalidatePath("/", "layout");
+  redirect(`/quotes/${id}?sent=1`);
+}
+
+export async function quoteMarkApproved(f: FormData) {
+  const user = await requireOwner();
+  const id = s(f, "id");
+  await guard(f, `/quotes/${id}`, () => markQuoteApproved(user, id));
+  revalidatePath("/", "layout");
+  redirect(`/quotes/${id}`);
+}
+
+export async function quoteConvert(f: FormData) {
+  const user = await requireOwner();
+  const id = s(f, "id");
+  let jobId = "";
+  await guard(f, `/quotes/${id}`, async () => {
+    const date = s(f, "date");
+    const job = await convertQuote(user, id, { date: /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : null, billingType: s(f, "billingType") === "FIXED_PRICE" ? "FIXED_PRICE" : "PER_VISIT" });
+    jobId = job.id;
+  });
+  revalidatePath("/", "layout");
+  redirect(`/jobs/${jobId}`);
+}
+
+export async function quoteArchive(f: FormData) {
+  const user = await requireOwner();
+  const id = s(f, "id");
+  await guard(f, `/quotes/${id}`, () => archiveQuote(user, id));
+  revalidatePath("/", "layout");
+  redirect("/quotes");
+}
+
+export async function quoteViewAsClient(f: FormData) {
+  const user = await requireOwner();
+  const q = await db.quote.findFirstOrThrow({ where: { id: s(f, "id"), businessId: user.businessId } });
+  redirect(`/q/${await mintToken(db, user.businessId, "QUOTE", { quoteId: q.id, clientId: q.clientId })}`);
+}
+
+export async function sendHubLink(f: FormData) {
+  const user = await requireOwner();
+  const c = await db.client.findFirstOrThrow({ where: { id: s(f, "clientId"), businessId: user.businessId } });
+  await enqueue(db, { businessId: user.businessId, template: "hub.link", to: c.email, replyTo: env.helpEmail, priority: 3, props: { clientId: c.id }, clientId: c.id });
+  kickOutbox();
+  redirect(`/clients/${c.id}?hub=sent`);
+}

@@ -8,10 +8,12 @@ import { money } from "@/server/money";
 import { businessId, db } from "@/server/db";
 import { clientName, jobsWithStatus } from "@/server/queries";
 import { updateClient } from "../../actions";
+import { sendHubLink } from "../../quote-actions";
 
 export default async function ClientPage({ params, searchParams }: PageProps<"/clients/[id]">) {
   const { id } = await params;
-  const editing = (await searchParams).edit === "1";
+  const sp = await searchParams;
+  const editing = sp.edit === "1";
   const bid = await businessId();
   const c = await db.client.findFirst({
     where: { id, businessId: bid },
@@ -35,6 +37,8 @@ export default async function ClientPage({ params, searchParams }: PageProps<"/c
         actions={<>
           {tel && <a href={tel} className="inline-flex min-h-11 items-center rounded-full border-2 border-blue bg-blue px-5 text-sm font-semibold text-white">Call</a>}
           <a href={`mailto:${c.email}`} className="inline-flex min-h-11 items-center rounded-full border-2 border-line bg-white px-5 text-sm font-semibold">Email</a>
+          <form action={sendHubLink}><input type="hidden" name="clientId" value={c.id} /><button className="inline-flex min-h-11 items-center rounded-full border-2 border-line bg-white px-5 text-sm font-semibold">{sp.hub === "sent" ? "Hub link sent ✓" : "Send hub link"}</button></form>
+          <Link href={`/quotes/new?client=${id}`} className="inline-flex min-h-11 items-center rounded-full border-2 border-line bg-white px-5 text-sm font-semibold">New quote</Link>
           <Link href={`/jobs/new?client=${id}`} className="inline-flex min-h-11 items-center rounded-full border-2 border-line bg-white px-5 text-sm font-semibold">New job</Link>
           <Link href={`/jobs/new?client=${id}&kind=plan`} className="inline-flex min-h-11 items-center rounded-full border-2 border-line bg-white px-5 text-sm font-semibold">Snow plan</Link>
           <Link href={editing ? `/clients/${id}` : `/clients/${id}?edit=1`} className="inline-flex min-h-11 items-center rounded-full border-2 border-line bg-white px-5 text-sm font-semibold">{editing ? "Cancel" : "Edit"}</Link>
