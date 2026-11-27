@@ -14,7 +14,8 @@ export async function POST(req: Request) {
   if (files.length > MAX_MMS_FILES) return Response.json({ error: `Up to ${MAX_MMS_FILES} photos per text` }, { status: 400 });
   try {
     const photos = await Promise.all(files.map(async (f) => ({ bytes: Buffer.from(await f.arrayBuffer()), contentType: f.type })));
-    const id = await sendText(user, key.startsWith("n") ? { to: `+${key.slice(1)}`, body, photos } : { clientId: key, body, photos });
+    const replies = form.getAll("reply").map(String);
+    const id = await sendText(user, key.startsWith("n") ? { to: `+${key.slice(1)}`, body, photos, replies } : { clientId: key, body, photos, replies });
     return Response.json({ ok: true, id }, { status: 201 });
   } catch (e) {
     if (e instanceof TransitionError || e instanceof MediaError) return Response.json({ error: e.message }, { status: 400 });

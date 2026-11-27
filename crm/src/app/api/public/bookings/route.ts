@@ -4,6 +4,7 @@ import { createBooking } from "@/server/booking/create";
 import { BookingError, validate } from "@/server/booking/validate";
 import { todayLocal } from "@/server/dates";
 import { businessId, db } from "@/server/db";
+import { enqueueSms, kickOutbox } from "@/server/email/outbox";
 import { env } from "@/server/env";
 import { clientIp, limited } from "@/server/http";
 
@@ -45,7 +46,11 @@ export async function POST(req: Request) {
   const res = await createBooking(booking, {
     businessId: await businessId(), source: "BOOKING_FORM", ip: clientIp(req), userAgent: req.headers.get("user-agent") ?? undefined, raw: data,
   });
-  if (data.smsOptIn === true && booking.phone) await db.client.update({ where: { id: res.clientId }, data: { smsOptIn: true } });
+  if (data.smsOptIn === true && booking.phone) {
+    const client = await db.client.update({ where: { id: res.clientId }, data: { smsOptIn: true } });
+    await enqueueSms(db, { businessId: client.businessId, template: "sms.opt_in", client, props: {}, dedupeKey: `sms-optin:${client.id}` }); // once per client
+    kickOutbox();
+  }
   console.info(`booking ${res.number} saved`);
   return json(req, 201, { ok: true, id: res.number, estimate: booking.estimate, ...(res.uploadUrl ? { uploadUrl: res.uploadUrl } : {}) });
 }

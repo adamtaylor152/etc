@@ -21,12 +21,13 @@ async function shrink(file: File): Promise<Blob> {
   }
 }
 
-export function Composer({ convoKey, disabled, quick = [] }: { convoKey: string; disabled?: string; quick?: string[] }) {
+export function Composer({ convoKey, disabled, quick = [], rcs = false }: { convoKey: string; disabled?: string; quick?: string[]; rcs?: boolean }) {
   const router = useRouter();
   const [body, setBody] = useState("");
   const [files, setFiles] = useState<{ file: File; url: string }[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [replies, setReplies] = useState<string[] | null>(null); // tap-to-reply buttons (RCS; a "Reply:" line on SMS)
   const input = useRef<HTMLInputElement>(null);
   const area = useRef<HTMLTextAreaElement>(null);
 
@@ -52,6 +53,7 @@ export function Composer({ convoKey, disabled, quick = [] }: { convoKey: string;
     const form = new FormData();
     form.append("key", convoKey);
     form.append("body", body);
+    for (const r of replies ?? []) if (r.trim()) form.append("reply", r);
     for (const f of files) form.append("file", await shrink(f.file), f.file.name.replace(/\.\w+$/, "") + ".jpg");
     const res = await fetch("/api/messages/send", { method: "POST", body: form }).catch(() => null);
     setBusy(false);
@@ -63,6 +65,7 @@ export function Composer({ convoKey, disabled, quick = [] }: { convoKey: string;
     files.forEach((f) => URL.revokeObjectURL(f.url));
     setBody("");
     setFiles([]);
+    setReplies(null);
     router.refresh();
   }
 
@@ -73,6 +76,18 @@ export function Composer({ convoKey, disabled, quick = [] }: { convoKey: string;
       {quick.length > 0 && !body && !files.length && (
         <div className="mb-2 flex gap-1.5 overflow-x-auto pb-1">
           {quick.map((q) => <button key={q} type="button" onClick={() => setBody(q)} className="shrink-0 rounded-full border border-line px-3 py-1 text-xs font-semibold text-ink-soft hover:bg-tint">{q.length > 34 ? q.slice(0, 33) + "…" : q}</button>)}
+        </div>
+      )}
+      {replies && (
+        <div className="mb-2 flex flex-wrap items-center gap-1.5">
+          <span className="text-xs font-semibold text-ink-soft">Reply buttons:</span>
+          {replies.map((r, i) => (
+            <input key={i} value={r} maxLength={25} placeholder={["Yes", "No thanks", "Call me", "Tomorrow"][i]} aria-label={`Reply button ${i + 1}`}
+              onChange={(e) => setReplies(replies.map((x, j) => (j === i ? e.target.value : x)))}
+              className="h-8 w-28 rounded-full border border-blue/40 px-3 text-xs" />
+          ))}
+          {replies.length < 4 && <button type="button" onClick={() => setReplies([...replies, ""])} className="text-xs font-semibold text-blue">+ Add</button>}
+          <button type="button" onClick={() => setReplies(null)} className="text-xs text-ink-soft" aria-label="Remove reply buttons">✕</button>
         </div>
       )}
       {files.length > 0 && (
@@ -92,6 +107,10 @@ export function Composer({ convoKey, disabled, quick = [] }: { convoKey: string;
           <span aria-hidden>📷</span><span className="sr-only">Add photos</span>
           <input ref={input} type="file" accept="image/*" multiple className="sr-only" disabled={files.length >= MAX || busy} onChange={(e) => add(e.target.files)} />
         </label>
+        <button type="button" onClick={() => setReplies(replies ?? ["", ""])} title="Add tap-to-reply buttons"
+          className={`hidden size-11 shrink-0 place-items-center rounded-full border-2 text-sm font-bold sm:grid ${replies ? "border-blue text-blue" : "border-line text-ink-soft hover:bg-tint"}`}>
+          <span aria-hidden>⌨︎</span><span className="sr-only">Add reply buttons</span>
+        </button>
         <textarea ref={area} value={body} onChange={(e) => setBody(e.target.value)} rows={1} maxLength={1000} placeholder="Text message" aria-label="Message"
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(); } }}
           onPaste={(e) => { if (e.clipboardData.files.length) { e.preventDefault(); add(e.clipboardData.files); } }}
@@ -100,7 +119,8 @@ export function Composer({ convoKey, disabled, quick = [] }: { convoKey: string;
           className="inline-flex min-h-11 shrink-0 items-center rounded-full bg-blue px-5 text-sm font-semibold text-white disabled:opacity-40">{busy ? "Sending…" : "Send"}</button>
       </div>
       <p className="mt-1 px-1 text-right text-[11px] text-ink-soft">
-        {files.length ? `MMS · ${files.length} photo${files.length === 1 ? "" : "s"}` : seg.parts > 1 ? `${seg.parts} texts${seg.unicode ? " (emoji/accents use more room)" : ""}` : body ? `${body.length}/${seg.perPart}` : "Enter to send · Shift+Enter for a new line"}
+        {rcs && <span className="mr-2 font-semibold text-blue">RCS when their phone supports it</span>}
+        {files.length ? `${rcs ? "Photos" : "MMS"} · ${files.length} photo${files.length === 1 ? "" : "s"}` : seg.parts > 1 ? `${seg.parts} texts${seg.unicode ? " (emoji/accents use more room)" : ""}` : body ? `${body.length}/${seg.perPart}` : "Enter to send · Shift+Enter for a new line"}
       </p>
     </div>
   );
