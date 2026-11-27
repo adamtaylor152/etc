@@ -7,7 +7,7 @@
 <meta name="description" content="Local teen-run snow shovelling and odd-jobs crew. $35 a shovel, +$5 ice melt. Every job goes toward electrician school. Call or text 403-656-8200.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,800&family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;800;900&family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
   :root {
     --ink: #14213d;
@@ -21,13 +21,18 @@
     --ice: #d9ecf7;
     --good: #2a9d8f;
     --radius: 18px;
+    --display: "Big Shoulders Display", Impact, "Arial Narrow", sans-serif;
   }
   * { box-sizing: border-box; }
   html { scroll-behavior: smooth; }
   body { margin: 0; font: 17px/1.6 Inter, system-ui, sans-serif; color: var(--ink); background: var(--snow); }
-  h1, h2, h3 { font-family: Fraunces, Georgia, serif; line-height: 1.15; margin: 0 0 .5em; }
-  h1 { font-size: clamp(2.2rem, 5.5vw, 3.8rem); font-weight: 800; letter-spacing: -.02em; }
-  h2 { font-size: clamp(1.7rem, 3.6vw, 2.5rem); }
+  /* ponytail: one display face — condensed, work-truck lettering, fits a trades kid */
+  h1, h2, h3 { line-height: 1.15; margin: 0 0 .5em; }
+  h1, h2 { font-family: var(--display); font-weight: 900; text-transform: uppercase; line-height: .95; letter-spacing: .005em; }
+  h1 { font-size: clamp(3rem, 7.4vw, 5.6rem); }
+  h1 .hl { color: var(--brand); }
+  h2 { font-size: clamp(2.2rem, 4.6vw, 3.4rem); }
+  h3 { font-weight: 700; }
   h3 { font-size: 1.2rem; }
   p { margin: 0 0 1em; }
   a { color: inherit; }
@@ -39,7 +44,7 @@
   /* header */
   header { position: sticky; top: 0; z-index: 20; background: rgba(247,249,252,.92); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
   header .wrap { display: flex; align-items: center; justify-content: space-between; height: 64px; }
-  .logo { font-family: Fraunces, serif; font-weight: 800; font-size: 1.7rem; text-decoration: none; }
+  .logo { font-family: var(--display); font-weight: 900; font-size: 2.1rem; text-decoration: none; }
   .logo span { color: var(--brand); }
   nav a { text-decoration: none; margin-left: 22px; font-weight: 500; color: var(--ink-soft); }
   nav a:hover { color: var(--ink); }
@@ -63,7 +68,7 @@
   /* fund card */
   .fund { background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius); padding: 28px; box-shadow: 0 20px 50px -25px rgba(20,33,61,.35); }
   .fund-top { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
-  .fund-raised { font-family: Fraunces, serif; font-size: 2.6rem; font-weight: 800; line-height: 1; }
+  .fund-raised { font-family: var(--display); font-size: 3.2rem; font-weight: 800; line-height: 1; }
   .fund-goal { color: var(--ink-soft); font-size: .95rem; }
   .badge { display: inline-block; background: var(--ice); color: var(--ink); font-size: .78rem; font-weight: 700; padding: 5px 11px; border-radius: 999px; }
   .bar { position: relative; height: 16px; background: #eef1f6; border-radius: 999px; margin: 18px 0 8px; overflow: hidden; }
@@ -72,14 +77,14 @@
   .chart { margin-top: 22px; border-top: 1px dashed var(--line); padding-top: 18px; }
   .chart svg { width: 100%; height: auto; display: block; }
   .chart-empty { text-align: center; padding: 12px 6px 2px; }
-  .chart-empty strong { display: block; font-family: Fraunces, serif; font-size: 1.3rem; }
+  .chart-empty strong { display: block; font-family: var(--display); font-weight: 800; font-size: 1.7rem; text-transform: uppercase; }
   .fund-note { font-size: .85rem; color: var(--ink-soft); margin: 16px 0 0; }
 
   /* story */
   .story { background: var(--paper); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
   .story-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 56px; align-items: start; }
   .letter { font-size: 1.08rem; }
-  .letter .sig { font-family: Fraunces, serif; font-size: 1.3rem; margin-top: 8px; }
+  .letter .sig { font-family: var(--display); font-size: 1.3rem; margin-top: 8px; }
   .milestones { list-style: none; padding: 0; margin: 0; border-left: 3px solid var(--line); }
   .milestones li { position: relative; padding: 0 0 26px 26px; }
   .milestones li::before { content: ""; position: absolute; left: -10px; top: 4px; width: 17px; height: 17px; border-radius: 50%; background: var(--paper); border: 3px solid var(--line); }
@@ -93,7 +98,7 @@
   .plan { background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius); padding: 30px; display: flex; flex-direction: column; }
   .plan.featured { border: 2px solid var(--brand); position: relative; }
   .plan.featured .badge { position: absolute; top: -13px; left: 26px; background: var(--brand); color: #fff; }
-  .price { font-family: Fraunces, serif; font-size: 3rem; font-weight: 800; line-height: 1; margin: 6px 0 4px; }
+  .price { font-family: var(--display); font-size: 3.6rem; font-weight: 800; line-height: 1; margin: 6px 0 4px; }
   .price small { font-family: Inter, sans-serif; font-size: 1rem; font-weight: 500; color: var(--ink-soft); }
   .plan ul { padding-left: 1.1em; margin: 16px 0 24px; color: var(--ink-soft); }
   .plan .btn { margin-top: auto; justify-content: center; }
@@ -128,7 +133,7 @@
   /* cta */
   .cta { background: var(--ink); color: #fff; text-align: center; }
   .cta .muted { color: #b9c3d8; }
-  .phone-big { font-family: Fraunces, serif; font-size: clamp(2.2rem, 6vw, 3.6rem); font-weight: 800; text-decoration: none; display: inline-block; margin: 8px 0 22px; }
+  .phone-big { font-family: var(--display); font-size: clamp(2.2rem, 6vw, 3.6rem); font-weight: 800; text-decoration: none; display: inline-block; margin: 8px 0 22px; }
   .cta .btn-ghost { border-color: #fff; color: #fff; }
   .cta .ctas { display: flex; justify-content: center; flex-wrap: wrap; gap: 12px; }
 
@@ -165,7 +170,7 @@
     <div class="wrap hero-grid">
       <div>
         <span class="eyebrow">Snow shovelling · odd jobs · etc.</span>
-        <h1>Your driveway, cleared. His future, built.</h1>
+        <h1>Your driveway, cleared.<br><span class="hl">His future, built.</span></h1>
         <p class="lead">We're a local teen and his friends doing snow removal and odd jobs around the neighbourhood. Every dollar goes toward one goal: paying for electrician school.</p>
         <div class="ctas">
           <a class="btn btn-primary" href="tel:+14036568200">📞 Book a shovel — $35</a>
