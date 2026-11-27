@@ -1,5 +1,6 @@
 "use server";
 // Owner mutations. Every action re-checks the session (server actions are public POST endpoints).
+import { adoptTexts } from "@/server/ops/texts";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireOwner } from "@/server/auth";
@@ -46,6 +47,7 @@ export async function updateClient(form: FormData) {
       tags: [...new Set(f.tags.split(",").map((t) => t.trim().toLowerCase()).filter(Boolean))],
     },
   });
+  await adoptTexts(user.businessId, f.id, f.phone); // earlier texts from this number join the client's conversation
   revalidatePath(`/clients/${f.id}`);
 }
 

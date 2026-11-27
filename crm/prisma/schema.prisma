@@ -180,12 +180,14 @@ enum AttachmentKind {
   PROOF
   DOCUMENT
   OTHER
+  TEXT_PHOTO // came in (or went out) by MMS
 }
 
 enum MediaType {
   IMAGE
   VIDEO
   PDF
+  FILE
 }
 
 enum ActorType {
@@ -804,6 +806,9 @@ model Attachment {
   job               Job?           @relation(fields: [jobId], references: [id])
   visitId           String?
   visit             Visit?         @relation(fields: [visitId], references: [id])
+  textMessageId     String?
+  textMessage       TextMessage?   @relation(fields: [textMessageId], references: [id])
+  filename          String?
   caption           String?
   sharedWithClient  Boolean        @default(false)
   showcase          Boolean        @default(false)
@@ -811,6 +816,8 @@ model Attachment {
   sortOrder         Int            @default(0)
   deletedAt         DateTime?
   createdAt         DateTime       @default(now())
+
+  @@index([textMessageId])
 }
 
 model Note {
@@ -915,6 +922,9 @@ model TextMessage {
   error       String?
   sentById    String?
   readAt      DateTime?
+  type        String    @default("SMS") // SMS | MMS | RCS (as the carrier reported it)
+  media       Attachment[]
+  mediaPending Json? // inbound MMS files not downloaded yet: [{url, contentType, attempts}]
   createdAt   DateTime  @default(now())
 
   @@index([businessId, clientId, createdAt])

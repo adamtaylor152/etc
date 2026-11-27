@@ -23,10 +23,12 @@ export default async function ClientPage({ params, searchParams }: PageProps<"/c
     },
   });
   if (!c) notFound();
-  const [jobs, notes, events] = await Promise.all([
+  const [jobs, notes, events, texts, textCount] = await Promise.all([
     jobsWithStatus({ businessId: bid, clientId: id }),
     db.note.findMany({ where: { businessId: bid, clientId: id }, orderBy: { createdAt: "desc" } }),
     db.activityEvent.findMany({ where: { businessId: bid, clientId: id }, orderBy: { at: "desc" }, take: 50 }),
+    db.textMessage.findMany({ where: { businessId: bid, clientId: id }, orderBy: { createdAt: "desc" }, take: 8, include: { media: { where: { deletedAt: null, mediaType: "IMAGE" } } } }),
+    db.textMessage.count({ where: { businessId: bid, clientId: id } }),
   ]);
   const tel = c.phone ? `tel:${c.phone.replace(/[^\d+]/g, "")}` : null;
   return (
@@ -69,6 +71,28 @@ export default async function ClientPage({ params, searchParams }: PageProps<"/c
               <Dl rows={[["Email", c.email], ["Phone", c.phone ? `${c.phone}${c.smsOptIn ? " · texts OK" : ""}` : null], ["Payment", c.preferredPayment === "ETRANSFER" ? "e-Transfer" : c.preferredPayment === "CASH" ? "Cash" : c.preferredPayment], ["Source", c.source.replaceAll("_", " ").toLowerCase()], ["Notes", c.notes]]} />
             </Card>
           )}
+          <Card title="Texts" actions={<Link href={`/messages/${c.id}`} className="text-sm font-semibold text-blue">{textCount ? `Open conversation (${textCount})` : c.phone ? "Send a text" : ""}</Link>}>
+            {texts.length ? (
+              <ol className="space-y-1.5">
+                {[...texts].reverse().map((t) => (
+                  <li key={t.id} className={`flex flex-col ${t.direction === "OUT" ? "items-end" : "items-start"}`}>
+                    {t.media.length > 0 && (
+                      <div className="mb-1 flex gap-1">
+                        {t.media.slice(0, 4).map((m) => (
+                          <a key={m.id} href={`/api/media/${m.id}/lg`} target="_blank" rel="noreferrer">
+                            {/* eslint-disable-next-line @next/next/no-img-element -- private media, our own variants */}
+                            <img src={`/api/media/${m.id}/sm`} alt="Texted photo" loading="lazy" className="size-16 rounded-lg object-cover" />
+                          </a>
+                        ))}
+                      </div>
+                    )}
+                    {t.body && <div className={`max-w-[85%] whitespace-pre-line rounded-2xl px-3 py-1.5 text-sm ${t.direction === "OUT" ? "bg-blue text-white" : "bg-tint"}`}>{t.body}</div>}
+                    <span className="px-1 text-[11px] text-ink-soft">{prettyDateTime(t.createdAt)}</span>
+                  </li>
+                ))}
+              </ol>
+            ) : <Empty>{c.phone ? "No texts yet." : "Add a mobile number to text this client."}</Empty>}
+          </Card>
           <Card title="Properties">
             <ul className="divide-y divide-line">
               {c.properties.map((p) => (

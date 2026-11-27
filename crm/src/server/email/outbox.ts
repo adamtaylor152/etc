@@ -17,6 +17,7 @@ export async function enqueue<T extends TemplateName>(tx: Db, m: {
   businessId: string; template: T; to: string; props: PropsOf<T>; cc?: string[]; replyTo?: string;
   priority?: number; dedupeKey?: string; clientId?: string; entityType?: string; entityId?: string; sendAfter?: Date;
 }) {
+  if (!m.to.trim()) return null; // clients added from a text thread may have no email
   const subject = (templates[m.template].subject as (p: PropsOf<T>) => string)(m.props);
   const data = {
     businessId: m.businessId, template: m.template, to: m.to, cc: m.cc ?? [], replyTo: m.replyTo, subject,
