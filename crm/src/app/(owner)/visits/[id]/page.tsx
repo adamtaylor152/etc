@@ -13,6 +13,7 @@ import { money } from "@/server/money";
 import { clientName } from "@/server/queries";
 import { mapsLink, routeVisits } from "@/server/routing";
 import { visitStatus } from "@/server/status/job";
+import { paymentRecord } from "../../billing-actions";
 import { visitTransition } from "../../work-actions";
 
 const SKIP: [string, string][] = [
@@ -36,6 +37,8 @@ export default async function VisitPage({ params, searchParams }: PageProps<"/vi
   const status = visitStatus({ state: v.state, scheduledDate: dateOnly(v.scheduledDate) }, todayLocal());
   const open = ["SCHEDULED", "EN_ROUTE", "IN_PROGRESS"].includes(v.state);
   const hasIceMelt = v.job.iceMelt || v.job.lineItems.some((l) => l.name === "Ice melt");
+  const invoice = await db.invoice.findFirst({ where: { businessId: bid, status: { not: "VOID" }, lineItems: { some: { visitId: v.id } } } });
+  const owing = invoice ? invoice.totalCents - invoice.amountPaidCents : 0;
   const tel = v.job.client.phone ? `tel:${v.job.client.phone.replace(/[^\d+]/g, "")}` : null;
 
   // Next stop on the same storm (or the same day), in route order.
@@ -127,7 +130,20 @@ export default async function VisitPage({ params, searchParams }: PageProps<"/vi
             ["Location", v.completedLat != null ? <a className="text-blue" href={`https://www.google.com/maps/search/?api=1&query=${v.completedLat},${v.completedLng}`}>Recorded</a> : null],
             ["Charges", v.charges.length ? v.charges.map((c) => `${c.name}: ${money(c.totalCents)}`).join("\n") : null],
           ]} />
-          <form action={visitTransition} className="mt-3">{hidden("SCHEDULED")}<Button variant="secondary">Reopen</Button></form>
+          {invoice && owing > 0 && (
+            <form action={paymentRecord} className="mt-3 space-y-2 rounded-xl bg-tint p-3">
+              <input type="hidden" name="invoiceId" value={invoice.id} /><input type="hidden" name="back" value={here} />
+              <input type="hidden" name="amount" value={(owing / 100).toFixed(2)} />
+              <p className="text-sm">Invoice #{invoice.number}: <b>{money(owing)}</b> owing</p>
+              <div className="grid grid-cols-2 gap-2">
+                <button name="method" value="CASH" className="min-h-12 rounded-full bg-emerald-600 font-semibold text-white">Got cash</button>
+                <button name="method" value="ETRANSFER" className="min-h-12 rounded-full border-2 border-line bg-white font-semibold">Got e-Transfer</button>
+              </div>
+            </form>
+          )}
+          {invoice && owing <= 0 && <p className="mt-3 text-sm font-semibold text-emerald-700">Invoice #{invoice.number} paid ✓</p>}
+          {!invoice?.id && v.charges.some((c) => c.invoiceLineItemId) && <p className="mt-3 text-sm text-ink-soft">Invoiced.</p>}
+          {!v.charges.some((c) => c.invoiceLineItemId) && <form action={visitTransition} className="mt-3">{hidden("SCHEDULED")}<Button variant="secondary">Reopen</Button></form>}
         </Card>
       )}
 

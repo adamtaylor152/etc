@@ -35,3 +35,9 @@ export function prettyDateTime(d: Date | null | undefined): string {
   if (!d) return "";
   return d.toLocaleString("en-CA", { timeZone: TZ, month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
+
+/** The instant a Calgary calendar day starts (DST- and tzdata-aware). */
+export function localDayStart(s: string): Date {
+  const [y, m, d] = s.split("-").map(Number);
+  return new Date(new TZDate(y, m - 1, d, TZ).getTime());
+}

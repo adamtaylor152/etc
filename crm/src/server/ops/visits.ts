@@ -1,7 +1,9 @@
 // Visit operations: the field flow (on my way -> arrived -> done / skip), scheduling and reopening.
 import type { SkipReason, VisitState } from "@/generated/prisma/client";
 import { chargesForVisit } from "../billing/charges";
-import { toDbDate } from "../dates";
+import { dueDate } from "../billing/invoice";
+import { todayLocal, toDbDate } from "../dates";
+import { invoiceUnbilled } from "./invoices";
 import { db, type Tx } from "../db";
 import { enqueue } from "../email/outbox";
 import { env } from "../env";
@@ -48,6 +50,15 @@ export async function transitionVisit(user: Actor, visitId: string, to: VisitSta
       const job = { ...v.job, lineItems: v.job.lineItems.map((l) => ({ ...l, quantity: Number(l.quantity) })) };
       const lines = chargesForVisit(job, { pushNumber: v.pushNumber, iceMeltApplied: updated.iceMeltApplied }, await iceMeltPrice(tx, user.businessId));
       if (lines.length) await tx.visitCharge.createMany({ data: lines.map((l) => ({ ...l, businessId: user.businessId, visitId })) });
+      // Billed per visit (one-off jobs): invoice it now so the "all done" email can carry a pay link.
+      if (lines.length && v.job.invoiceSchedule === "AFTER_EACH_VISIT") {
+        const inv = await invoiceUnbilled(user, { clientId: v.job.clientId, visitId }, tx);
+        const biz = await tx.business.findUniqueOrThrow({ where: { id: user.businessId } });
+        if ((biz.settings as { autoSendVisitInvoices?: boolean }).autoSendVisitInvoices !== false) {
+          const today = todayLocal();
+          await tx.invoice.update({ where: { id: inv.id }, data: { status: "AWAITING_PAYMENT", issuedOn: toDbDate(today), dueOn: toDbDate(dueDate(today, inv.paymentTerms)), sentAt: new Date() } });
+        }
+      }
       // "All done" email with before/after photos. Waits 5 minutes so photos taken right after tapping Done make it in;
       // the dedupe key means reopening and completing again never sends it twice.
       const settings = (await tx.business.findUniqueOrThrow({ where: { id: user.businessId } })).settings as { visitDoneEmail?: boolean };

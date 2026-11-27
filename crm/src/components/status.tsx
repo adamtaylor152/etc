@@ -21,3 +21,11 @@ export const RequestBadge = ({ s }: { s: RequestStatus }) => <Badge tone={REQUES
 export const STORM: Record<SnowEventStatus, [string, Tone]> = {
   FORECAST: ["Forecast", "blue"], ACTIVE: ["Active", "navy"], COMPLETED: ["Finished", "green"], CANCELLED: ["Cancelled", "gray"],
 };
+
+import type { InvoiceView } from "@/server/billing/invoice";
+const INVOICE: Record<InvoiceView, [string, Tone]> = {
+  DRAFT: ["Draft", "gray"], AWAITING_PAYMENT: ["Awaiting payment", "blue"], PARTIAL: ["Partly paid", "amber"], PAST_DUE: ["Past due", "red"],
+  PAID: ["Paid", "green"], BAD_DEBT: ["Written off", "gray"], VOID: ["Void", "gray"],
+};
+export const InvoiceBadge = ({ s }: { s: InvoiceView }) => <Badge tone={INVOICE[s][1]}>{INVOICE[s][0]}</Badge>;
+export const INVOICE_LABEL = Object.fromEntries(Object.entries(INVOICE).map(([k, [l]]) => [k, l])) as Record<InvoiceView, string>;

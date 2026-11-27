@@ -3,7 +3,11 @@
 import type { ReactElement } from "react";
 import { BookingConfirmation, OwnerNewBooking, type BookingEmailProps } from "@/emails/booking";
 import { OwnerLogin } from "@/emails/login";
+import { InvoiceSent, OwnerPaymentReceived, PaymentReceipt, type InvoiceEmailData } from "@/emails/invoice";
 import { OwnerPhotosUploaded, PhotoUploadRequest, VisitDone } from "@/emails/visit";
+import { invoiceTotals } from "../billing/invoice";
+import { money } from "../money";
+import { stripeEnabled } from "../stripe";
 import { dateOnly, prettyDate, todayLocal } from "../dates";
 import { signedMediaPath } from "../media";
 import { clientName } from "../queries";
@@ -65,12 +69,16 @@ const visitDone: Template<{ visitId: string }> = {
       include: { job: { include: { client: true } }, property: true, attachments: { where: { deletedAt: null, sharedWithClient: true, kind: { in: ["BEFORE", "AFTER"] } }, orderBy: { createdAt: "asc" } } },
     });
     const report = await mintToken(db, ctx.businessId, "VISIT_REPORT", { visitId: v.id, clientId: v.job.clientId });
+    // Billed per visit: the invoice made at completion rides along in the same email.
+    const inv = await db.invoice.findFirst({ where: { businessId: ctx.businessId, status: "AWAITING_PAYMENT", lineItems: { some: { visitId: v.id } } } });
+    const payUrl = inv ? `${env.appUrl}/i/${await mintToken(db, ctx.businessId, "INVOICE", { invoiceId: inv.id, clientId: inv.clientId })}` : undefined;
     return (
       <VisitDone
         name={clientName(v.job.client)} address={v.property.formatted} when={prettyDate(v.completedAt ? todayLocal(v.completedAt) : dateOnly(v.scheduledDate))}
         what={v.job.kind === "SNOW_PLAN" || v.job.title.startsWith("Snow") ? "Snow clearing" : v.job.title} depthCm={v.depthCm}
         photos={v.attachments.map((a) => ({ kind: a.kind as "BEFORE" | "AFTER", url: env.appUrl + signedMediaPath(a.id, "md") }))}
         reportUrl={`${env.appUrl}/v/${report}`} site={env.siteUrl} phone={env.phone}
+        payUrl={payUrl} amount={inv ? money(inv.totalCents - inv.amountPaidCents) : undefined}
       />
     );
   },
@@ -84,6 +92,55 @@ const photoUploadRequest: Template<{ requestId: string; name: string; services: 
   },
 };
 
+async function invoiceData(invoiceId: string, businessId: string): Promise<InvoiceEmailData> {
+  const inv = await db.invoice.findUniqueOrThrow({ where: { id: invoiceId }, include: { client: true, lineItems: { orderBy: { sortOrder: "asc" } } } });
+  const biz = await db.business.findUniqueOrThrow({ where: { id: businessId } });
+  const t = invoiceTotals([inv.subtotalCents], inv.discountCents, biz);
+  const raw = await mintToken(db, businessId, "INVOICE", { invoiceId: inv.id, clientId: inv.clientId });
+  return {
+    name: clientName(inv.client), number: inv.number, subject: inv.subject ?? "Services", issued: prettyDate(dateOnly(inv.issuedOn) ?? todayLocal()),
+    due: prettyDate(dateOnly(inv.dueOn) ?? todayLocal()),
+    lines: inv.lineItems.map((l) => ({ name: Number(l.quantity) !== 1 ? `${l.name} × ${Number(l.quantity)}` : l.name, date: prettyDate(dateOnly(l.serviceDate)), amount: money(l.totalCents) })),
+    total: money(inv.totalCents), paid: inv.amountPaidCents ? money(inv.amountPaidCents) : null, balance: money(Math.max(0, inv.totalCents - inv.amountPaidCents)),
+    taxNote: biz.taxRegistered ? (t.taxIncluded ? `Includes ${biz.taxName} of ${money(inv.taxCents)}` : `${biz.taxName} ${money(inv.taxCents)} included in total`) + (biz.taxNumber ? ` · ${biz.taxName} #${biz.taxNumber}` : "") : null,
+    payUrl: `${env.appUrl}/i/${raw}`, etransferEmail: biz.etransferEmail || env.etransferEmail, etransferRef: inv.etransferRef,
+    cardEnabled: stripeEnabled(), site: env.siteUrl, phone: env.phone,
+  };
+}
+
+const invoiceSent: Template<{ invoiceId: string }> = {
+  subject: () => "Your invoice from etc.",
+  async render(p, ctx) { return <InvoiceSent d={await invoiceData(p.invoiceId, ctx.businessId)} />; },
+};
+
+const invoiceReminder: Template<{ invoiceId: string; n: 1 | 2 }> = {
+  subject: (p) => (p.n === 1 ? "Friendly reminder: your etc. invoice" : "Second reminder: your etc. invoice"),
+  async render(p, ctx) { return <InvoiceSent d={await invoiceData(p.invoiceId, ctx.businessId)} reminder={p.n} />; },
+};
+
+const METHOD: Record<string, string> = { CASH: "cash", ETRANSFER: "e-Transfer", CARD: "card", CHEQUE: "cheque", OTHER: "payment" };
+const paymentReceipt: Template<{ paymentId: string }> = {
+  subject: () => "Receipt from etc. Thank you!",
+  async render(p, ctx) {
+    const pay = await db.payment.findUniqueOrThrow({ where: { id: p.paymentId }, include: { invoice: true } });
+    return (
+      <PaymentReceipt d={await invoiceData(pay.invoiceId, ctx.businessId)} amount={money(pay.amountCents)} method={METHOD[pay.method]}
+        when={prettyDate(todayLocal(pay.receivedAt))} paidInFull={pay.invoice.amountPaidCents >= pay.invoice.totalCents} />
+    );
+  },
+};
+
+const ownerPaymentReceived: Template<{ paymentId: string }> = {
+  subject: () => "Payment received",
+  async render(p, ctx) {
+    const pay = await db.payment.findUniqueOrThrow({ where: { id: p.paymentId }, include: { invoice: true, client: true } });
+    const user = await db.user.findFirst({ where: { businessId: ctx.businessId, email: ctx.to.toLowerCase(), active: true } });
+    const path = `/invoices/${pay.invoiceId}`;
+    const url = user ? `${env.appUrl}/auth/go?t=${await mintToken(db, ctx.businessId, "OWNER_DEEP_LINK", { userId: user.id, redirectPath: path })}` : `${env.appUrl}${path}`;
+    return <OwnerPaymentReceived name={clientName(pay.client)} amount={money(pay.amountCents)} number={pay.invoice.number} url={url} />;
+  },
+};
+
 export const templates = {
   "owner.login": ownerLogin,
   "owner.new_booking": ownerNewBooking,
@@ -91,6 +148,10 @@ export const templates = {
   "owner.photos_uploaded": ownerPhotosUploaded,
   "visit.done": visitDone,
   "photo_upload.request": photoUploadRequest,
+  "invoice.sent": invoiceSent,
+  "invoice.reminder": invoiceReminder,
+  "payment.receipt": paymentReceipt,
+  "owner.payment_received": ownerPaymentReceived,
 } as const;
 
 export type TemplateName = keyof typeof templates;
