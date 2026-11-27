@@ -43,3 +43,19 @@ describe("matchInvoice", () => {
     expect(matchInvoice({ amountCents: 3500, sender: null, refs: ["ETC-9"], message: null }, open)).toBeNull();
   });
 });
+
+import { classifyInterac } from "@/server/billing/interac";
+describe("classifyInterac", () => {
+  it("payments need an amount and a 'sent you' line", () => {
+    expect(classifyInterac(sample.subject, sample.body)).toBe("payment");
+    expect(classifyInterac("e-Transfer received", "From: Bob Jones\nYou've received $20.00")).toBe("payment");
+  });
+  it("Autodeposit confirmation emails are not payments", () => {
+    expect(classifyInterac("INTERAC e-Transfer: Confirm your Autodeposit registration",
+      "Please confirm your Autodeposit registration for pay@etccrew.ca. Once confirmed, money sent to you will be automatically deposited into your account.")).toBe("setup");
+    expect(classifyInterac("Your Autodeposit is now active", "Funds will be automatically deposited.")).toBe("setup");
+  });
+  it("other Interac mail is ignored", () => {
+    expect(classifyInterac("Interac security notice", "We will never ask for your password.")).toBe("other");
+  });
+});
