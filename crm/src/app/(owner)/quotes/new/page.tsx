@@ -1,6 +1,7 @@
 // New quote from a request (/quotes/new?request=...) or for a client (?client=...).
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { ClientPick } from "@/components/client-pick";
 import { Gallery } from "@/components/gallery";
 import { QuoteLinesEditor } from "@/components/quote-lines";
 import { Button, Card, Field, Input, PageHeader, Textarea, inputCls } from "@/components/ui";
@@ -14,6 +15,7 @@ export default async function NewQuote({ searchParams }: PageProps<"/quotes/new"
   const sp = await searchParams;
   const bid = await businessId();
   const request = sp.request ? await db.request.findFirst({ where: { id: String(sp.request), businessId: bid } }) : null;
+  if (!request && !sp.client) return <ClientPick businessId={bid} base="/quotes/new" q={typeof sp.q === "string" ? sp.q : undefined} title="New quote" />;
   const client = await db.client.findFirst({ where: { id: request?.clientId ?? String(sp.client ?? ""), businessId: bid }, include: { properties: { where: { archivedAt: null } } } });
   if (!client) notFound();
   const services = await db.service.findMany({ where: { businessId: bid, active: true }, orderBy: { sortOrder: "asc" } });

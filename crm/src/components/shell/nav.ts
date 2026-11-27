@@ -36,8 +36,10 @@ export type CreateItem = { href: string; label: string; icon: LucideIcon; color:
 // Object colours (Jobber's convention): request orange, quote rose, job green, invoice blue, task navy.
 export const CREATE: CreateItem[] = [
   { href: "/clients/new", label: "Client", icon: UserPlus, color: "text-navy" },
+  { href: "/requests/new", label: "Request", icon: Inbox, color: "text-orange-700" },
   { href: "/quotes/new", label: "Quote", icon: FileText, color: "text-rose-700" },
   { href: "/jobs/new", label: "Job", icon: Hammer, color: "text-emerald-700" },
+  { href: "/invoices/new", label: "Invoice", icon: Receipt, color: "text-blue" },
   { href: "/tasks/new", label: "Task", icon: ListTodo, color: "text-navy" },
   { href: "/messages/new", label: "Text message", icon: MessageSquare, color: "text-blue" },
   { href: "/calls/new", label: "Log a call", icon: Phone, color: "text-violet-700" },
