@@ -1,5 +1,6 @@
 // Job operations from the back office: new one-off jobs, every-snowfall plans, pause/close.
-import { todayLocal, toDbDate } from "../dates";
+import { addDays, todayLocal, toDbDate } from "../dates";
+import { recurrenceDates, toRRule, type Repeat } from "../recurrence";
 import { db } from "../db";
 import { logActivity, nextNumber } from "../records";
 import { seasonFor } from "../booking/create";
@@ -74,4 +75,71 @@ export async function setJobClosed(user: Actor, jobId: string, closed: boolean, 
     await tx.job.update({ where: { id: jobId }, data: closed ? { closedAt: new Date(), closeReason: reason || null } : { closedAt: null, closeReason: null } });
     await logActivity(tx, { businessId: user.businessId, type: closed ? "job.closed" : "job.reopened", entityType: "Job", entityId: jobId, actorType: "USER", actorUserId: user.id, clientId: job.clientId, jobId });
   });
+}
+
+// ---------- recurring jobs ----------
+const HORIZON_DAYS = 90;
+
+/** Create concrete visits for the next 90 days. Safe to re-run (unique on job + recurrenceDate). */
+export async function generateRecurringVisits(businessId: string, jobId?: string) {
+  const today = todayLocal();
+  const jobs = await db.job.findMany({
+    where: { businessId, kind: "RECURRING", closedAt: null, asNeeded: false, rrule: { not: null }, ...(jobId ? { id: jobId } : {}) },
+    include: { property: { select: { routeSort: true } } },
+  });
+  let created = 0;
+  for (const j of jobs) {
+    const dates = recurrenceDates(j.rrule!, today, addDays(today, HORIZON_DAYS));
+    if (!dates.length) continue;
+    const res = await db.visit.createMany({
+      skipDuplicates: true,
+      data: dates.map((d) => ({
+        businessId, jobId: j.id, propertyId: j.propertyId, scheduledDate: toDbDate(d), recurrenceDate: toDbDate(d),
+        source: "RECURRENCE" as const, anytime: true, routeSort: j.property.routeSort,
+      })),
+    });
+    created += res.count;
+  }
+  return created;
+}
+
+export async function createRecurringJob(user: Actor, input: {
+  clientId: string; propertyId: string; title: string; instructions?: string; lines: LineInput[]; repeat: Repeat | null;
+}) {
+  const prop = await db.property.findFirstOrThrow({ where: { id: input.propertyId, clientId: input.clientId, businessId: user.businessId } });
+  const job = await db.$transaction(async (tx) => {
+    const lines = input.lines.map((l, i) => ({ ...l, totalCents: Math.round(l.quantity * l.unitPriceCents), sortOrder: i, perVisit: true }));
+    const j = await tx.job.create({
+      data: {
+        businessId: user.businessId, number: await nextNumber(tx, user.businessId, "JOB"), clientId: input.clientId, propertyId: prop.id,
+        kind: "RECURRING", title: input.title, instructions: input.instructions || null, billingType: "PER_VISIT", invoiceSchedule: "MONTHLY",
+        rrule: input.repeat ? toRRule(input.repeat) : null, asNeeded: !input.repeat,
+        recurrenceStartsOn: input.repeat ? toDbDate(input.repeat.startsOn) : null, recurrenceEndsOn: input.repeat?.endsOn ? toDbDate(input.repeat.endsOn) : null,
+        lineItems: { create: lines },
+      },
+    });
+    await logActivity(tx, { businessId: user.businessId, type: "job.created", entityType: "Job", entityId: j.id, actorType: "USER", actorUserId: user.id, clientId: input.clientId, jobId: j.id });
+    return j;
+  });
+  await generateRecurringVisits(user.businessId, job.id);
+  return job;
+}
+
+/** Change the schedule: future visits nobody touched are replaced; done, moved or detached visits stay. */
+export async function updateRecurrence(user: Actor, jobId: string, repeat: Repeat | null) {
+  const job = await db.job.findFirstOrThrow({ where: { id: jobId, businessId: user.businessId, kind: "RECURRING" } });
+  await db.$transaction(async (tx) => {
+    await tx.visit.deleteMany({
+      where: { jobId, source: "RECURRENCE", state: "SCHEDULED", detachedFromRecurrence: false, scheduledDate: { gte: toDbDate(todayLocal()) }, charges: { none: {} }, attachments: { none: {} } },
+    });
+    await tx.job.update({
+      where: { id: jobId },
+      data: {
+        rrule: repeat ? toRRule(repeat) : null, asNeeded: !repeat, recurrenceStartsOn: repeat ? toDbDate(repeat.startsOn) : null,
+        recurrenceEndsOn: repeat?.endsOn ? toDbDate(repeat.endsOn) : null,
+      },
+    });
+    await logActivity(tx, { businessId: user.businessId, type: "job.schedule_changed", entityType: "Job", entityId: jobId, actorType: "USER", actorUserId: user.id, clientId: job.clientId, jobId });
+  });
+  await generateRecurringVisits(user.businessId, jobId);
 }

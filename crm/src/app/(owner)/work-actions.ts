@@ -7,7 +7,7 @@ import { z } from "zod";
 import type { SkipReason, VisitState } from "@/generated/prisma/client";
 import { requireOwner } from "@/server/auth";
 import { addVisit, deleteVisit, scheduleVisit, transitionVisit } from "@/server/ops/visits";
-import { createOneOffJob, createSnowPlan, setJobClosed, setPlanPaused, updatePlan } from "@/server/ops/jobs";
+import { createOneOffJob, createRecurringJob, createSnowPlan, setJobClosed, setPlanPaused, updatePlan, updateRecurrence } from "@/server/ops/jobs";
 import { addPush, cancelStorm, createStorm, finishStorm, setStormDepth, startStorm } from "@/server/ops/storms";
 import { TransitionError } from "@/server/status/visit";
 
@@ -145,4 +145,34 @@ export async function stormFinish(f: FormData) {
 export async function stormCancel(f: FormData) {
   const user = await requireOwner();
   await run(f, () => cancelStorm(user, str(f, "id")));
+}
+
+/** Calendar drag & drop (called directly from the client component). */
+export async function calendarReschedule(visitId: string, date: string | null) {
+  const user = await requireOwner();
+  const d = date === null ? null : z.string().regex(/^\d{4}-\d{2}-\d{2}$/).parse(date);
+  await scheduleVisit(user, visitId, d);
+  revalidatePath("/schedule");
+}
+
+// ---------- recurring ----------
+const REPEAT = z.object({ freq: z.enum(["WEEKLY", "BIWEEKLY", "MONTHLY"]), byDay: z.array(z.coerce.number().int().min(0).max(6)), startsOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), endsOn: date });
+const repeatFrom = (f: FormData) => str(f, "freq") === "AS_NEEDED" ? null
+  : REPEAT.parse({ freq: str(f, "freq"), byDay: f.getAll("byDay").map(String), startsOn: str(f, "startsOn"), endsOn: str(f, "endsOn") });
+
+export async function recurringCreate(f: FormData) {
+  const user = await requireOwner();
+  const names = f.getAll("lineName").map(String), prices = f.getAll("linePrice").map(String), qtys = f.getAll("lineQty").map(String);
+  const lines = names.map((name, i) => ({ name: name.trim(), unitPriceCents: dollars.parse(prices[i] || "0"), quantity: z.coerce.number().positive().max(1000).parse(qtys[i] || "1") })).filter((l) => l.name);
+  const job = await createRecurringJob(user, {
+    clientId: str(f, "clientId"), propertyId: str(f, "propertyId"), title: z.string().min(1).max(120).parse(str(f, "title")),
+    instructions: str(f, "instructions").slice(0, 2000), lines, repeat: repeatFrom(f),
+  });
+  revalidatePath("/", "layout");
+  redirect(`/jobs/${job.id}`);
+}
+
+export async function recurringUpdate(f: FormData) {
+  const user = await requireOwner();
+  await run(f, () => updateRecurrence(user, str(f, "id"), repeatFrom(f)));
 }

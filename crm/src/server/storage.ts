@@ -5,7 +5,8 @@ import { mkdir, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { Readable } from "node:stream";
 
-const root = () => path.resolve(process.env.UPLOAD_DIR ?? "./data/uploads");
+// turbopackIgnore: the upload dir is runtime data, not app code; without this the build traces the whole project.
+const root = () => path.resolve(/* turbopackIgnore: true */ process.env.UPLOAD_DIR ?? "./data/uploads");
 
 function resolveKey(key: string) {
   const full = path.resolve(root(), key);

@@ -1,60 +1,35 @@
-// Day agenda for the next two weeks, plus late and unscheduled visits. (Full calendar views come in M7.)
-import Link from "next/link";
-import { VisitBadge } from "@/components/status";
-import { Card, Empty, PageHeader } from "@/components/ui";
-import { addDays, dateOnly, prettyDate, todayLocal, toDbDate } from "@/server/dates";
+// Calendar of visits (month / week / list) with drag-to-reschedule and an unscheduled sidebar.
+import { ScheduleCalendar } from "@/components/calendar";
+import { PageHeader } from "@/components/ui";
+import { addDays, dateOnly, todayLocal, toDbDate } from "@/server/dates";
 import { businessId, db } from "@/server/db";
 import { clientName } from "@/server/queries";
-import { visitStatus } from "@/server/status/job";
 
 export const metadata = { title: "Schedule" };
+
+const COLOR = { SNOW_PLAN: "#1d6fd8", ONE_OFF: "#14213d", RECURRING: "#0f766e" } as const;
 
 export default async function Schedule() {
   const bid = await businessId();
   const today = todayLocal();
-  const end = addDays(today, 14);
   const visits = await db.visit.findMany({
     where: {
-      businessId: bid, state: { in: ["SCHEDULED", "EN_ROUTE", "IN_PROGRESS"] }, job: { closedAt: null },
-      OR: [{ scheduledDate: null }, { scheduledDate: { lte: toDbDate(end) } }],
+      businessId: bid, state: { not: "CANCELLED" }, job: { closedAt: null },
+      OR: [{ scheduledDate: null, state: "SCHEDULED" }, { scheduledDate: { gte: toDbDate(addDays(today, -62)), lte: toDbDate(addDays(today, 120)) } }],
     },
-    include: { job: { include: { client: true } }, property: { include: { community: true } } },
-    orderBy: [{ scheduledDate: "asc" }, { routeSort: "asc" }],
+    include: { job: { include: { client: true } }, property: true },
   });
-  const buckets = new Map<string, typeof visits>();
-  for (const v of visits) {
-    const d = dateOnly(v.scheduledDate);
-    const key = !d ? "unscheduled" : d < today ? "late" : d;
-    buckets.set(key, [...(buckets.get(key) ?? []), v]);
-  }
-  const days = Array.from({ length: 15 }, (_, i) => addDays(today, i));
-  const sections: [string, string, typeof visits][] = [
-    ["late", "Late", buckets.get("late") ?? []],
-    ...days.map((d): [string, string, typeof visits] => [d, d === today ? `Today · ${prettyDate(d)}` : prettyDate(d), buckets.get(d) ?? []]),
-    ["unscheduled", "Not scheduled yet", buckets.get("unscheduled") ?? []],
-  ];
+  const events = visits.filter((v) => v.scheduledDate).map((v) => ({
+    id: v.id, date: dateOnly(v.scheduledDate)!, done: v.state === "COMPLETED" || v.state === "SKIPPED",
+    title: `${v.state === "COMPLETED" ? "✓ " : v.state === "SKIPPED" ? "– " : ""}${clientName(v.job.client)} · ${v.job.kind === "SNOW_PLAN" ? "Snow" : v.job.title}`,
+    color: v.scheduledDate && dateOnly(v.scheduledDate)! < today && v.state === "SCHEDULED" ? "#b91c1c" : COLOR[v.job.kind],
+    editable: v.state === "SCHEDULED" && !v.snowEventId,
+  }));
+  const unscheduled = visits.filter((v) => !v.scheduledDate).map((v) => ({ id: v.id, title: `${clientName(v.job.client)} · ${v.job.title}`, sub: v.property.formatted }));
   return (
     <>
-      <PageHeader title="Schedule" sub="Next two weeks. Snow-plan visits appear when a storm starts." />
-      <div className="space-y-4">
-        {sections.filter(([k, , list]) => list.length || k === today).map(([k, label, list]) => (
-          <Card key={k} title={label} actions={/^\d/.test(k) && list.length > 0 && <Link className="text-sm font-semibold text-blue" href={`/routes?date=${k}`}>Route</Link>}>
-            {list.length ? (
-              <ul className="divide-y divide-line">
-                {list.map((v) => (
-                  <li key={v.id}>
-                    <Link href={`/visits/${v.id}`} className="flex items-center justify-between gap-3 py-2.5 text-sm">
-                      <span className="min-w-0"><span className="font-semibold">{clientName(v.job.client)}</span>
-                        <span className="block truncate text-ink-soft">{v.job.title} · {v.property.formatted}</span></span>
-                      <VisitBadge s={visitStatus({ state: v.state, scheduledDate: dateOnly(v.scheduledDate) }, today)} />
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            ) : <Empty>Nothing booked.</Empty>}
-          </Card>
-        ))}
-      </div>
+      <PageHeader title="Schedule" sub="Blue = snow plans, navy = one-off jobs, green = recurring, red = late." />
+      <ScheduleCalendar events={events} unscheduled={unscheduled} initialDate={today} />
     </>
   );
 }

@@ -15,6 +15,7 @@ const LABEL: Record<string, string> = {
   "storm.finished": "Storm finished", "storm.cancelled": "Storm cancelled",
   "quote.created": "Quote created", "quote.sent": "Quote sent", "quote.approved": "Quote approved", "quote.changes_requested": "Client asked for changes",
   "quote.converted": "Quote converted to a job",
+  "job.schedule_changed": "Repeat schedule changed",
   "visit.scheduled": "Visit reopened", "visit.cancelled": "Visit cancelled", "visit.scheduled_for": "Visit rescheduled",
 };
 

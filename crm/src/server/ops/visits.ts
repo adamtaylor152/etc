@@ -95,9 +95,21 @@ function transitionTx(user: Actor, visitId: string, to: VisitState, extra: Trans
 }
 
 export async function scheduleVisit(user: Actor, visitId: string, date: string | null) {
+  await scheduleTx(user, visitId, date);
+  kickOutbox();
+}
+
+async function scheduleTx(user: Actor, visitId: string, date: string | null) {
   const v = await db.visit.findFirstOrThrow({ where: { id: visitId, businessId: user.businessId }, include: { job: true } });
   await db.$transaction(async (tx) => {
-    await tx.visit.update({ where: { id: visitId }, data: { scheduledDate: date ? toDbDate(date) : null } });
+    await tx.visit.update({ where: { id: visitId }, data: { scheduledDate: date ? toDbDate(date) : null, ...(v.recurrenceDate ? { detachedFromRecurrence: true } : {}) } });
+    const client = await tx.client.findUniqueOrThrow({ where: { id: v.job.clientId } });
+    if (date && v.job.kind !== "SNOW_PLAN" && (await getSettings(tx, user.businessId)).visitReminders && !client.emailBouncedAt) {
+      await enqueue(tx, {
+        businessId: user.businessId, template: "visit.scheduled", to: client.email, replyTo: env.helpEmail, priority: 4, props: { visitId },
+        dedupeKey: `visit:${visitId}:scheduled:${date}`, clientId: client.id, entityType: "Visit", entityId: visitId,
+      });
+    }
     await logActivity(tx, { businessId: user.businessId, type: "visit.scheduled_for", entityType: "Visit", entityId: visitId, actorType: "USER", actorUserId: user.id, clientId: v.job.clientId, jobId: v.jobId, data: { date } });
   });
 }
