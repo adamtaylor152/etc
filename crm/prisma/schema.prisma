@@ -1,0 +1,867 @@
+// etc. CRM schema. Money is integer cents, snow depth integer cm.
+// Calendar dates are @db.Date (handled as YYYY-MM-DD in America/Edmonton); instants are timestamptz.
+// Every tenant table carries businessId (SaaS insurance); scope every query by it (see src/server/db.ts).
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------- enums ----------
+enum UserRole {
+  OWNER
+  CREW
+}
+
+enum TokenPurpose {
+  LOGIN
+  OWNER_DEEP_LINK
+  QUOTE
+  INVOICE
+  CLIENT_HUB
+  PHOTO_UPLOAD
+  VISIT_REPORT
+}
+
+enum ClientSource {
+  BOOKING_FORM
+  MANUAL
+  PHONE
+  REFERRAL
+  CLIENT_HUB
+  IMPORT
+}
+
+enum PaymentMethod {
+  CASH
+  ETRANSFER
+  CARD
+  CHEQUE
+  OTHER
+}
+
+enum GeocodeSource {
+  PLACES_AUTOCOMPLETE
+  GOOGLE_GEOCODING
+  MANUAL_PIN
+  NONE
+}
+
+enum ServiceCategory {
+  SNOW
+  CLEANUP
+  WASHING
+  FIXUP
+  ADDON
+  OTHER
+}
+
+enum PricingMode {
+  FIXED
+  QUOTE
+}
+
+enum PriceUnit {
+  EACH
+  VISIT
+  PUSH
+  HOUR
+  SEASON
+}
+
+enum RequestStatus {
+  NEW
+  ASSESSMENT_SCHEDULED
+  CONVERTED
+  ARCHIVED
+}
+
+enum SnowPlanChoice {
+  ONE_TIME
+  EVERY_SNOWFALL
+}
+
+enum QuoteStatus {
+  DRAFT
+  AWAITING_RESPONSE
+  CHANGES_REQUESTED
+  APPROVED
+  CONVERTED
+  ARCHIVED
+}
+
+enum JobKind {
+  ONE_OFF
+  RECURRING
+  SNOW_PLAN
+}
+
+enum BillingType {
+  FIXED_PRICE
+  PER_VISIT
+}
+
+enum InvoiceSchedule {
+  AFTER_EACH_VISIT
+  PER_SNOW_EVENT
+  MONTHLY
+  ON_COMPLETION
+  MANUAL
+}
+
+enum SnowBillingMode {
+  PER_PUSH
+  PER_EVENT
+  SEASONAL
+}
+
+enum VisitState {
+  SCHEDULED
+  EN_ROUTE
+  IN_PROGRESS
+  COMPLETED
+  SKIPPED
+  CANCELLED
+}
+
+enum VisitSource {
+  MANUAL
+  BOOKING
+  RECURRENCE
+  SNOW_EVENT
+}
+
+enum SkipReason {
+  ALREADY_CLEARED
+  BLOCKED_BY_CAR
+  NO_ACCESS
+  BELOW_TRIGGER
+  CLIENT_CANCELLED
+  WEATHER
+  OTHER
+}
+
+enum SnowEventStatus {
+  FORECAST
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum InvoiceStatus {
+  DRAFT
+  AWAITING_PAYMENT
+  PAID
+  BAD_DEBT
+  VOID
+}
+
+enum PaymentTerms {
+  DUE_ON_RECEIPT
+  NET_7
+  NET_15
+  NET_30
+}
+
+enum PaymentStatus {
+  SUCCEEDED
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+enum AttachmentKind {
+  BEFORE
+  AFTER
+  REQUEST_PHOTO
+  PROOF
+  DOCUMENT
+  OTHER
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
+  PDF
+}
+
+enum ActorType {
+  USER
+  CLIENT
+  SYSTEM
+}
+
+enum EmailStatus {
+  QUEUED
+  SENDING
+  SENT
+  FAILED
+  SUPPRESSED
+}
+
+enum CounterKind {
+  REQUEST
+  QUOTE
+  JOB
+  INVOICE
+  SNOW_EVENT
+}
+
+// ---------- tenancy & auth ----------
+model Business {
+  id                  String       @id @default(cuid())
+  slug                String       @unique
+  name                String
+  legalName           String?
+  email               String?
+  phone               String?
+  helpEmail           String?
+  etransferEmail      String?
+  website             String?
+  timezone            String       @default("America/Edmonton")
+  currency            String       @default("CAD")
+  taxRegistered       Boolean      @default(false)
+  taxName             String       @default("GST")
+  taxRateBps          Int          @default(500)
+  taxNumber           String?
+  pricesIncludeTax    Boolean      @default(true)
+  defaultPaymentTerms PaymentTerms @default(DUE_ON_RECEIPT)
+  depotAddress        String?
+  depotLat            Float?
+  depotLng            Float?
+  googleReviewUrl     String?
+  settings            Json         @default("{}")
+  createdAt           DateTime     @default(now())
+
+  users    User[]
+  clients  Client[]
+  services Service[]
+}
+
+model User {
+  id          String    @id @default(cuid())
+  businessId  String
+  business    Business  @relation(fields: [businessId], references: [id])
+  email       String
+  name        String?
+  role        UserRole  @default(OWNER)
+  active      Boolean   @default(true)
+  lastLoginAt DateTime?
+  createdAt   DateTime  @default(now())
+  sessions    Session[]
+
+  @@unique([businessId, email])
+}
+
+model Session {
+  id         String   @id // sha256 of the cookie value
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  businessId String
+  expiresAt  DateTime
+  lastSeenAt DateTime @default(now())
+  userAgent  String?
+  ip         String?
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+}
+
+model LinkToken {
+  id           String       @id @default(cuid())
+  businessId   String
+  purpose      TokenPurpose
+  tokenHash    String       @unique // sha256(raw); raw value is never stored
+  userId       String?
+  clientId     String?
+  requestId    String?
+  quoteId      String?
+  invoiceId    String?
+  jobId        String?
+  visitId      String?
+  redirectPath String?
+  expiresAt    DateTime
+  maxUses      Int?
+  useCount     Int          @default(0)
+  lastUsedAt   DateTime?
+  revokedAt    DateTime?
+  createdAt    DateTime     @default(now())
+
+  @@index([businessId, purpose])
+}
+
+// ---------- clients & places ----------
+model Client {
+  id               String         @id @default(cuid())
+  businessId       String
+  business         Business       @relation(fields: [businessId], references: [id])
+  firstName        String
+  lastName         String         @default("")
+  companyName      String?
+  email            String // lowercased
+  altEmails        String[]
+  phone            String?
+  preferredPayment PaymentMethod?
+  source           ClientSource
+  referredBy       String?
+  tags             String[]
+  notes            String?
+  marketingOptOut  Boolean        @default(false)
+  emailBouncedAt   DateTime?
+  archivedAt       DateTime?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  properties  Property[]
+  requests    Request[]
+  jobs        Job[]
+  quotes      Quote[]
+  invoices    Invoice[]
+  payments    Payment[]
+  attachments Attachment[]
+  notesList   Note[]
+
+  @@index([businessId, email])
+}
+
+model Property {
+  id            String        @id @default(cuid())
+  businessId    String
+  clientId      String
+  client        Client        @relation(fields: [clientId], references: [id])
+  label         String?
+  formatted     String // the address as typed/selected
+  normalized    String // lowercased, collapsed whitespace: dedupe key
+  line1         String?
+  postalCode    String?
+  city          String        @default("Calgary")
+  province      String        @default("AB")
+  placeId       String?
+  lat           Float?
+  lng           Float?
+  geocodeSource GeocodeSource @default(NONE)
+  communityCode String?
+  community     Community?    @relation(fields: [communityCode], references: [code])
+  accessNotes   String?
+  gateCode      String?
+  petNotes      String?
+  hazards       String?
+  routeSort     Int?
+  isDefault     Boolean       @default(false)
+  archivedAt    DateTime?
+  createdAt     DateTime      @default(now())
+
+  requests    Request[]
+  jobs        Job[]
+  visits      Visit[]
+  quotes      Quote[]
+  attachments Attachment[]
+
+  @@index([businessId, normalized])
+  @@index([businessId, communityCode])
+}
+
+// Global reference data (City of Calgary Community District Boundaries)
+model Community {
+  code        String   @id
+  name        String
+  sector      String?
+  class       String?
+  geometry    Json
+  centroidLat Float
+  centroidLng Float
+  sourceDate  String
+
+  properties Property[]
+  service    ServiceCommunity[]
+}
+
+model ServiceCommunity {
+  businessId    String
+  communityCode String
+  community     Community @relation(fields: [communityCode], references: [code])
+  sortOrder     Int       @default(0)
+  color         String?
+  active        Boolean   @default(true)
+
+  @@id([businessId, communityCode])
+}
+
+// ---------- price book ----------
+model Service {
+  id             String          @id @default(cuid())
+  businessId     String
+  business       Business        @relation(fields: [businessId], references: [id])
+  key            String
+  name           String
+  bookingLabel   String? // exact value posted by book.html, e.g. "Snow shovelling"
+  category       ServiceCategory
+  description    String?
+  pricingMode    PricingMode
+  unitPriceCents Int?
+  unit           PriceUnit       @default(EACH)
+  isAddon        Boolean         @default(false)
+  bookable       Boolean         @default(true)
+  active         Boolean         @default(true)
+  sortOrder      Int             @default(0)
+
+  @@unique([businessId, key])
+}
+
+// ---------- pipeline ----------
+model Request {
+  id               String          @id @default(cuid())
+  businessId       String
+  number           Int
+  clientId         String
+  client           Client          @relation(fields: [clientId], references: [id])
+  propertyId       String?
+  property         Property?       @relation(fields: [propertyId], references: [id])
+  source           ClientSource
+  status           RequestStatus   @default(NEW)
+  title            String
+  services         String[] // booking labels as submitted
+  snowPlan         SnowPlanChoice?
+  iceMelt          Boolean         @default(false)
+  preferredDate    DateTime?       @db.Date
+  preferredPayment PaymentMethod?
+  notes            String?
+  accessNotes      String?
+  estimateText     String? // exact legacy string, e.g. "$35 / snowfall + quote"
+  rawPayload       Json?
+  ip               String?
+  userAgent        String?
+  legacyBookingId  Int?
+  assessmentAt     DateTime?
+  convertedAt      DateTime?
+  archivedAt       DateTime?
+  createdAt        DateTime        @default(now())
+
+  jobs        Job[]
+  quotes      Quote[]
+  attachments Attachment[]
+
+  @@unique([businessId, number])
+  @@unique([businessId, legacyBookingId])
+  @@index([businessId, status])
+}
+
+model Quote {
+  id                   String      @id @default(cuid())
+  businessId           String
+  number               Int
+  clientId             String
+  client               Client      @relation(fields: [clientId], references: [id])
+  propertyId           String?
+  property             Property?   @relation(fields: [propertyId], references: [id])
+  requestId            String?
+  request              Request?    @relation(fields: [requestId], references: [id])
+  status               QuoteStatus @default(DRAFT)
+  title                String?
+  message              String?
+  subtotalCents        Int         @default(0)
+  discountCents        Int         @default(0)
+  taxCents             Int         @default(0)
+  totalCents           Int         @default(0)
+  validUntil           DateTime?   @db.Date
+  sentAt               DateTime?
+  firstViewedAt        DateTime?
+  approvedAt           DateTime?
+  approvedByName       String?
+  approvedIp           String?
+  changesRequestedAt   DateTime?
+  changeRequestMessage String?
+  convertedAt          DateTime?
+  archivedAt           DateTime?
+  jobId                String?     @unique
+  createdAt            DateTime    @default(now())
+
+  lineItems   QuoteLineItem[]
+  attachments Attachment[]
+
+  @@unique([businessId, number])
+}
+
+model QuoteLineItem {
+  id             String  @id @default(cuid())
+  quoteId        String
+  quote          Quote   @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  serviceId      String?
+  name           String
+  description    String?
+  quantity       Decimal @default(1) @db.Decimal(9, 2)
+  unitPriceCents Int
+  totalCents     Int
+  isOptional     Boolean @default(false)
+  isSelected     Boolean @default(true)
+  sortOrder      Int     @default(0)
+}
+
+// ---------- snow ----------
+model Season {
+  id               String   @id @default(cuid())
+  businessId       String
+  name             String
+  startsOn         DateTime @db.Date
+  endsOn           DateTime @db.Date
+  defaultTriggerCm Int      @default(2)
+
+  events SnowEvent[]
+  jobs   Job[]
+}
+
+model SnowEvent {
+  id               String          @id @default(cuid())
+  businessId       String
+  seasonId         String
+  season           Season          @relation(fields: [seasonId], references: [id])
+  number           Int
+  name             String
+  status           SnowEventStatus @default(FORECAST)
+  forecastCm       Int?
+  measuredCm       Int?
+  snowStartedAt    DateTime?
+  snowEndedAt      DateTime?
+  activatedAt      DateTime?
+  completedAt      DateTime?
+  pushCount        Int             @default(1)
+  forecastSnapshot Json?
+  notes            String?
+  createdAt        DateTime        @default(now())
+
+  visits   Visit[]
+  invoices Invoice[]
+}
+
+// ---------- jobs & visits ----------
+model Job {
+  id                 String           @id @default(cuid())
+  businessId         String
+  number             Int
+  clientId           String
+  client             Client           @relation(fields: [clientId], references: [id])
+  propertyId         String
+  property           Property         @relation(fields: [propertyId], references: [id])
+  requestId          String?
+  request            Request?         @relation(fields: [requestId], references: [id])
+  quoteId            String?
+  seasonId           String?
+  season             Season?          @relation(fields: [seasonId], references: [id])
+  kind               JobKind
+  title              String
+  instructions       String?
+  billingType        BillingType      @default(PER_VISIT)
+  invoiceSchedule    InvoiceSchedule  @default(AFTER_EACH_VISIT)
+  totalCents         Int?
+  // RECURRING
+  rrule              String?
+  recurrenceStartsOn DateTime?        @db.Date
+  recurrenceEndsOn   DateTime?        @db.Date
+  asNeeded           Boolean          @default(false)
+  anytime            Boolean          @default(true)
+  defaultStartMinute Int?
+  defaultDurationMin Int?
+  // SNOW_PLAN
+  triggerCm          Int?
+  snowBillingMode    SnowBillingMode?
+  pricePerPushCents  Int?
+  seasonalPriceCents Int?
+  iceMelt            Boolean          @default(false)
+  planPausedAt       DateTime?
+  closedAt           DateTime?
+  closeReason        String?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  lineItems    JobLineItem[]
+  visits       Visit[]
+  invoices     Invoice[]
+  attachments  Attachment[]
+  invoiceLines InvoiceLineItem[]
+
+  @@unique([businessId, number])
+  @@index([businessId, kind, seasonId])
+  // raw SQL in migration: one open snow plan per property per season
+}
+
+model JobLineItem {
+  id             String  @id @default(cuid())
+  jobId          String
+  job            Job     @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  serviceId      String?
+  name           String
+  description    String?
+  quantity       Decimal @default(1) @db.Decimal(9, 2)
+  unitPriceCents Int
+  totalCents     Int
+  perVisit       Boolean @default(true)
+  sortOrder      Int     @default(0)
+}
+
+model Visit {
+  id                     String      @id @default(cuid())
+  businessId             String
+  jobId                  String
+  job                    Job         @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  propertyId             String
+  property               Property    @relation(fields: [propertyId], references: [id])
+  snowEventId            String?
+  snowEvent              SnowEvent?  @relation(fields: [snowEventId], references: [id])
+  pushNumber             Int?
+  scheduledDate          DateTime?   @db.Date
+  startAt                DateTime?
+  endAt                  DateTime?
+  anytime                Boolean     @default(true)
+  state                  VisitState  @default(SCHEDULED)
+  routeSort              Int?
+  assigneeId             String?
+  source                 VisitSource @default(MANUAL)
+  recurrenceDate         DateTime?   @db.Date
+  detachedFromRecurrence Boolean     @default(false)
+  enRouteAt              DateTime?
+  arrivedAt              DateTime?
+  completedAt            DateTime?
+  completedById          String?
+  completedLat           Float?
+  completedLng           Float?
+  skippedAt              DateTime?
+  skipReason             SkipReason?
+  skipNote               String?
+  depthCm                Int?
+  iceMeltApplied         Boolean?
+  instructions           String?
+  createdAt              DateTime    @default(now())
+
+  charges      VisitCharge[]
+  attachments  Attachment[]
+  invoiceLines InvoiceLineItem[]
+
+  @@unique([jobId, snowEventId, pushNumber])
+  @@unique([jobId, recurrenceDate])
+  @@index([businessId, scheduledDate])
+}
+
+// Created when a visit completes; "unbilled" = invoiceLineItemId IS NULL.
+model VisitCharge {
+  id                String           @id @default(cuid())
+  businessId        String
+  visitId           String
+  visit             Visit            @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  name              String
+  quantity          Decimal          @default(1) @db.Decimal(9, 2)
+  unitPriceCents    Int
+  totalCents        Int
+  invoiceLineItemId String?          @unique
+  invoiceLineItem   InvoiceLineItem? @relation(fields: [invoiceLineItemId], references: [id])
+  createdAt         DateTime         @default(now())
+}
+
+// ---------- billing ----------
+model Invoice {
+  id                      String        @id @default(cuid())
+  businessId              String
+  number                  Int
+  clientId                String
+  client                  Client        @relation(fields: [clientId], references: [id])
+  propertyId              String?
+  jobId                   String?
+  job                     Job?          @relation(fields: [jobId], references: [id])
+  snowEventId             String?
+  snowEvent               SnowEvent?    @relation(fields: [snowEventId], references: [id])
+  status                  InvoiceStatus @default(DRAFT)
+  subject                 String?
+  message                 String?
+  issuedOn                DateTime?     @db.Date
+  dueOn                   DateTime?     @db.Date
+  paymentTerms            PaymentTerms  @default(DUE_ON_RECEIPT)
+  subtotalCents           Int           @default(0)
+  discountCents           Int           @default(0)
+  taxCents                Int           @default(0)
+  totalCents              Int           @default(0)
+  amountPaidCents         Int           @default(0)
+  etransferRef            String
+  sentAt                  DateTime?
+  firstViewedAt           DateTime?
+  paidAt                  DateTime?
+  voidedAt                DateTime?
+  voidReason              String?
+  badDebtAt               DateTime?
+  remindersSent           Int           @default(0)
+  lastReminderAt          DateTime?
+  stripeCheckoutSessionId String?
+  createdAt               DateTime      @default(now())
+
+  lineItems InvoiceLineItem[]
+  payments  Payment[]
+
+  @@unique([businessId, number])
+  @@unique([businessId, etransferRef])
+}
+
+model InvoiceLineItem {
+  id             String       @id @default(cuid())
+  invoiceId      String
+  invoice        Invoice      @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  jobId          String?
+  job            Job?         @relation(fields: [jobId], references: [id])
+  visitId        String?
+  visit          Visit?       @relation(fields: [visitId], references: [id])
+  serviceId      String?
+  name           String
+  description    String?
+  serviceDate    DateTime?    @db.Date
+  quantity       Decimal      @default(1) @db.Decimal(9, 2)
+  unitPriceCents Int
+  totalCents     Int
+  sortOrder      Int          @default(0)
+  charge         VisitCharge?
+}
+
+model Payment {
+  id                      String        @id @default(cuid())
+  businessId              String
+  clientId                String
+  client                  Client        @relation(fields: [clientId], references: [id])
+  invoiceId               String
+  invoice                 Invoice       @relation(fields: [invoiceId], references: [id])
+  method                  PaymentMethod
+  status                  PaymentStatus @default(SUCCEEDED)
+  amountCents             Int
+  feeCents                Int?
+  refundedCents           Int           @default(0)
+  receivedAt              DateTime      @default(now())
+  reference               String?
+  note                    String?
+  stripePaymentIntentId   String?       @unique
+  stripeCheckoutSessionId String?
+  recordedById            String?
+  createdAt               DateTime      @default(now())
+}
+
+// ---------- media, notes, audit, mail ----------
+model Attachment {
+  id                String         @id @default(cuid())
+  businessId        String
+  kind              AttachmentKind
+  mediaType         MediaType      @default(IMAGE)
+  storageKey        String
+  contentType       String
+  bytes             Int
+  width             Int?
+  height            Int?
+  sha256            String
+  capturedAt        DateTime?
+  capturedLat       Float?
+  capturedLng       Float?
+  uploadedByType    ActorType
+  uploadedById      String?
+  clientId          String?
+  client            Client?        @relation(fields: [clientId], references: [id])
+  propertyId        String?
+  property          Property?      @relation(fields: [propertyId], references: [id])
+  requestId         String?
+  request           Request?       @relation(fields: [requestId], references: [id])
+  quoteId           String?
+  quote             Quote?         @relation(fields: [quoteId], references: [id])
+  jobId             String?
+  job               Job?           @relation(fields: [jobId], references: [id])
+  visitId           String?
+  visit             Visit?         @relation(fields: [visitId], references: [id])
+  caption           String?
+  sharedWithClient  Boolean        @default(false)
+  showcase          Boolean        @default(false)
+  showcaseConsentAt DateTime?
+  sortOrder         Int            @default(0)
+  deletedAt         DateTime?
+  createdAt         DateTime       @default(now())
+}
+
+model Note {
+  id               String   @id @default(cuid())
+  businessId       String
+  authorId         String?
+  body             String
+  sharedWithClient Boolean  @default(false)
+  pinned           Boolean  @default(false)
+  clientId         String?
+  client           Client?  @relation(fields: [clientId], references: [id])
+  propertyId       String?
+  requestId        String?
+  quoteId          String?
+  jobId            String?
+  visitId          String?
+  invoiceId        String?
+  createdAt        DateTime @default(now())
+}
+
+model ActivityEvent {
+  id            String    @id @default(cuid())
+  businessId    String
+  at            DateTime  @default(now())
+  actorType     ActorType
+  actorUserId   String?
+  actorClientId String?
+  type          String // "booking.received", "visit.completed", ...
+  entityType    String
+  entityId      String
+  clientId      String?
+  jobId         String?
+  snowEventId   String?
+  data          Json      @default("{}")
+
+  @@index([businessId, entityType, entityId])
+  @@index([businessId, clientId])
+}
+
+model EmailMessage {
+  id                String      @id @default(cuid())
+  businessId        String
+  template          String
+  dedupeKey         String?
+  to                String
+  cc                String[]
+  replyTo           String?
+  subject           String
+  props             Json
+  priority          Int         @default(5) // 1 = must send (login, receipts), 9 = can wait
+  status            EmailStatus @default(QUEUED)
+  attempts          Int         @default(0)
+  nextAttemptAt     DateTime    @default(now())
+  sentAt            DateTime?
+  lastError         String?
+  providerMessageId String?
+  clientId          String?
+  entityType        String?
+  entityId          String?
+  createdAt         DateTime    @default(now())
+
+  @@unique([businessId, dedupeKey])
+  @@index([status, nextAttemptAt])
+}
+
+model EmailTemplateOverride {
+  businessId String
+  template   String
+  subject    String?
+  intro      String?
+  enabled    Boolean @default(true)
+
+  @@id([businessId, template])
+}
+
+model Counter {
+  businessId String
+  kind       CounterKind
+  next       Int         @default(1)
+
+  @@id([businessId, kind])
+}
+
+model WeatherSnapshot {
+  id        String   @id @default(cuid())
+  fetchedAt DateTime @default(now())
+  payload   Json
+}

@@ -6,6 +6,7 @@ Website for Silas's snow shovelling & odd-jobs business. Static pages in `public
 - Before & after photos: drop both photos in `public/img/work/` and add a line to `WORK` near the bottom of `public/index.html`. Take both shots from the same spot, landscape; they're shown 4:3. The section and its "Our work" nav link stay hidden until the first pair is added, then appear on their own.
 - `public/book.html` is the booking wizard. It posts to `POST /api/bookings`.
 - `server.py` serves `public/`, saves bookings to SQLite (`$DATA_DIR/bookings.db`), and emails the owner and the customer.
+- `crm/` is the etc. CRM (Next.js + Postgres, `app.etccrew.ca`): clients, jobs, snow plans and more. When `CRM_BOOKING_URL` is set, `book.html` posts bookings there and falls back to this server's `/api/bookings` if the CRM is unreachable. See [crm/README.md](crm/README.md).
 
 ## Run locally
 
@@ -36,6 +37,7 @@ python3 tests/test_server.py
 | `ETRANSFER_EMAIL` | Address shown to customers paying by e-Transfer (defaults to `OWNER_EMAIL`) |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASSWORD` | Outgoing mail |
 | `SMTP_TLS` | `starttls` (default), `ssl` (port 465) or `none` |
+| `CRM_BOOKING_URL` | `https://app.etccrew.ca/api/public/bookings` to send bookings to the CRM. Leave empty to keep taking them here |
 | `WEATHER_USER_AGENT` | Sent to MET Norway for the snow forecast. They ask for an app name plus contact, e.g. `etc-website/1.0 help@etccrew.ca` |
 
 Health check: `GET /healthz`.

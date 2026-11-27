@@ -1,0 +1,22 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-navy: #14213d;
+  --color-blue: #1d6fd8;
+  --color-sky: #7cb8ff;
+  --color-ink-soft: #4a5672;
+  --color-line: #dfe5ef;
+  --color-tint: #f4f7fc;
+  --font-sans: var(--font-inter);
+  --font-display: var(--font-rubik);
+}
+
+body {
+  background: #eef2f8;
+  color: var(--color-navy);
+}
+
+@media print {
+  .no-print { display: none !important; }
+  body { background: white; }
+}
