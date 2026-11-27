@@ -12,7 +12,9 @@ import { money } from "@/server/money";
 import { clientName, jobsWithStatus } from "@/server/queries";
 import { visitStatus } from "@/server/status/job";
 import { invoiceCreate } from "../../billing-actions";
-import { jobClose, planPause, planUpdate, visitAdd, visitDelete, visitSchedule } from "../../work-actions";
+import { RepeatFields } from "@/components/repeat-fields";
+import { describeRule } from "@/server/recurrence";
+import { jobClose, planPause, recurringUpdate, planUpdate, visitAdd, visitDelete, visitSchedule } from "../../work-actions";
 
 export default async function JobPage({ params, searchParams }: PageProps<"/jobs/[id]">) {
   const { id } = await params;
@@ -78,6 +80,19 @@ export default async function JobPage({ params, searchParams }: PageProps<"/jobs
               <p className="mt-3 text-sm text-ink-soft">{job.season?.name}. A visit is added automatically when a storm reaches the trigger. Billed per push, once per storm.</p>
             </Card>
           ) : (
+            <>
+            {job.kind === "RECURRING" && (
+              <Card title={`Repeats: ${describeRule(job.rrule)}`}>
+                <form action={recurringUpdate} className="space-y-3">
+                  <input type="hidden" name="id" value={job.id} /><input type="hidden" name="back" value={here} />
+                  <RepeatFields freq={job.asNeeded ? "AS_NEEDED" : job.rrule?.includes("INTERVAL=2") ? "BIWEEKLY" : job.rrule?.includes("MONTHLY") ? "MONTHLY" : "WEEKLY"}
+                    byDay={["MO", "TU", "WE", "TH", "FR", "SA", "SU"].map((d, i) => (job.rrule && new RegExp(`BYDAY=[^;\\n]*${d}`).test(job.rrule) ? i : -1)).filter((i) => i >= 0)}
+                    startsOn={dateOnly(job.recurrenceStartsOn) ?? today} endsOn={dateOnly(job.recurrenceEndsOn) ?? ""} />
+                  <Button variant="secondary">Update schedule</Button>
+                  <p className="text-xs text-ink-soft">Future visits nobody has touched are rebuilt. Done or moved visits stay as they are.</p>
+                </form>
+              </Card>
+            )}
             <Card title="Line items">
               <table className="w-full text-sm">
                 <tbody className="divide-y divide-line">
@@ -86,8 +101,9 @@ export default async function JobPage({ params, searchParams }: PageProps<"/jobs
                   ))}
                 </tbody>
               </table>
-              <p className="mt-2 text-xs text-ink-soft">{job.billingType === "FIXED_PRICE" ? `Fixed price ${money(job.totalCents ?? 0)}, invoiced when the job is done.` : "Billed per visit."} Prices include tax.</p>
+              <p className="mt-2 text-xs text-ink-soft">{job.billingType === "FIXED_PRICE" ? `Fixed price ${money(job.totalCents ?? 0)}, invoiced when the job is done.` : job.invoiceSchedule === "MONTHLY" ? "Billed monthly for the visits done." : "Billed per visit."} Prices include tax.</p>
             </Card>
+            </>
           )}
 
           <Card title="Visits" actions={!closed && (

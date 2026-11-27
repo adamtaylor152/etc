@@ -5,12 +5,13 @@ import { BookingConfirmation, OwnerNewBooking, type BookingEmailProps } from "@/
 import { OwnerLogin } from "@/emails/login";
 import { InvoiceSent, OwnerPaymentReceived, PaymentReceipt, type InvoiceEmailData } from "@/emails/invoice";
 import { HubLink, OwnerNotice, QuoteApproved, QuoteSent, type QuoteEmailData } from "@/emails/quote";
+import { DailyDigest, ReviewRequest, VisitScheduled } from "@/emails/schedule";
 import { OnMyWay, OwnerSnowAlert, StormHeadsUp } from "@/emails/snow";
 import { OwnerPhotosUploaded, PhotoUploadRequest, VisitDone } from "@/emails/visit";
 import { invoiceTotals } from "../billing/invoice";
 import { money } from "../money";
 import { stripeEnabled } from "../stripe";
-import { dateOnly, prettyDate, todayLocal } from "../dates";
+import { dateOnly, prettyDate, todayLocal, toDbDate } from "../dates";
 import { signedMediaPath } from "../media";
 import { clientName } from "../queries";
 import { db } from "../db";
@@ -209,6 +210,42 @@ const hubLink: Template<{ clientId: string }> = {
   },
 };
 
+async function scheduledEmail(visitId: string, reminder: boolean) {
+  const v = await db.visit.findUniqueOrThrow({ where: { id: visitId }, include: { job: { include: { client: true } }, property: true } });
+  return <VisitScheduled name={clientName(v.job.client)} what={v.job.title} date={prettyDate(dateOnly(v.scheduledDate))} address={v.property.formatted} reminder={reminder} site={env.siteUrl} phone={env.phone} />;
+}
+const visitScheduled: Template<{ visitId: string }> = { subject: () => "You're booked with etc.", render: (p) => scheduledEmail(p.visitId, false) };
+const visitReminder: Template<{ visitId: string }> = { subject: () => "Reminder: etc. is coming tomorrow", render: (p) => scheduledEmail(p.visitId, true) };
+
+const reviewRequest: Template<{ clientId: string }> = {
+  subject: () => "How did we do?",
+  async render(p, ctx) {
+    const [c, biz] = await Promise.all([db.client.findUniqueOrThrow({ where: { id: p.clientId } }), db.business.findUniqueOrThrow({ where: { id: ctx.businessId } })]);
+    return <ReviewRequest name={clientName(c)} url={biz.googleReviewUrl ?? env.siteUrl} site={env.siteUrl} phone={env.phone} />;
+  },
+};
+
+const ownerDailyDigest: Template<{ day: string }> = {
+  subject: (p) => `Today at etc. (${prettyDate(p.day)})`,
+  async render(p, ctx) {
+    const bid = ctx.businessId;
+    const [today, late, unbilled, owing, newRequests, failedEmails] = await Promise.all([
+      db.visit.findMany({ where: { businessId: bid, scheduledDate: toDbDate(p.day), state: "SCHEDULED" }, include: { property: true, job: true } }),
+      db.visit.count({ where: { businessId: bid, state: "SCHEDULED", scheduledDate: { lt: toDbDate(p.day) }, job: { closedAt: null } } }),
+      db.visitCharge.aggregate({ where: { businessId: bid, invoiceLineItemId: null }, _sum: { totalCents: true } }),
+      db.invoice.findMany({ where: { businessId: bid, status: "AWAITING_PAYMENT" }, select: { totalCents: true, amountPaidCents: true } }),
+      db.request.count({ where: { businessId: bid, status: "NEW" } }),
+      db.emailMessage.count({ where: { businessId: bid, status: "FAILED" } }),
+    ]);
+    const user = await db.user.findFirst({ where: { businessId: bid, email: ctx.to.toLowerCase(), active: true } });
+    const url = user ? `${env.appUrl}/auth/go?t=${await mintToken(db, bid, "OWNER_DEEP_LINK", { userId: user.id, redirectPath: "/" })}` : env.appUrl;
+    return <DailyDigest d={{
+      day: prettyDate(p.day), today: today.map((v) => ({ address: v.property.formatted, what: v.job.title })), late,
+      unbilled: money(unbilled._sum.totalCents ?? 0), owing: money(owing.reduce((a, i) => a + i.totalCents - i.amountPaidCents, 0)), newRequests, failedEmails, url,
+    }} />;
+  },
+};
+
 export const templates = {
   "owner.login": ownerLogin,
   "owner.new_booking": ownerNewBooking,
@@ -228,6 +265,10 @@ export const templates = {
   "quote.approved": quoteApproved,
   "owner.notice": ownerNotice,
   "hub.link": hubLink,
+  "visit.scheduled": visitScheduled,
+  "visit.reminder": visitReminder,
+  "review.request": reviewRequest,
+  "owner.daily_digest": ownerDailyDigest,
 } as const;
 
 export type TemplateName = keyof typeof templates;
