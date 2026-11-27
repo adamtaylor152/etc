@@ -94,8 +94,17 @@ assert ("connect", "smtp-relay.brevo.com", 587) in sent and ("tls",) in sent and
 assert [m["To"] for m in msgs] == ["owner@example.com", "test@example.com"]
 assert msgs[0]["Reply-To"] == "test@example.com" and "#7" in msgs[0]["Subject"]
 assert msgs[0]["Cc"] == "helper@example.com" and msgs[1]["Cc"] is None  # only the owner notice is copied
-assert "pay@example.com" in msgs[1].get_content() and "Silas" in msgs[1].get_content()
-assert msgs[1]["Reply-To"] == "help@etccrew.ca" and "help@etccrew.ca" in msgs[1].get_content()
+for m in msgs:  # both emails: plain text + branded HTML
+    assert m.get_body(("html",)) is not None and m.get_body(("plain",)) is not None
+assert "Thanks, Test!" in msgs[1].get_body(("html",)).get_content() and "email-hero.jpg" in msgs[1].get_body(("html",)).get_content()
+sent.clear()
+evil = dict(good, name='<script>x</script> Eve', notes="</td><b>bold</b>", address='<img src=y onerror=z>')
+server.notify(8, server.validate(evil))
+for m in [x[1] for x in sent if x[0] == "msg"]:
+    h = m.get_body(("html",)).get_content()
+    assert "<script>" not in h and "<b>bold</b>" not in h and "<img src=y" not in h, "form input must be escaped in HTML email"
+assert "pay@example.com" in msgs[1].get_body(("plain",)).get_content() and "Silas" in msgs[1].get_body(("plain",)).get_content()
+assert msgs[1]["Reply-To"] == "help@etccrew.ca" and "help@etccrew.ca" in msgs[1].get_body(("plain",)).get_content()
 
 # Forecast: hourly then 6-hourly periods, no double counting, served from cache.
 fake = {"properties": {"timeseries": [

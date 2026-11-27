@@ -29,6 +29,8 @@ from email.message import EmailMessage
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+import emails
+
 HERE = Path(__file__).resolve().parent
 PUBLIC = HERE / "public"
 DATA_DIR = Path(os.environ.get("DATA_DIR", HERE / "data"))
@@ -41,7 +43,8 @@ MAIL_FROM = os.environ.get("MAIL_FROM", OWNER_EMAIL)
 ETRANSFER_EMAIL = os.environ.get("ETRANSFER_EMAIL", OWNER_EMAIL)
 PHONE = "403-656-8200"
 PRIMARY_HOST = os.environ.get("PRIMARY_HOST", "")  # e.g. etccrew.ca: every other domain 301s here
-HELP_EMAIL = os.environ.get("HELP_EMAIL", "help@etccrew.ca")  # public contact; customer replies go here
+HELP_EMAIL = os.environ.get("HELP_EMAIL", "help@etccrew.ca")
+SITE_URL = f"https://{PRIMARY_HOST or 'etccrew.ca'}"  # links + images in emails  # public contact; customer replies go here
 
 SERVICES = {
     "Snow shovelling", "Commercial snow removal", "Roof snow removal",
@@ -151,7 +154,7 @@ def save(b):
 
 
 # ---------- email ----------
-def send(to, subject, body, reply_to="", cc=""):
+def send(to, subject, body, reply_to="", cc="", html=""):
     if not (os.environ.get("SMTP_HOST") and MAIL_FROM and to):
         log.info("mail not configured, skipped: %s -> %s", subject, to)
         return
@@ -161,7 +164,9 @@ def send(to, subject, body, reply_to="", cc=""):
         msg["Reply-To"] = reply_to
     if cc:
         msg["Cc"] = cc  # send_message() delivers to Cc recipients too
-    msg.set_content(body)  # plain text only: user input is never rendered as HTML
+    msg.set_content(body)  # plain-text part for clients that don't show HTML
+    if html:
+        msg.add_alternative(html, subtype="html")  # built by emails.py, which escapes all user input
     host, port = os.environ["SMTP_HOST"], int(os.environ.get("SMTP_PORT", "587"))
     tls = os.environ.get("SMTP_TLS", "starttls")
     with (smtplib.SMTP_SSL if tls == "ssl" else smtplib.SMTP)(host, port, timeout=20) as s:
@@ -185,7 +190,8 @@ def notify(bid, b):
            if b["payment"] == "e-Transfer" and ETRANSFER_EMAIL else
            "You chose cash. Just pay the crew when we're done.")
     try:
-        send(OWNER_EMAIL, f"New booking #{bid}: {b['name']}, {', '.join(b['services'])}", details, reply_to=b["email"], cc=OWNER_CC)
+        send(OWNER_EMAIL, f"New booking #{bid}: {b['name']}, {', '.join(b['services'])}", details, reply_to=b["email"], cc=OWNER_CC,
+             html=emails.owner_email(b, bid, services=service_lines(b), when=when, site=SITE_URL))
     except Exception:
         log.exception("owner email failed for booking %s", bid)
     try:
@@ -193,7 +199,9 @@ def notify(bid, b):
              f"Hi {b['name']},\n\nThanks for booking with etc.! Silas will confirm a time with you shortly.\n\n"
              f"{details}\n\n{pay}\n\nWe'll email you before & after photos when the job is done.\n\nQuestions? Call {PHONE} or email {HELP_EMAIL}.\n\n"
              "Every job helps Silas save for electrician school. Thank you!\n- Silas & the etc. crew",
-             reply_to=HELP_EMAIL)
+             reply_to=HELP_EMAIL,
+             html=emails.customer_email(b, bid, services=service_lines(b), when=when, site=SITE_URL, phone=PHONE,
+                                        help_email=HELP_EMAIL, etransfer_email=ETRANSFER_EMAIL))
     except Exception:
         log.exception("customer email failed for booking %s", bid)
 
