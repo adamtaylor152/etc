@@ -20,6 +20,9 @@ export const smsTemplates = {
     const v = await db.visit.findUniqueOrThrow({ where: { id: p.visitId }, include: { job: { include: { client: true } }, property: true } });
     return `Snow day! ${first(v.job.client.firstName)}, you're on our route today for ${v.property.formatted.split(",")[0]}. Away? Just reply. - etc.`;
   },
+  // Once, when someone ticks "text me" on the booking form (carriers and RCS review expect a confirmation).
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- no props, but enqueueSms needs a props type
+  "sms.opt_in": async (_p: Record<string, never>) => "You're signed up for etc. booking texts. Reply STOP to stop, HELP for help.",
 } satisfies Record<string, (p: never, ctx: Ctx) => Promise<string>>;
 
 export type SmsTemplateName = keyof typeof smsTemplates;

@@ -57,3 +57,30 @@ describe("segments", () => {
     expect(segments("{".repeat(81))).toMatchObject({ parts: 2 }); // extension chars count double
   });
 });
+
+import { rcsBody, withReplyHint } from "@/server/sms";
+describe("RCS", () => {
+  const base = { agentId: "etc", from: "+14036568200", to: "+14035550101" };
+  it("sends text with reply buttons, falling back to SMS with a Reply line", () => {
+    const b = rcsBody({ ...base, text: "Tomorrow at 9?", replies: ["Yes", "No"] });
+    expect(b.agent_message.content_message).toEqual({ text: "Tomorrow at 9?", suggestions: [{ reply: { text: "Yes", postback_data: "reply:0" } }, { reply: { text: "No", postback_data: "reply:1" } }] });
+    expect(b).toMatchObject({ agent_id: "etc", to: "+14035550101", sms_fallback: { from: "+14036568200", text: "Tomorrow at 9?\n\nReply: Yes / No" } });
+    expect(withReplyHint("Hi", [])).toBe("Hi");
+  });
+  it("turns one photo into a card and several into a carousel, with an MMS fallback", () => {
+    const one = rcsBody({ ...base, text: "Done!", mediaUrls: ["https://x/1.jpg"] });
+    expect(one.agent_message.content_message).toMatchObject({ rich_card: { standalone_card: { card_content: { description: "Done!", media: { content_info: { file_url: "https://x/1.jpg" } } } } } });
+    expect(one).toMatchObject({ mms_fallback: { media_urls: ["https://x/1.jpg"], text: "Done!" } });
+    const two = rcsBody({ ...base, text: "", mediaUrls: ["https://x/1.jpg", "https://x/2.jpg"] });
+    expect((two.agent_message.content_message as { rich_card: { carousel_card: { card_contents: unknown[] } } }).rich_card.carousel_card.card_contents).toHaveLength(2);
+  });
+  it("parses RCS replies, button taps, files, locations and read receipts", () => {
+    const ev = (body: object) => ({ data: { event_type: "message.received", payload: { id: "r1", type: "RCS", from: { phone_number: "+14035550101" }, body } } });
+    expect(parseTelnyxEvent(ev({ text: "hi" }))).toMatchObject({ kind: "received", type: "RCS", text: "hi", media: [] });
+    expect(parseTelnyxEvent(ev({ suggestion_response: { text: "Yes", postback_data: "reply:0" } }))).toMatchObject({ text: "Yes" });
+    expect(parseTelnyxEvent(ev({ user_file: { payload: { file_uri: "https://rcs/f.jpg", mime_type: "image/jpeg" } } }))).toMatchObject({ text: "", media: [{ url: "https://rcs/f.jpg", contentType: "image/jpeg" }] });
+    expect(parseTelnyxEvent(ev({ location: { latitude: 51, longitude: -114 } }))).toMatchObject({ text: "📍 https://maps.google.com/?q=51,-114" });
+    expect(parseTelnyxEvent({ data: { event_type: "message.read", payload: { id: "o1" } } })).toEqual({ kind: "status", id: "o1", status: "read", error: null });
+    expect(keyword("help")).toBe("HELP");
+  });
+});

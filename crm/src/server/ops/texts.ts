@@ -5,7 +5,7 @@ import { enqueue, kickOutbox } from "../email/outbox";
 import { env } from "../env";
 import { clientName } from "../queries";
 import { MAX_UPLOAD_BYTES, mmsJpeg, saveAny, saveImage, signedMediaPath } from "../media";
-import { clip, keyword, sendSms, smsEnabled, smsFrom, toE164 } from "../sms";
+import { clip, keyword, rcsFeatures, sendRcs, sendSms, smsEnabled, smsFrom, toE164, withReplyHint } from "../sms";
 import { TransitionError } from "../status/visit";
 
 type Actor = { id: string; businessId: string };
@@ -19,10 +19,23 @@ export async function clientByPhone(businessId: string, e164: string) {
 export const MAX_MMS_FILES = 5;
 
 /** Owner sends a text (optionally with photos -> MMS) to a client, or replies to an unknown number. */
-export async function sendText(user: Actor, input: { clientId?: string; to?: string; body: string; photos?: { bytes: Buffer; contentType: string }[] }) {
+export const MAX_REPLIES = 4;
+export const HELP_TEXT = "etc. snow shovelling & odd jobs, Calgary. Call or text 403-656-8200, or email help@etccrew.ca. Reply STOP to stop texts.";
+export const STOP_TEXT = "You won't get any more texts from etc. Reply START to turn them back on.";
+
+/** Pick the channel: RCS when the phone supports what we're sending (cards need rich-card support), else SMS/MMS. */
+async function deliver(to: string, body: string, urls: string[], replies: string[]): Promise<{ id: string; type: string }> {
+  const f = await rcsFeatures(to);
+  const cardsOk = urls.length === 0 || f.includes(urls.length > 1 ? "RICHCARD_CAROUSEL" : "RICHCARD_STANDALONE");
+  if (f.length && cardsOk) return sendRcs(to, body, urls, replies);
+  return { id: await sendSms(to, withReplyHint(body, replies), urls), type: urls.length ? "MMS" : "SMS" };
+}
+
+export async function sendText(user: Actor, input: { clientId?: string; to?: string; body: string; photos?: { bytes: Buffer; contentType: string }[]; replies?: string[] }) {
   if (!smsEnabled()) throw new TransitionError("Texting isn't set up yet (Telnyx key missing)");
   const body = input.body.trim();
   const photos = input.photos ?? [];
+  const replies = [...new Set((input.replies ?? []).map((r) => r.trim().slice(0, 25)).filter(Boolean))].slice(0, MAX_REPLIES);
   if (!body && !photos.length) throw new TransitionError("Type a message or add a photo");
   if (photos.length > MAX_MMS_FILES) throw new TransitionError(`Up to ${MAX_MMS_FILES} photos per text`);
   const client = input.clientId ? await db.client.findFirstOrThrow({ where: { id: input.clientId, businessId: user.businessId } }) : null;
@@ -39,8 +52,8 @@ export async function sendText(user: Actor, input: { clientId?: string; to?: str
     urls.push(env.appUrl + signedMediaPath(a.id, "mms", 30));
   }
   try {
-    const id = await sendSms(to, clip(body, 1000), urls);
-    await db.textMessage.update({ where: { id: msg.id }, data: { status: "sent", providerId: id || null } });
+    const sent = await deliver(to, clip(body, 1000), urls, replies);
+    await db.textMessage.update({ where: { id: msg.id }, data: { status: "sent", providerId: sent.id || null, type: sent.type, body: withReplyHint(clip(body, 1000), replies) } });
   } catch (e) {
     await db.textMessage.update({ where: { id: msg.id }, data: { status: "failed", error: String(e).slice(0, 500) } });
     throw new TransitionError("Couldn't send that text. Try again in a minute.");
@@ -65,6 +78,8 @@ export async function receiveText(businessId: string, e: { id: string; from: str
   const k = keyword(e.text);
   if (client && k === "STOP") await db.client.update({ where: { id: client.id }, data: { smsOptOutAt: new Date(), smsOptIn: false } });
   if (client && k === "START") await db.client.update({ where: { id: client.id }, data: { smsOptOutAt: null } });
+  // Carriers answer HELP/STOP for plain SMS; RCS leaves it to us (and approval requires it). HELP gets an answer either way.
+  if (k === "HELP" || (e.type === "RCS" && k === "STOP")) await autoReply(businessId, client?.id ?? null, e.from, k === "HELP" ? HELP_TEXT : STOP_TEXT);
   // Tell the owners (at most one email per conversation every 15 minutes).
   const who = client ? clientName(client) : e.from;
   const slot = Math.floor(Date.now() / 900_000);
@@ -178,7 +193,19 @@ export async function linkTextPhotos(user: Actor, input: { messageId: string; at
   await db.attachment.updateMany({ where: { id: { in: ids }, businessId: user.businessId }, data });
 }
 
+async function autoReply(businessId: string, clientId: string | null, to: string, body: string) {
+  if (!smsEnabled()) return;
+  const msg = await db.textMessage.create({ data: { businessId, clientId, direction: "OUT", from: smsFrom(), to, body } });
+  try {
+    const sent = await deliver(to, body, [], []);
+    await db.textMessage.update({ where: { id: msg.id }, data: { status: "sent", providerId: sent.id || null, type: sent.type } });
+  } catch (err) {
+    await db.textMessage.update({ where: { id: msg.id }, data: { status: "failed", error: String(err).slice(0, 500) } });
+  }
+}
+
 /** Delivery receipts. */
 export async function textStatus(e: { id: string; status: string; error: string | null }) {
-  await db.textMessage.updateMany({ where: { providerId: e.id }, data: { status: e.status, error: e.error } });
+  // A late "delivered" must not overwrite "read" (RCS read receipts can arrive first).
+  await db.textMessage.updateMany({ where: { providerId: e.id, ...(e.status === "read" ? {} : { status: { not: "read" } }) }, data: { status: e.status, error: e.error } });
 }
