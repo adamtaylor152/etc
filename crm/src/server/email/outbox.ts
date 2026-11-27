@@ -5,7 +5,7 @@ import nodemailer, { type Transporter } from "nodemailer";
 import type { EmailMessage, Prisma } from "@/generated/prisma/client";
 import { db, type Db } from "../db";
 import { env } from "../env";
-import { clip, sendSms, smsEnabled, toE164 } from "../sms";
+import { clip, sendSms, smsEnabled, smsFrom, toE164 } from "../sms";
 import { smsTemplates, type SmsTemplateName } from "./sms-templates";
 import { templates, type PropsOf, type TemplateName } from "./templates";
 
@@ -121,8 +121,15 @@ async function sendText(m: EmailMessage) {
   try {
     const t = smsTemplates[m.template as SmsTemplateName];
     if (!t) throw new Error(`unknown sms template ${m.template}`);
-    const sid = await sendSms(m.to, clip(await t(m.props as never, { businessId: m.businessId })));
+    const client = m.clientId ? await db.client.findUnique({ where: { id: m.clientId } }) : null;
+    if (client?.smsOptOutAt) {
+      await db.emailMessage.update({ where: { id: m.id }, data: { status: "SUPPRESSED", lastError: "client texted STOP" } });
+      return;
+    }
+    const body = clip(await t(m.props as never, { businessId: m.businessId }));
+    const sid = await sendSms(m.to, body);
     await db.emailMessage.update({ where: { id: m.id }, data: { status: "SENT", sentAt: new Date(), providerMessageId: sid, lastError: null } });
+    await db.textMessage.create({ data: { businessId: m.businessId, clientId: m.clientId, direction: "OUT", from: smsFrom(), to: m.to, body, status: "sent", providerId: sid || null } });
   } catch (e) {
     const failed = m.attempts >= MAX_ATTEMPTS;
     await db.emailMessage.update({
@@ -134,10 +141,10 @@ async function sendText(m: EmailMessage) {
 
 /** Queue a text for a client who opted in. No-op otherwise. */
 export async function enqueueSms<T extends SmsTemplateName>(tx: Db, m: {
-  businessId: string; template: T; client: { id: string; phone: string | null; smsOptIn: boolean }; props: Parameters<(typeof smsTemplates)[T]>[0]; dedupeKey: string; entityType?: string; entityId?: string; sendAfter?: Date;
+  businessId: string; template: T; client: { id: string; phone: string | null; smsOptIn: boolean; smsOptOutAt?: Date | null }; props: Parameters<(typeof smsTemplates)[T]>[0]; dedupeKey: string; entityType?: string; entityId?: string; sendAfter?: Date;
 }) {
   const to = toE164(m.client.phone);
-  if (!m.client.smsOptIn || !to) return null;
+  if (!m.client.smsOptIn || m.client.smsOptOutAt || !to) return null;
   const data = {
     businessId: m.businessId, template: m.template, to, cc: [], subject: m.template, props: m.props as Prisma.InputJsonValue,
     priority: 3, dedupeKey: m.dedupeKey, clientId: m.client.id, entityType: m.entityType, entityId: m.entityId, nextAttemptAt: m.sendAfter ?? new Date(),

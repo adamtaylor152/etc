@@ -96,7 +96,10 @@ GOOGLE_GEOCODING_KEY=... pnpm import:legacy bookings.json
 | `EMAIL_DAILY_CAP` | Default 300 (Brevo free). Low-priority mail waits once you're within 30 of the cap. |
 | `UPLOAD_DIR` | Default `/data/uploads` (the volume) |
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | Optional: card payments. Stripe account in an adult's name; webhook → `https://app.etccrew.ca/api/stripe/webhook`, event `checkout.session.completed` |
-| `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM` | Optional: text updates (on the way, all done with photo link, storm day) to clients who opted in. `TWILIO_FROM` is your Twilio number, e.g. `+15875550123`. Twilio handles STOP replies. |
+| `TELNYX_API_KEY` | Texting (Telnyx). Set it in Coolify yourself; never commit it. |
+| `TELNYX_FROM` | The business number in E.164: `+14036568200` |
+| `TELNYX_PUBLIC_KEY` | Telnyx portal → Account → Public key (verifies inbound webhooks) |
+| `TELNYX_MESSAGING_PROFILE_ID` | Optional: the messaging profile the number belongs to |
 | `INTERAC_INBOUND_SECRET` | Optional: 32+ random chars, shared with the Cloudflare Email Worker below |
 | `WEATHER_USER_AGENT` | Sent to MET Norway, e.g. `etc-crm/1.0 help@etccrew.ca` |
 | `GOOGLE_GEOCODING_KEY` | Optional: only for `import:legacy` |
@@ -147,6 +150,16 @@ When `CRM_BOOKING_URL` is set, etccrew.ca's tuition tracker and "Our work" galle
 - **Gallery:** before/after photos an owner starred "★ Website", which they should only do with the client's OK.
 
 Captions show only the community and month.
+
+### Texting (Telnyx)
+
+1. In the Telnyx portal, make sure 403-656-8200 is on a **Messaging Profile**. Set that profile's inbound webhook URL to `https://app.etccrew.ca/api/telnyx/webhook`.
+2. Copy the account's **public key** into `TELNYX_PUBLIC_KEY`, and an **API key** into `TELNYX_API_KEY`, in Coolify. Then redeploy.
+
+What texting does:
+- **Messages page:** two-way texts with clients. Replies show up in the conversation, and owners get an email for each new text (at most one every 15 minutes per conversation).
+- **Automatic texts:** "on the way", "all done" with a photo link, and storm day, sent only to clients who opted in.
+- **Opt-out:** a client who texts STOP gets no texts at all until they text START.
 
 ### Support scripts
 

@@ -310,7 +310,8 @@ model Client {
   tags             String[]
   notes            String?
   marketingOptOut  Boolean        @default(false)
-  smsOptIn         Boolean        @default(false) // client agreed to text updates (CRTC/CASL: opt-in, STOP honoured)
+  smsOptIn         Boolean        @default(false) // client agreed to automatic text updates
+  smsOptOutAt      DateTime? // client texted STOP: no texts at all until they text START
   emailBouncedAt   DateTime?
   archivedAt       DateTime?
   createdAt        DateTime       @default(now())
@@ -324,6 +325,7 @@ model Client {
   payments    Payment[]
   attachments Attachment[]
   notesList   Note[]
+  texts       TextMessage[]
 
   @@index([businessId, email])
 }
@@ -865,4 +867,30 @@ model WeatherSnapshot {
   id        String   @id @default(cuid())
   fetchedAt DateTime @default(now())
   payload   Json
+}
+
+// Every text in or out (two-way SMS via Telnyx). Automatic texts go through the outbox and are logged here too.
+model TextMessage {
+  id          String    @id @default(cuid())
+  businessId  String
+  clientId    String?
+  client      Client?   @relation(fields: [clientId], references: [id])
+  direction   TextDirection
+  from        String // E.164
+  to          String // E.164
+  body        String
+  status      String    @default("queued") // queued | sent | delivered | failed | received
+  providerId  String?   @unique
+  error       String?
+  sentById    String?
+  readAt      DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([businessId, clientId, createdAt])
+  @@index([businessId, direction, readAt])
+}
+
+enum TextDirection {
+  IN
+  OUT
 }
