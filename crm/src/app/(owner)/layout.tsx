@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { ServiceWorker } from "@/components/sw-register";
+import { TopNav } from "@/components/top-nav";
 import { Logo } from "@/components/ui";
 import { requireOwner } from "@/server/auth";
 import { db } from "@/server/db";
 import { signOutAction } from "../auth/go/actions";
 
+// Phone bottom bar (desktop uses the grouped TopNav).
 const NAV = [
   { href: "/", label: "Today", icon: "☀", phone: true },
   { href: "/routes", label: "Route", icon: "➜", phone: true },
@@ -22,18 +24,18 @@ const NAV = [
 
 export default async function OwnerLayout({ children }: LayoutProps<"/">) {
   const user = await requireOwner();
-  const unread = await db.textMessage.count({ where: { businessId: user.businessId, direction: "IN", readAt: null } });
+  const [unread, toMatch] = await Promise.all([
+    db.textMessage.count({ where: { businessId: user.businessId, direction: "IN", readAt: null } }),
+    db.unmatchedPayment.count({ where: { businessId: user.businessId, status: "OPEN" } }),
+  ]);
   return (
     <div className="min-h-screen pb-20 sm:pb-0">
       <header className="no-print sticky top-0 z-20 bg-navy text-white">
-        <div className="mx-auto flex max-w-6xl items-center gap-6 px-4 py-3">
+        <div className="mx-auto flex max-w-6xl items-center gap-3 px-3 py-3 sm:px-4 lg:gap-4">
           <Link href="/"><Logo /></Link>
-          <nav className="hidden gap-1 overflow-x-auto sm:flex">
-            {NAV.map((n) => <Link key={n.href} href={n.href} className="rounded-full px-3 py-1.5 text-sm font-semibold text-white/80 hover:bg-white/10 hover:text-white">{n.label}{n.href === "/messages" && unread > 0 && <span className="ml-1 rounded-full bg-sky px-1.5 text-xs text-navy">{unread}</span>}</Link>)}
-          </nav>
-          <form action={signOutAction} className="ml-auto flex items-center gap-3 text-sm">
-            <span className="hidden text-white/60 md:inline">{user.email}</span>
-            <button className="rounded-full px-3 py-1.5 font-semibold text-white/80 hover:bg-white/10">Sign out</button>
+          <TopNav unread={unread} toMatch={toMatch} email={user.email} signOut={signOutAction} />
+          <form action={signOutAction} className="ml-auto sm:hidden">
+            <button className="rounded-full px-3 py-1.5 text-sm font-semibold text-white/80 hover:bg-white/10">Sign out</button>
           </form>
         </div>
       </header>
