@@ -7,7 +7,7 @@ import { z } from "zod";
 import type { SkipReason, VisitState } from "@/generated/prisma/client";
 import { requireOwner } from "@/server/auth";
 import { addVisit, deleteVisit, scheduleVisit, transitionVisit } from "@/server/ops/visits";
-import { createOneOffJob, createRecurringJob, createSnowPlan, renewalCandidates, renewalSeason, setJobClosed, setPlanPaused, updatePlan, updateRecurrence } from "@/server/ops/jobs";
+import { createRecurringJob, createSnowPlan, renewalCandidates, renewalSeason, setJobClosed, setPlanPaused, updatePlan, updateRecurrence } from "@/server/ops/jobs";
 import { db } from "@/server/db";
 import { enqueue, kickOutbox } from "@/server/email/outbox";
 import { env } from "@/server/env";
@@ -70,21 +70,6 @@ export async function visitDelete(f: FormData) {
 }
 
 // ---------- jobs & plans ----------
-export async function jobCreate(f: FormData) {
-  const user = await requireOwner();
-  const names = f.getAll("lineName").map(String);
-  const prices = f.getAll("linePrice").map(String);
-  const qtys = f.getAll("lineQty").map(String);
-  const lines = names.map((name, i) => ({ name: name.trim(), unitPriceCents: dollars.parse(prices[i] || "0"), quantity: z.coerce.number().positive().max(1000).parse(qtys[i] || "1") }))
-    .filter((l) => l.name);
-  const input = z.object({
-    clientId: z.string().min(1), propertyId: z.string().min(1), title: z.string().min(1).max(120), instructions: z.string().max(2000),
-    date, billingType: z.enum(["PER_VISIT", "FIXED_PRICE"]),
-  }).parse(Object.fromEntries(["clientId", "propertyId", "title", "instructions", "date", "billingType"].map((k) => [k, str(f, k)])));
-  const job = await createOneOffJob(user, { ...input, lines });
-  revalidatePath("/", "layout");
-  redirect(`/jobs/${job.id}`);
-}
 
 export async function planCreate(f: FormData) {
   const user = await requireOwner();

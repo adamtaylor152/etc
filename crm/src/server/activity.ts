@@ -13,7 +13,7 @@ export type FeedItem = {
 };
 
 const EVENT_TITLE: Record<string, string> = {
-  "booking.received": "Booked online", "booking.imported": "Imported booking", "client.created": "Client added",
+  "booking.received": "Booked online", "request.created": "Request created", "booking.imported": "Imported booking", "client.created": "Client added",
   "request.archived": "Request archived", "request.unarchived": "Request reopened",
   "quote.created": "Quote created", "quote.sent": "Quote sent", "quote.approved": "Quote approved", "quote.changes_requested": "Client asked for changes to a quote",
   "quote.converted": "Quote converted to a job",

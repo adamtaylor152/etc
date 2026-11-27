@@ -47,6 +47,16 @@ const chargeLines = (charges: ChargeRow[]): LineIn[] => charges.map((c) => ({
 }));
 
 /** Draft invoice for a client's unbilled charges (optionally only one job, visit or storm). */
+/** A hand-made invoice (Create → Invoice): any lines, not tied to visit charges. */
+export async function createCustomInvoice(user: Actor & { id: string }, input: { clientId: string; propertyId?: string | null; jobId?: string | null; subject: string; lines: { name: string; quantity: number; unitPriceCents: number; serviceDate?: Date | null }[] }) {
+  const client = await db.client.findFirst({ where: { id: input.clientId, businessId: user.businessId } });
+  if (!client) throw new TransitionError("Pick a client");
+  if (input.jobId && !(await db.job.findFirst({ where: { id: input.jobId, clientId: client.id } }))) throw new TransitionError("That job isn't this client's");
+  const lines = input.lines.filter((l) => l.name.trim() && l.quantity > 0).map((l) => ({ ...l, name: l.name.trim().slice(0, 200), totalCents: Math.round(l.quantity * l.unitPriceCents), jobId: input.jobId ?? null }));
+  if (!lines.length) throw new TransitionError("Add at least one line");
+  return db.$transaction((tx) => createDraft(tx, user, { clientId: client.id, propertyId: input.propertyId, jobId: input.jobId, subject: input.subject.trim() || "Services", lines }));
+}
+
 export async function invoiceUnbilled(user: Actor, where: { clientId: string; jobId?: string; visitId?: string; snowEventId?: string }, tx?: Tx) {
   const run = async (t: Tx) => {
     const charges = await t.visitCharge.findMany({

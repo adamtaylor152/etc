@@ -2,7 +2,7 @@
 // communication/files, billing history; right column: lifetime value + balance, last communication, notes.
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Archive, FileText, Hammer, Mail, MapPin, MessageSquare, Pencil, Phone, Plus, Repeat, Snowflake } from "lucide-react";
+import { Archive, Banknote, FileText, Hammer, Inbox, ListTodo, Mail, MapPin, MessageSquare, Pencil, Phone, Plus, Receipt, Repeat, Snowflake } from "lucide-react";
 import { clientArchive, propertyArchive } from "../../client-actions";
 import { sendHubLink } from "../../quote-actions";
 import { ActivityFeed, parseTypes } from "@/components/activity-feed";
@@ -85,10 +85,14 @@ export default async function ClientPage({ params, searchParams }: PageProps<"/c
           {tel && <a href={tel} className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-line bg-white px-3 text-sm font-semibold hover:bg-tint"><Phone className="size-4" />Call</a>}
           {phones[0] && <Link href={`/messages/${id}`} className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-line bg-white px-3 text-sm font-semibold hover:bg-tint"><MessageSquare className="size-4" />Text</Link>}
           <Menu label="Create" primary items={[
+            { label: "Request", href: `/requests/new?client=${id}`, icon: <Inbox className="size-4 text-orange-700" /> },
             { label: "Quote", href: `/quotes/new?client=${id}`, icon: <FileText className="size-4 text-rose-700" /> },
             { label: "Job", href: `/jobs/new?client=${id}`, icon: <Hammer className="size-4 text-emerald-700" /> },
             { label: "Recurring job", href: `/jobs/new?client=${id}&kind=recurring`, icon: <Repeat className="size-4 text-emerald-700" /> },
             { label: "Snow plan", href: `/jobs/new?client=${id}&kind=plan`, icon: <Snowflake className="size-4 text-sky-700" /> },
+            { label: "Invoice", href: `/invoices/new?client=${id}`, icon: <Receipt className="size-4 text-blue" /> },
+            { label: "Collect payment", href: `/clients/${id}/collect`, icon: <Banknote className="size-4 text-blue" /> },
+            { label: "Task", href: `/tasks/new?client=${id}&back=${encodeURIComponent(`/clients/${id}`)}`, icon: <ListTodo className="size-4 text-navy" /> },
             { divider: true },
             { label: "Log a call", href: `/calls/new?client=${id}&back=${encodeURIComponent(`/clients/${id}?tab=activity`)}`, icon: <Phone className="size-4 text-violet-700" /> },
             { label: "Property", href: `/clients/${id}/properties/new`, icon: <MapPin className="size-4" /> },
@@ -185,7 +189,12 @@ export default async function ClientPage({ params, searchParams }: PageProps<"/c
                   ) : <p className="text-sm text-ink-soft">Nothing scheduled.</p>}
                 </div>
                 <div>
-                  <h3 className="mb-2 text-sm font-bold">Billing history</h3>
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <h3 className="text-sm font-bold">Billing history</h3>
+                    <span className="flex gap-3 text-xs font-semibold text-blue">
+                      <Link href={`/clients/${id}/collect`}>Collect payment</Link><Link href={`/invoices/new?client=${id}`}>New invoice</Link><Link href={`/clients/${id}/statement`}>Statement</Link>
+                    </span>
+                  </div>
                   {books.rows.length ? (
                     <table className="w-full text-sm">
                       <thead><tr className="border-b border-line text-left text-xs uppercase text-ink-soft"><th className="py-1.5 font-semibold">Date</th><th className="font-semibold">Item</th><th className="text-right font-semibold">Amount</th><th className="hidden text-right font-semibold sm:table-cell">Balance</th></tr></thead>

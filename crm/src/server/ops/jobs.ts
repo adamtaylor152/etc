@@ -11,6 +11,8 @@ export type LineInput = { name: string; unitPriceCents: number; quantity: number
 export async function createOneOffJob(user: Actor, input: {
   clientId: string; propertyId: string; title: string; instructions?: string; lines: LineInput[]; date: string | null;
   billingType: "PER_VISIT" | "FIXED_PRICE";
+  /** Jobber-style extras: a time on the first visit, more visit dates, who's going, and the request it came from. */
+  startAt?: Date | null; endAt?: Date | null; moreDates?: string[]; assigneeIds?: string[]; requestId?: string | null;
 }) {
   const prop = await db.property.findFirstOrThrow({ where: { id: input.propertyId, clientId: input.clientId, businessId: user.businessId } });
   return db.$transaction(async (tx) => {
@@ -21,10 +23,20 @@ export async function createOneOffJob(user: Actor, input: {
         kind: "ONE_OFF", title: input.title, instructions: input.instructions || null, billingType: input.billingType,
         invoiceSchedule: input.billingType === "PER_VISIT" ? "AFTER_EACH_VISIT" : "ON_COMPLETION",
         totalCents: input.billingType === "FIXED_PRICE" ? lines.reduce((a, l) => a + l.totalCents, 0) : null,
-        lineItems: { create: lines },
-        visits: { create: [{ businessId: user.businessId, propertyId: prop.id, scheduledDate: input.date ? toDbDate(input.date) : null, routeSort: prop.routeSort }] },
+        lineItems: { create: lines }, requestId: input.requestId || null,
       },
     });
+    const assignees = { create: (input.assigneeIds ?? []).map((userId) => ({ userId })) };
+    const dates = [input.date, ...(input.moreDates ?? []).filter((d) => d && d !== input.date)].slice(0, 20);
+    for (const [i, d] of dates.entries()) {
+      await tx.visit.create({
+        data: {
+          businessId: user.businessId, jobId: job.id, propertyId: prop.id, scheduledDate: d ? toDbDate(d) : null, routeSort: prop.routeSort,
+          ...(i === 0 && input.startAt ? { startAt: input.startAt, endAt: input.endAt ?? null, anytime: false } : {}), assignees,
+        },
+      });
+    }
+    if (input.requestId) await tx.request.updateMany({ where: { id: input.requestId, businessId: user.businessId }, data: { status: "CONVERTED", convertedAt: new Date() } });
     await logActivity(tx, { businessId: user.businessId, type: "job.created", entityType: "Job", entityId: job.id, actorType: "USER", actorUserId: user.id, clientId: input.clientId, jobId: job.id });
     return job;
   });

@@ -63,7 +63,10 @@ export default async function RequestPage({ params, searchParams }: PageProps<"/
                 {r.jobs.map((j) => <li key={j.id}><Link href={`/jobs/${j.id}`} className="block py-2.5 font-semibold text-blue">Job #{j.number}: {j.title}</Link></li>)}
               </ul>
             ) : <p className="text-sm text-ink-soft">This needs a quote.</p>}
-            <Link href={`/quotes/new?request=${r.id}`} className="mt-3 inline-flex min-h-11 items-center rounded-full border-2 border-blue bg-blue px-5 text-sm font-semibold text-white">Create quote</Link>
+            <span className="mt-3 flex flex-wrap gap-2">
+              <Link href={`/quotes/new?request=${r.id}`} className="inline-flex min-h-10 items-center rounded-lg bg-blue px-4 text-sm font-semibold text-white">Convert to quote</Link>
+              <Link href={`/jobs/new?request=${r.id}`} className="inline-flex min-h-10 items-center rounded-lg border border-line bg-white px-4 text-sm font-semibold hover:bg-tint">Convert to job</Link>
+            </span>
           </Card>
         </div>
         <RecordPanel businessId={bid} target={{ requestId: r.id }} clientId={r.clientId} path={`/requests/${r.id}`} />
