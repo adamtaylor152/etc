@@ -111,28 +111,23 @@ GOOGLE_GEOCODING_KEY=... pnpm import:legacy bookings.json
 
 Create the Stripe account in Dad's name (Silas is a minor). Use test keys first: run `stripe listen --forward-to localhost:3000/api/stripe/webhook`, pay a test invoice, and confirm the receipt arrives. Card fees are absorbed, with no surcharge.
 
-### Interac e-Transfer auto-match (optional)
+### Interac e-Transfer auto-match
 
-1. Turn on Autodeposit at the bank for `ETRANSFER_EMAIL`.
-2. In Cloudflare Email Routing, route that address to an Email Worker. The worker forwards a copy to the inbox and posts the notice to the CRM:
+`pay@etccrew.ca` (the address clients send e-Transfers to) is routed by Cloudflare Email Routing to the `etc-interac` email Worker. The Worker posts each raw email to the CRM:
 
 ```js
 export default {
   async email(message, env) {
-    await message.forward(env.FORWARD_TO);
-    const text = await new Response(message.raw).text();
-    await fetch("https://app.etccrew.ca/api/interac", {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-etc-secret": env.INTERAC_INBOUND_SECRET },
-      body: JSON.stringify({ from: message.from, subject: message.headers.get("subject"), text }),
-    });
+    const raw = await new Response(message.raw).arrayBuffer();
+    await fetch("https://app.etccrew.ca/api/interac/email", { method: "POST", body: raw, headers: { "content-type": "message/rfc822" } });
+    if (env.FORWARD_TO) await message.forward(env.FORWARD_TO); // optional copy to a verified inbox
   },
 };
 ```
 
-What the CRM does with each notice:
-- If the client put `ETC-<invoice number>` in their message (or the amount and last name match exactly one open invoice), the payment is recorded and the receipt emailed.
-- Anything else goes to the owners as "e-Transfer to match".
+- **No shared secret:** the CRM only trusts emails with a valid DKIM signature from `interac.ca` that matches the From address. Everything else is ignored.
+- **Recording payments:** auto-deposited notices that mention `ETC-<invoice number>` (or match one open invoice by amount and last name) are recorded and the receipt emailed. Anything else goes to the owners: notices that still need depositing, and payments it couldn't match.
+- **Autodeposit:** register `pay@etccrew.ca` for Interac Autodeposit at the bank so payments land without a click.
 
 ### Booking page cutover
 
