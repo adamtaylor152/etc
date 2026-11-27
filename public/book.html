@@ -76,6 +76,8 @@
   .linkish { background: none; border: 0; padding: 0; font: inherit; color: var(--brand-dark); text-decoration: underline; cursor: pointer; }
   .remember { display: flex; gap: 10px; align-items: center; margin-top: 16px; font-size: .95rem; cursor: pointer; }
   .remember input { accent-color: var(--brand); width: 18px; height: 18px; }
+  .every-note { background: var(--ice); border-radius: 12px; padding: 12px 14px; margin: 0 0 18px; font-size: .95rem; }
+  .every-note[hidden], .field[hidden] { display: none; }
   .error { color: var(--brand-dark); font-weight: 600; font-size: .95rem; margin: 0 0 12px; min-height: 1.4em; }
 
   .review { list-style: none; padding: 0; margin: 0 0 18px; }
@@ -182,7 +184,8 @@
     <!-- 4. Details & payment -->
     <fieldset data-title="Details" hidden>
       <h2>A few last details</h2>
-      <label class="field">When would you like us? <small>(optional for every-snowfall)</small>
+      <p class="every-note" id="every-note" hidden>❄️ <b>No date needed.</b> You're on the every-snowfall plan, so we'll come automatically after each snowfall all winter.</p>
+      <label class="field" id="date-field"><span id="date-label">When would you like us?</span> <small>(optional)</small>
         <input type="date" name="date" id="date">
       </label>
       <label class="field">Notes <small>(optional)</small>
@@ -249,6 +252,17 @@
   syncShovel();
   $("date").min = todayStr; // YYYY-MM-DD in local time
 
+  // Every-snowfall shovelling has no date: we just come after each snowfall. Only ask for a date
+  // when there's a one-time visit or other jobs to schedule.
+  function syncDate() {
+    const every = $("svc-shovel").checked && form.plan.value === "Every snowfall";
+    const others = [...form.querySelectorAll("[name=services]:checked")].some(c => c.value !== "Snow shovelling");
+    $("every-note").hidden = !every;
+    $("date-field").hidden = every && !others;
+    $("date-label").textContent = every && others ? "When should we do the other jobs?" : "When would you like us?";
+    if (every && !others) form.date.value = "";
+  }
+
   function show(n) {
     i = n;
     steps.forEach((s, k) => s.hidden = k !== i);
@@ -258,7 +272,8 @@
     $("next").textContent = i === steps.length - 1 ? "Send booking" : "Next";
     $("error").textContent = "";
     if (i === steps.length - 1) buildReview();
-    steps[i].querySelector("input, textarea")?.focus({ preventScroll: true });
+    if (steps[i].dataset.title === "Details") syncDate();
+    [...steps[i].querySelectorAll("input, textarea")].find(el => el.offsetParent)?.focus({ preventScroll: true });
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
