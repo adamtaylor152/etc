@@ -236,6 +236,7 @@
       <div class="big">🙌</div>
       <h2>Thanks, neighbour!</h2>
       <p class="muted">Your booking is in. A confirmation is on its way to <b id="done-email"></b>, and Silas will be in touch to lock in a time. Questions? Call <a href="tel:+14036568200"><b>403-656-8200</b></a> or email <a href="mailto:help@etccrew.ca"><b>help@etccrew.ca</b></a>.</p>
+      <p class="muted" id="done-photos" hidden>Want a faster quote? <a id="done-photos-link" href="#"><b>Send us a few photos</b></a> of the job from your phone.</p>
       <p class="muted">Every job helps Silas get to electrician school. Thank you.</p>
       <a class="btn btn-primary" href="index.html">Back to the homepage</a>
     </div>
@@ -355,27 +356,36 @@
   }
 
   let sending = false;
+  let geo = null, geoFor = ""; // map pin from Places autocomplete, sent to the CRM for routing by community
   async function submit() {
     if (sending) return;
     sending = true;
     const d = data();
     const btn = $("next");
     btn.disabled = true; btn.textContent = "Sending…"; $("error").textContent = "";
+    const payload = JSON.stringify({
+      name: d.name, email: d.email, phone: d.phone, address: d.address, access: d.access,
+      services: d.raw, plan: form.plan.value, icemelt: form.icemelt.checked,
+      date: d.date, notes: d.notes, payment: d.payment, website: form.website.value, ...(geo || {}),
+    });
+    const post = url => fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: payload });
     try {
-      const res = await fetch("/api/bookings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: d.name, email: d.email, phone: d.phone, address: d.address, access: d.access,
-          services: d.raw, plan: form.plan.value, icemelt: form.icemelt.checked,
-          date: d.date, notes: d.notes, payment: d.payment, website: form.website.value,
-        }),
-      });
+      // The etc. CRM takes bookings when /config.js sets ETC_BOOKING_URL. If it's unreachable or erroring,
+      // fall back to this server's own /api/bookings so a booking is never lost.
+      let res;
+      if (window.ETC_BOOKING_URL) {
+        try {
+          res = await post(window.ETC_BOOKING_URL);
+          if (res.status >= 500) res = null;
+        } catch { res = null; }
+      }
+      res = res || await post("/api/bookings");
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.error || "Something went wrong.");
       steps.forEach(s => s.hidden = true);
       $("nav").hidden = true;
       $("done-email").textContent = d.email;
+      if (body.uploadUrl && /^https?:\/\//.test(body.uploadUrl)) { $("done-photos-link").href = body.uploadUrl; $("done-photos").hidden = false; }
       $("done").hidden = false;
       $("remember").checked ? saveMe() : forgetMe();
       $("step-label").textContent = "Booked";
@@ -444,14 +454,19 @@
   window.initPlaces = () => {
     const ac = new google.maps.places.Autocomplete($("address"), {
       componentRestrictions: { country: "ca" },
-      fields: ["formatted_address"],
+      fields: ["formatted_address", "geometry", "place_id", "address_components"],
       types: ["address"],
       bounds: { north: 51.21, south: 50.84, east: -113.86, west: -114.32 }, // Calgary
     });
     ac.addListener("place_changed", () => {
       const p = ac.getPlace();
       if (p.formatted_address) $("address").value = p.formatted_address;
+      const pc = (p.address_components || []).find(c => c.types.includes("postal_code"));
+      geo = p.geometry ? { lat: p.geometry.location.lat(), lng: p.geometry.location.lng(), placeId: p.place_id || "", postalCode: pc ? pc.long_name : "" } : null;
+      geoFor = $("address").value;
     });
+    // Typed over the picked address: the pin no longer matches, so don't send it.
+    $("address").addEventListener("input", () => { if ($("address").value !== geoFor) geo = null; });
   };
   if (window.ETC_MAPS_KEY) {
     const s = document.createElement("script");

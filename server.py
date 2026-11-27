@@ -5,6 +5,7 @@ Env:
   PORT              default 8080
   DATA_DIR          where bookings.db lives (mount a volume here), default ./data
   GOOGLE_MAPS_KEY   browser key for address autocomplete, served as /config.js
+  CRM_BOOKING_URL   etc. CRM booking endpoint (https://app.etccrew.ca/api/public/bookings); empty = this server takes bookings
   OWNER_EMAIL       where new-booking notices go
   OWNER_CC          comma-separated addresses copied on new-booking notices
   MAIL_FROM         From: address for all mail (default OWNER_EMAIL)
@@ -37,6 +38,7 @@ DATA_DIR = Path(os.environ.get("DATA_DIR", HERE / "data"))
 DB = DATA_DIR / "bookings.db"
 PORT = int(os.environ.get("PORT", "8080"))
 MAPS_KEY = os.environ.get("GOOGLE_MAPS_KEY", "")
+CRM_BOOKING_URL = os.environ.get("CRM_BOOKING_URL", "")  # etc. CRM endpoint; book.html posts there, falling back to /api/bookings
 OWNER_EMAIL = os.environ.get("OWNER_EMAIL", "")
 OWNER_CC = os.environ.get("OWNER_CC", "")
 MAIL_FROM = os.environ.get("MAIL_FROM", OWNER_EMAIL)
@@ -300,7 +302,8 @@ class Handler(SimpleHTTPRequestHandler):
             except Exception:
                 return self.reply(502, {"error": "forecast unavailable"})
         if path == "/config.js":
-            return self.reply(200, body=f"window.ETC_MAPS_KEY = {json.dumps(MAPS_KEY)};\n".encode(),
+            return self.reply(200, body=(f"window.ETC_MAPS_KEY = {json.dumps(MAPS_KEY)};\n"
+                                         f"window.ETC_BOOKING_URL = {json.dumps(CRM_BOOKING_URL)};\n").encode(),
                               ctype="application/javascript")
         return super().do_GET()
 

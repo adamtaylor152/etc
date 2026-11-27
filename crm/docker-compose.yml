@@ -1,0 +1,12 @@
+# Local dev: docker compose up -d   (Postgres on 5433, Mailpit UI on http://localhost:8025)
+services:
+  db:
+    image: postgres:17
+    environment: { POSTGRES_USER: etc, POSTGRES_PASSWORD: etc, POSTGRES_DB: etc }
+    ports: ["5433:5432"]
+    volumes: [db:/var/lib/postgresql/data]
+  mailpit:
+    image: axllent/mailpit
+    ports: ["1025:1025", "8025:8025"]
+volumes:
+  db:

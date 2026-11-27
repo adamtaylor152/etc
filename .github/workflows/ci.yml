@@ -1,0 +1,41 @@
+name: CI
+on:
+  push:
+  pull_request:
+
+jobs:
+  site:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.13" }
+      - run: python3 tests/test_server.py
+
+  crm:
+    runs-on: ubuntu-latest
+    defaults:
+      run: { working-directory: crm }
+    services:
+      postgres:
+        image: postgres:17
+        env: { POSTGRES_USER: etc, POSTGRES_PASSWORD: etc, POSTGRES_DB: etc }
+        ports: ["5432:5432"]
+        options: --health-cmd "pg_isready -U etc" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://etc:etc@localhost:5432/etc
+      OWNER_EMAILS: owner@example.com
+      CRON_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { package_json_file: crm/package.json }
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: pnpm, cache-dependency-path: crm/pnpm-lock.yaml }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm prisma migrate deploy
+      - run: pnpm db:seed
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm test
+      - run: pnpm build
