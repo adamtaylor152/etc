@@ -741,7 +741,38 @@ model Payment {
   stripePaymentIntentId   String?       @unique
   stripeCheckoutSessionId String?
   recordedById            String?
+  unmatchedPaymentId      String?
+  unmatchedPayment        UnmatchedPayment? @relation(fields: [unmatchedPaymentId], references: [id])
   createdAt               DateTime      @default(now())
+}
+
+// Money that came in but couldn't be matched to an invoice automatically (e.g. an e-Transfer from a spouse's
+// account with no ETC- code). Owners apply it to one or more invoices, or dismiss it.
+model UnmatchedPayment {
+  id              String                 @id @default(cuid())
+  businessId      String
+  source          String // "interac"
+  method          PaymentMethod          @default(ETRANSFER)
+  amountCents     Int
+  sender          String?
+  message         String?
+  providerRef     String? // Interac reference number: never queue or apply the same transfer twice
+  receivedAt      DateTime               @default(now())
+  status          UnmatchedPaymentStatus @default(OPEN)
+  dismissedReason String?
+  resolvedAt      DateTime?
+  resolvedById    String?
+  createdAt       DateTime               @default(now())
+  payments        Payment[]
+
+  @@unique([businessId, providerRef])
+  @@index([businessId, status])
+}
+
+enum UnmatchedPaymentStatus {
+  OPEN
+  APPLIED
+  DISMISSED
 }
 
 // ---------- media, notes, audit, mail ----------

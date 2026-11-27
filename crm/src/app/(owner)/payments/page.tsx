@@ -10,6 +10,7 @@ const METHOD: Record<string, string> = { CASH: "Cash", ETRANSFER: "e-Transfer", 
 
 export default async function Payments() {
   const bid = await businessId();
+  const toMatch = await db.unmatchedPayment.count({ where: { businessId: bid, status: "OPEN" } });
   const payments = await db.payment.findMany({ where: { businessId: bid }, include: { client: true, invoice: true }, orderBy: { receivedAt: "desc" }, take: 300 });
   const year = todayLocal().slice(0, 4);
   const thisYear = payments.filter((p) => p.receivedAt.toISOString().startsWith(year));
@@ -17,7 +18,7 @@ export default async function Payments() {
   return (
     <>
       <PageHeader title="Payments" sub={`${money(thisYear.reduce((a, p) => a + p.amountCents - p.refundedCents, 0))} received in ${year}`}
-        actions={<a href={`/api/export/payments?from=${year}-01-01&to=${year}-12-31`} className="inline-flex min-h-11 items-center rounded-full border-2 border-line bg-white px-5 text-sm font-semibold">Download {year} CSV</a>} />
+        actions={<>{toMatch > 0 && <Link href="/payments/unmatched" className="inline-flex min-h-11 items-center rounded-full border-2 border-amber-300 bg-amber-50 px-5 text-sm font-semibold text-amber-900">{toMatch} to match</Link>}<a href={`/api/export/payments?from=${year}-01-01&to=${year}-12-31`} className="inline-flex min-h-11 items-center rounded-full border-2 border-line bg-white px-5 text-sm font-semibold">Download {year} CSV</a></>} />
       {byMethod.length > 0 && (
         <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
           {byMethod.map(([m, c]) => <div key={m} className="rounded-2xl border border-line bg-white p-4"><div className="font-display text-2xl font-bold">{money(c)}</div><div className="text-sm text-ink-soft">{METHOD[m]}</div></div>)}

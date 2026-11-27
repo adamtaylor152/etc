@@ -141,10 +141,10 @@ async function recompute(tx: Tx, invoiceId: string) {
 
 export async function recordPayment(user: Actor, input: {
   invoiceId: string; method: PaymentMethod; amountCents: number; reference?: string; note?: string;
-  stripePaymentIntentId?: string; stripeCheckoutSessionId?: string; feeCents?: number;
-}) {
+  stripePaymentIntentId?: string; stripeCheckoutSessionId?: string; feeCents?: number; unmatchedPaymentId?: string; receivedAt?: Date;
+}, outerTx?: Tx) {
   if (!Number.isInteger(input.amountCents) || input.amountCents <= 0) throw new TransitionError("Enter an amount");
-  const result = await db.$transaction(async (tx) => {
+  const run = async (tx: Tx) => {
     const inv = await tx.invoice.findFirstOrThrow({ where: { id: input.invoiceId, businessId: user.businessId } });
     if (inv.status === "VOID") throw new TransitionError("This invoice is void");
     if (input.stripePaymentIntentId && await tx.payment.findUnique({ where: { stripePaymentIntentId: input.stripePaymentIntentId } })) return null; // webhook replay
@@ -153,6 +153,7 @@ export async function recordPayment(user: Actor, input: {
         businessId: user.businessId, clientId: inv.clientId, invoiceId: inv.id, method: input.method, amountCents: input.amountCents,
         reference: input.reference || null, note: input.note || null, stripePaymentIntentId: input.stripePaymentIntentId,
         stripeCheckoutSessionId: input.stripeCheckoutSessionId, feeCents: input.feeCents, recordedById: user.id ?? undefined,
+        unmatchedPaymentId: input.unmatchedPaymentId, ...(input.receivedAt ? { receivedAt: input.receivedAt } : {}),
       },
     });
     await recompute(tx, inv.id);
@@ -171,7 +172,9 @@ export async function recordPayment(user: Actor, input: {
       actorUserId: user.id ?? undefined, clientId: inv.clientId, jobId: inv.jobId ?? undefined, data: { method: input.method, amountCents: input.amountCents },
     });
     return p;
-  });
+  };
+  if (outerTx) return run(outerTx);
+  const result = await db.$transaction(run);
   kickOutbox();
   return result;
 }

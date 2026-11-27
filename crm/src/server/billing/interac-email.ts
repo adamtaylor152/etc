@@ -9,6 +9,7 @@ import { enqueue, kickOutbox } from "../email/outbox";
 import { env } from "../env";
 import { money } from "../money";
 import { recordPayment } from "../ops/invoices";
+import { queueUnmatched } from "../ops/unmatched";
 import { clientName } from "../queries";
 import { classifyInterac, matchInvoice, parseInterac } from "./interac";
 
@@ -29,8 +30,8 @@ export async function parseRawEmail(raw: string | Buffer) {
   return { from: mail.from?.address ?? "", subject: mail.subject ?? "", text: mail.text ?? (mail.html ?? "").replace(/<[^>]+>/g, " ") };
 }
 
-async function tellOwners(bid: string, title: string, body: string) {
-  for (const to of env.ownerEmails) await enqueue(db, { businessId: bid, template: "owner.notice", to, priority: 3, props: { title, body, path: "/invoices?tab=OPEN" } });
+async function tellOwners(bid: string, title: string, body: string, path = "/invoices?tab=OPEN") {
+  for (const to of env.ownerEmails) await enqueue(db, { businessId: bid, template: "owner.notice", to, priority: 3, props: { title, body, path } });
   kickOutbox();
 }
 
@@ -55,6 +56,9 @@ export async function handleInteracNotice(subject: string, text: string, deposit
     });
     return { matched: hit.etransferRef };
   }
-  await tellOwners(bid, `e-Transfer to match: ${what}`, `We couldn't match it to an invoice automatically. Record it on the right invoice.\nMessage: ${n.message ?? "(none)"}`);
-  return { matched: null };
+  if (n.amountCents) {
+    await queueUnmatched(bid, { source: "interac", amountCents: n.amountCents, sender: n.sender, message: n.message, providerRef: n.interacRef ?? null });
+  }
+  await tellOwners(bid, `e-Transfer to match: ${what}`, `We couldn't match it to an invoice automatically. It's waiting in Payments → To match, with suggested invoices.\nMessage: ${n.message ?? "(none)"}`, "/payments/unmatched");
+  return { matched: null, queued: !!n.amountCents };
 }
