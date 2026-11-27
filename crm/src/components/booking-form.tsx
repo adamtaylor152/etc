@@ -20,7 +20,7 @@ export function BookingForm({ services, phone }: { services: Service[]; phone: s
     const body = {
       name: f.get("name"), email: f.get("email"), phone: f.get("phone"), address: f.get("address"), access: f.get("access"),
       services: picked, plan: shovel ? plan : "", icemelt: shovel && f.get("icemelt") === "on",
-      date: shovel && plan === "Every snowfall" ? "" : f.get("date"), notes: f.get("notes"), payment: f.get("payment"), website: f.get("website"),
+      date: shovel && plan === "Every snowfall" ? "" : f.get("date"), notes: f.get("notes"), payment: f.get("payment"), website: f.get("website"), smsOptIn: f.get("smsOptIn") === "on",
     };
     const res = await fetch("/api/public/bookings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).catch(() => null);
     const data = await res?.json().catch(() => ({}));
@@ -45,7 +45,8 @@ export function BookingForm({ services, phone }: { services: Service[]; phone: s
         <legend className="mb-2 font-display text-lg font-bold">About you</legend>
         <label className="text-sm font-semibold">Name<input name="name" required maxLength={100} autoComplete="name" className={input} /></label>
         <label className="text-sm font-semibold">Email<input name="email" type="email" required autoComplete="email" className={input} /></label>
-        <label className="text-sm font-semibold">Phone (optional)<input name="phone" type="tel" autoComplete="tel" className={input} /></label>
+        <label className="text-sm font-semibold">Phone (optional)<input name="phone" type="tel" autoComplete="tel" className={input} />
+          <span className="mt-1 flex items-center gap-2 font-normal text-ink-soft"><input type="checkbox" name="smsOptIn" className="size-4" /> Text me when you&apos;re on the way &amp; done</span></label>
         <label className="text-sm font-semibold sm:col-span-2">Address<input name="address" required maxLength={300} autoComplete="street-address" placeholder="123 Evergreen Way SW, Calgary" className={input} /></label>
         <label className="text-sm font-semibold sm:col-span-2">Access notes (optional)<input name="access" maxLength={300} placeholder="Side gate code, dog in the yard…" className={input} /></label>
       </fieldset>

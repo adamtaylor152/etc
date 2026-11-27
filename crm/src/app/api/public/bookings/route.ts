@@ -3,7 +3,7 @@
 import { createBooking } from "@/server/booking/create";
 import { BookingError, validate } from "@/server/booking/validate";
 import { todayLocal } from "@/server/dates";
-import { businessId } from "@/server/db";
+import { businessId, db } from "@/server/db";
 import { env } from "@/server/env";
 import { clientIp, limited } from "@/server/http";
 
@@ -45,6 +45,7 @@ export async function POST(req: Request) {
   const res = await createBooking(booking, {
     businessId: await businessId(), source: "BOOKING_FORM", ip: clientIp(req), userAgent: req.headers.get("user-agent") ?? undefined, raw: data,
   });
+  if (data.smsOptIn === true && booking.phone) await db.client.update({ where: { id: res.clientId }, data: { smsOptIn: true } });
   console.info(`booking ${res.number} saved`);
   return json(req, 201, { ok: true, id: res.number, estimate: booking.estimate, ...(res.uploadUrl ? { uploadUrl: res.uploadUrl } : {}) });
 }

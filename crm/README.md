@@ -96,6 +96,7 @@ GOOGLE_GEOCODING_KEY=... pnpm import:legacy bookings.json
 | `EMAIL_DAILY_CAP` | Default 300 (Brevo free). Low-priority mail waits once you're within 30 of the cap. |
 | `UPLOAD_DIR` | Default `/data/uploads` (the volume) |
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | Optional: card payments. Stripe account in an adult's name; webhook → `https://app.etccrew.ca/api/stripe/webhook`, event `checkout.session.completed` |
+| `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM` | Optional: text updates (on the way, all done with photo link, storm day) to clients who opted in. `TWILIO_FROM` is your Twilio number, e.g. `+15875550123`. Twilio handles STOP replies. |
 | `INTERAC_INBOUND_SECRET` | Optional: 32+ random chars, shared with the Cloudflare Email Worker below |
 | `WEATHER_USER_AGENT` | Sent to MET Norway, e.g. `etc-crm/1.0 help@etccrew.ca` |
 | `GOOGLE_GEOCODING_KEY` | Optional: only for `import:legacy` |

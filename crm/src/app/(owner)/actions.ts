@@ -31,17 +31,18 @@ const ClientForm = z.object({
   tags: z.string().trim().max(300),
   notes: z.string().trim().max(5000),
   marketingOptOut: z.boolean(),
+  smsOptIn: z.boolean(),
 });
 
 export async function updateClient(form: FormData) {
   const user = await requireOwner();
-  const f = ClientForm.parse({ ...Object.fromEntries(form), marketingOptOut: form.get("marketingOptOut") === "on" });
+  const f = ClientForm.parse({ ...Object.fromEntries(form), marketingOptOut: form.get("marketingOptOut") === "on", smsOptIn: form.get("smsOptIn") === "on" });
   await db.client.findFirstOrThrow({ where: { id: f.id, businessId: user.businessId } });
   await db.client.update({
     where: { id: f.id },
     data: {
       firstName: f.firstName, lastName: f.lastName, companyName: f.companyName || null, email: f.email, phone: f.phone || null,
-      notes: f.notes || null, marketingOptOut: f.marketingOptOut,
+      notes: f.notes || null, marketingOptOut: f.marketingOptOut, smsOptIn: f.smsOptIn,
       tags: [...new Set(f.tags.split(",").map((t) => t.trim().toLowerCase()).filter(Boolean))],
     },
   });
