@@ -6,6 +6,7 @@ Env:
   DATA_DIR          where bookings.db lives (mount a volume here), default ./data
   GOOGLE_MAPS_KEY   browser key for address autocomplete, served as /config.js
   OWNER_EMAIL       where new-booking notices go
+  OWNER_CC          comma-separated addresses copied on new-booking notices
   MAIL_FROM         From: address for all mail (default OWNER_EMAIL)
   ETRANSFER_EMAIL   shown to customers who pick e-Transfer (default OWNER_EMAIL)
   PRIMARY_HOST      main domain (etccrew.ca); requests for any other host are redirected there
@@ -35,6 +36,7 @@ DB = DATA_DIR / "bookings.db"
 PORT = int(os.environ.get("PORT", "8080"))
 MAPS_KEY = os.environ.get("GOOGLE_MAPS_KEY", "")
 OWNER_EMAIL = os.environ.get("OWNER_EMAIL", "")
+OWNER_CC = os.environ.get("OWNER_CC", "")
 MAIL_FROM = os.environ.get("MAIL_FROM", OWNER_EMAIL)
 ETRANSFER_EMAIL = os.environ.get("ETRANSFER_EMAIL", OWNER_EMAIL)
 PHONE = "403-656-8200"
@@ -149,7 +151,7 @@ def save(b):
 
 
 # ---------- email ----------
-def send(to, subject, body, reply_to=""):
+def send(to, subject, body, reply_to="", cc=""):
     if not (os.environ.get("SMTP_HOST") and MAIL_FROM and to):
         log.info("mail not configured, skipped: %s -> %s", subject, to)
         return
@@ -157,6 +159,8 @@ def send(to, subject, body, reply_to=""):
     msg["From"], msg["To"], msg["Subject"] = MAIL_FROM, to, subject
     if reply_to:
         msg["Reply-To"] = reply_to
+    if cc:
+        msg["Cc"] = cc  # send_message() delivers to Cc recipients too
     msg.set_content(body)  # plain text only: user input is never rendered as HTML
     host, port = os.environ["SMTP_HOST"], int(os.environ.get("SMTP_PORT", "587"))
     tls = os.environ.get("SMTP_TLS", "starttls")
@@ -181,7 +185,7 @@ def notify(bid, b):
            if b["payment"] == "e-Transfer" and ETRANSFER_EMAIL else
            "You chose cash. Just pay the crew when we're done.")
     try:
-        send(OWNER_EMAIL, f"New booking #{bid}: {b['name']}, {', '.join(b['services'])}", details, reply_to=b["email"])
+        send(OWNER_EMAIL, f"New booking #{bid}: {b['name']}, {', '.join(b['services'])}", details, reply_to=b["email"], cc=OWNER_CC)
     except Exception:
         log.exception("owner email failed for booking %s", bid)
     try:

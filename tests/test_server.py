@@ -87,11 +87,13 @@ class FakeSMTP:
 server.smtplib.SMTP = FakeSMTP
 os.environ.update(SMTP_HOST="smtp-relay.brevo.com", SMTP_USER="u@example.com", SMTP_PASSWORD="k")
 server.MAIL_FROM, server.OWNER_EMAIL, server.ETRANSFER_EMAIL = "etc. <bookings@example.com>", "owner@example.com", "pay@example.com"
+server.OWNER_CC = "helper@example.com"
 server.notify(7, server.validate(good))
 msgs = [x[1] for x in sent if x[0] == "msg"]
 assert ("connect", "smtp-relay.brevo.com", 587) in sent and ("tls",) in sent and ("login", "u@example.com") in sent
 assert [m["To"] for m in msgs] == ["owner@example.com", "test@example.com"]
 assert msgs[0]["Reply-To"] == "test@example.com" and "#7" in msgs[0]["Subject"]
+assert msgs[0]["Cc"] == "helper@example.com" and msgs[1]["Cc"] is None  # only the owner notice is copied
 assert "pay@example.com" in msgs[1].get_content() and "Silas" in msgs[1].get_content()
 assert msgs[1]["Reply-To"] == "help@etccrew.ca" and "help@etccrew.ca" in msgs[1].get_content()
 

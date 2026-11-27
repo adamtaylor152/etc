@@ -29,6 +29,7 @@ python3 tests/test_server.py
 |---|---|
 | `GOOGLE_MAPS_KEY` | Browser key with Maps JavaScript API + Places API, restricted to `etccrew.ca/*` |
 | `OWNER_EMAIL` | Where new-booking notices go |
+| `OWNER_CC` | Comma-separated addresses copied (Cc) on new-booking notices |
 | `MAIL_FROM` | From address (defaults to `OWNER_EMAIL`) |
 | `PRIMARY_HOST` | `etccrew.ca`. Every other domain pointed at the app (etcyyc.com, etcyyc.ca, etccrew.com, www.*) is 301-redirected here |
 | `HELP_EMAIL` | Public contact shown on the site and in emails; customer replies go here (default `help@etccrew.ca`) |
