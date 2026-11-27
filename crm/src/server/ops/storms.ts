@@ -1,6 +1,10 @@
 // Storm operations (Aspire-style snow events). "Start storm" creates a visit for every every-snowfall plan
 // whose trigger the storm meets. Everything here is safe to re-run: visits are unique per (job, storm, push).
-import type { SnowEvent } from "@/generated/prisma/client";
+import type { Prisma, SnowEvent } from "@/generated/prisma/client";
+import { enqueue } from "../email/outbox";
+import { env } from "../env";
+import { forecast } from "../forecast";
+import { getSettings } from "../settings";
 import { prettyDate, todayLocal, toDbDate } from "../dates";
 import { db, type Tx } from "../db";
 import { logActivity, nextNumber } from "../records";
@@ -59,12 +63,25 @@ export async function createStorm(user: Actor, input: { forecastCm: number | nul
 }
 
 export async function startStorm(user: Actor, id: string, cm: number) {
+  const periods = await forecast(); // network: outside the transaction
   return db.$transaction(async (tx) => {
     const ev = await load(tx, user, id);
     if (ev.status !== "FORECAST" && ev.status !== "ACTIVE") throw new TransitionError("This storm is already finished");
     const day = todayLocal();
     await tx.snowEvent.update({ where: { id }, data: { status: "ACTIVE", measuredCm: cm, activatedAt: ev.activatedAt ?? new Date() } });
     const created = await generate(tx, ev, cm, 1, day);
+    // Keep what the forecast said, for "you said it would snow" conversations.
+    if (periods && !ev.forecastSnapshot) await tx.snowEvent.update({ where: { id }, data: { forecastSnapshot: periods.slice(0, 48) as unknown as Prisma.InputJsonValue } });
+    if ((await getSettings(tx, user.businessId)).stormHeadsUp) {
+      const visits = await tx.visit.findMany({ where: { snowEventId: id, pushNumber: 1, job: { kind: "SNOW_PLAN" } }, include: { job: { include: { client: true } } } });
+      for (const v of visits) {
+        if (!v.job.client.email || v.job.client.emailBouncedAt || v.job.client.marketingOptOut) continue;
+        await enqueue(tx, {
+          businessId: user.businessId, template: "storm.heads_up", to: v.job.client.email, replyTo: env.helpEmail, priority: 7, props: { visitId: v.id },
+          dedupeKey: `storm:${id}:headsup:${v.job.clientId}`, clientId: v.job.clientId, entityType: "SnowEvent", entityId: id,
+        });
+      }
+    }
     await logActivity(tx, { businessId: user.businessId, type: "storm.started", entityType: "SnowEvent", entityId: id, actorType: "USER", actorUserId: user.id, snowEventId: id, data: { cm, created } });
     return created;
   });

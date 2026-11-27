@@ -4,6 +4,7 @@ import type { ReactElement } from "react";
 import { BookingConfirmation, OwnerNewBooking, type BookingEmailProps } from "@/emails/booking";
 import { OwnerLogin } from "@/emails/login";
 import { InvoiceSent, OwnerPaymentReceived, PaymentReceipt, type InvoiceEmailData } from "@/emails/invoice";
+import { OnMyWay, OwnerSnowAlert, StormHeadsUp } from "@/emails/snow";
 import { OwnerPhotosUploaded, PhotoUploadRequest, VisitDone } from "@/emails/visit";
 import { invoiceTotals } from "../billing/invoice";
 import { money } from "../money";
@@ -141,6 +142,31 @@ const ownerPaymentReceived: Template<{ paymentId: string }> = {
   },
 };
 
+const visitOnMyWay: Template<{ visitId: string }> = {
+  subject: () => "The etc. crew is on the way",
+  async render(p) {
+    const v = await db.visit.findUniqueOrThrow({ where: { id: p.visitId }, include: { job: { include: { client: true } }, property: true } });
+    return <OnMyWay name={clientName(v.job.client)} address={v.property.formatted} site={env.siteUrl} phone={env.phone} />;
+  },
+};
+
+const stormHeadsUp: Template<{ visitId: string }> = {
+  subject: () => "Snow day: you're on our route",
+  async render(p) {
+    const v = await db.visit.findUniqueOrThrow({ where: { id: p.visitId }, include: { job: { include: { client: true } }, property: true, snowEvent: true } });
+    return <StormHeadsUp name={clientName(v.job.client)} address={v.property.formatted} cm={v.snowEvent?.measuredCm ?? null} site={env.siteUrl} phone={env.phone} />;
+  },
+};
+
+const ownerSnowAlert: Template<{ days: { label: string; cm: number }[]; plans: number }> = {
+  subject: (p) => `Snow coming: ${p.plans} plan${p.plans === 1 ? "" : "s"} would trigger`,
+  async render(p, ctx) {
+    const user = await db.user.findFirst({ where: { businessId: ctx.businessId, email: ctx.to.toLowerCase(), active: true } });
+    const url = user ? `${env.appUrl}/auth/go?t=${await mintToken(db, ctx.businessId, "OWNER_DEEP_LINK", { userId: user.id, redirectPath: "/snow" })}` : `${env.appUrl}/snow`;
+    return <OwnerSnowAlert days={p.days} plans={p.plans} url={url} />;
+  },
+};
+
 export const templates = {
   "owner.login": ownerLogin,
   "owner.new_booking": ownerNewBooking,
@@ -152,6 +178,9 @@ export const templates = {
   "invoice.reminder": invoiceReminder,
   "payment.receipt": paymentReceipt,
   "owner.payment_received": ownerPaymentReceived,
+  "visit.on_my_way": visitOnMyWay,
+  "storm.heads_up": stormHeadsUp,
+  "owner.snow_alert": ownerSnowAlert,
 } as const;
 
 export type TemplateName = keyof typeof templates;

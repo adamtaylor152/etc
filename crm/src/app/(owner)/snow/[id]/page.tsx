@@ -86,6 +86,7 @@ export default async function StormPage({ params, searchParams }: PageProps<"/sn
             <form action={stormCancel}>{hidden}<Button variant="danger" className="w-full">Cancel storm (forecast bust)</Button></form>
           )}
           {ev.notes && <Card title="Notes"><p className="text-sm">{ev.notes}</p></Card>}
+          {visits.length > 0 && <ButtonLink href={`/snow/${ev.id}/report`} className="w-full">Proof-of-service report</ButtonLink>}
         </div>
       </div>
     </>

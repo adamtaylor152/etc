@@ -5,9 +5,10 @@ import { dueDate } from "../billing/invoice";
 import { todayLocal, toDbDate } from "../dates";
 import { invoiceUnbilled } from "./invoices";
 import { db, type Tx } from "../db";
-import { enqueue } from "../email/outbox";
+import { enqueue, kickOutbox } from "../email/outbox";
 import { env } from "../env";
 import { logActivity } from "../records";
+import { getSettings } from "../settings";
 import { assertTransition, TransitionError } from "../status/visit";
 
 type Actor = { id: string; businessId: string };
@@ -22,6 +23,12 @@ async function iceMeltPrice(tx: Tx, businessId: string) {
 }
 
 export async function transitionVisit(user: Actor, visitId: string, to: VisitState, extra: TransitionExtra = {}) {
+  const updated = await transitionTx(user, visitId, to, extra);
+  kickOutbox();
+  return updated;
+}
+
+function transitionTx(user: Actor, visitId: string, to: VisitState, extra: TransitionExtra) {
   return db.$transaction(async (tx) => {
     const v = await tx.visit.findFirstOrThrow({
       where: { id: visitId, businessId: user.businessId },
@@ -53,20 +60,28 @@ export async function transitionVisit(user: Actor, visitId: string, to: VisitSta
       // Billed per visit (one-off jobs): invoice it now so the "all done" email can carry a pay link.
       if (lines.length && v.job.invoiceSchedule === "AFTER_EACH_VISIT") {
         const inv = await invoiceUnbilled(user, { clientId: v.job.clientId, visitId }, tx);
-        const biz = await tx.business.findUniqueOrThrow({ where: { id: user.businessId } });
-        if ((biz.settings as { autoSendVisitInvoices?: boolean }).autoSendVisitInvoices !== false) {
+        if ((await getSettings(tx, user.businessId)).autoSendVisitInvoices) {
           const today = todayLocal();
           await tx.invoice.update({ where: { id: inv.id }, data: { status: "AWAITING_PAYMENT", issuedOn: toDbDate(today), dueOn: toDbDate(dueDate(today, inv.paymentTerms)), sentAt: new Date() } });
         }
       }
       // "All done" email with before/after photos. Waits 5 minutes so photos taken right after tapping Done make it in;
       // the dedupe key means reopening and completing again never sends it twice.
-      const settings = (await tx.business.findUniqueOrThrow({ where: { id: user.businessId } })).settings as { visitDoneEmail?: boolean };
+      const settings = await getSettings(tx, user.businessId);
       const client = await tx.client.findUniqueOrThrow({ where: { id: v.job.clientId } });
-      if (settings.visitDoneEmail !== false && client.email && !client.emailBouncedAt) {
+      if (settings.visitDoneEmail && client.email && !client.emailBouncedAt) {
         await enqueue(tx, {
           businessId: user.businessId, template: "visit.done", to: client.email, replyTo: env.helpEmail, priority: 5, props: { visitId },
           dedupeKey: `visit:${visitId}:done`, sendAfter: new Date(Date.now() + 5 * 60_000), clientId: client.id, entityType: "Visit", entityId: visitId,
+        });
+      }
+    }
+    if (to === "EN_ROUTE" && (await getSettings(tx, user.businessId)).onMyWayEmail) {
+      const client = await tx.client.findUniqueOrThrow({ where: { id: v.job.clientId } });
+      if (client.email && !client.emailBouncedAt) {
+        await enqueue(tx, {
+          businessId: user.businessId, template: "visit.on_my_way", to: client.email, replyTo: env.helpEmail, priority: 3, props: { visitId },
+          dedupeKey: `visit:${visitId}:omw`, clientId: client.id, entityType: "Visit", entityId: visitId,
         });
       }
     }

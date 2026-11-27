@@ -1,5 +1,5 @@
 // Route order: communities in the business's service-area order (Evergreen first), then each property's
-// standing routeSort, then address. Auto-ordering by distance (nearest-neighbour + 2-opt) comes with the map (M5).
+// standing routeSort (set by auto-order / up-down moves, reused every storm), then address.
 import type { Prisma } from "@/generated/prisma/client";
 import { db } from "./db";
 
@@ -19,7 +19,7 @@ export async function routeVisits(businessId: string, where: Prisma.VisitWhereIn
   const big = Number.MAX_SAFE_INTEGER;
   visits.sort((a, b) =>
     (rank.get(a.property.communityCode ?? "") ?? big) - (rank.get(b.property.communityCode ?? "") ?? big)
-    || (a.routeSort ?? a.property.routeSort ?? big) - (b.routeSort ?? b.property.routeSort ?? big)
+    || (a.property.routeSort ?? big) - (b.property.routeSort ?? big)
     || a.property.formatted.localeCompare(b.property.formatted));
   // Group, keeping order.
   const groups: { name: string; code: string | null; visits: RouteVisit[] }[] = [];
