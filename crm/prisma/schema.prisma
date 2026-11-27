@@ -259,6 +259,7 @@ model User {
   sessions    Session[]
   visitAssignments VisitAssignee[]
   taskAssignments  TaskAssignee[]
+  timeEntries      TimeEntry[]
 
   @@unique([businessId, email])
 }
@@ -1047,4 +1048,40 @@ model TaskAssignee {
 
   @@id([taskId, userId])
   @@index([userId])
+}
+
+/** Time on a visit or job. A running timer has no endedAt. minutes is filled when it stops (or for manual entries). */
+model TimeEntry {
+  id         String    @id @default(cuid())
+  businessId String
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  visitId    String?
+  jobId      String?
+  startedAt  DateTime
+  endedAt    DateTime?
+  minutes    Int?
+  note       String?
+  createdAt  DateTime  @default(now())
+
+  @@index([businessId, startedAt])
+  @@index([jobId])
+  @@index([userId, endedAt])
+}
+
+/** Money spent on a job (salt, dump fees, gas, parts). */
+model Expense {
+  id           String   @id @default(cuid())
+  businessId   String
+  jobId        String?
+  userId       String?
+  date         DateTime @db.Date
+  category     String   @default("Materials")
+  description  String
+  amountCents  Int
+  attachmentId String?
+  createdAt    DateTime @default(now())
+
+  @@index([businessId, date])
+  @@index([jobId])
 }

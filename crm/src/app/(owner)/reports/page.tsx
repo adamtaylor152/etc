@@ -1,3 +1,6 @@
+import Link from "next/link";
+import { hm, jobProfit } from "@/server/ops/costing";
+import { team } from "@/server/schedule";
 // Reports: money in by month, what sells, where the work is, storms, quotes, tuition.
 // Single-series horizontal bars (one hue), every row labelled with its value; hover shows the exact figure.
 import { Card, PageHeader } from "@/components/ui";
@@ -33,6 +36,17 @@ export default async function Reports() {
   const bid = await businessId();
   const today = todayLocal();
   const yearAgo = daysAgo(365);
+  const since30 = daysAgo(30), since90 = daysAgo(90);
+  const [timeRows, people, costedJobs] = await Promise.all([
+    db.timeEntry.groupBy({ by: ["userId"], where: { businessId: bid, startedAt: { gte: since30 }, endedAt: { not: null } }, _sum: { minutes: true } }),
+    team(bid),
+    Promise.all([
+      db.expense.findMany({ where: { businessId: bid, jobId: { not: null }, date: { gte: since90 } }, select: { jobId: true }, distinct: ["jobId"] }),
+      db.timeEntry.findMany({ where: { businessId: bid, jobId: { not: null }, startedAt: { gte: since90 } }, select: { jobId: true }, distinct: ["jobId"] }),
+    ]).then(([a, b]) => db.job.findMany({ where: { businessId: bid, id: { in: [...new Set([...a, ...b].map((r) => r.jobId!))] } }, select: { id: true, number: true, title: true }, take: 15 })),
+  ]);
+  const hours = people.map((p) => ({ ...p, minutes: timeRows.find((r) => r.userId === p.id)?._sum.minutes ?? 0 })).filter((h) => h.minutes > 0);
+  const profits = (await Promise.all(costedJobs.map(async (j) => ({ ...j, ...(await jobProfit(bid, j.id)) })))).sort((a, b) => b.profitCents - a.profitCents);
   const [payments, lines, season, quotes, visitsDone] = await Promise.all([
     db.payment.findMany({ where: { businessId: bid, receivedAt: { gte: yearAgo } }, include: { invoice: { select: { propertyId: true } } } }),
     db.invoiceLineItem.findMany({ where: { invoice: { businessId: bid, status: { in: ["PAID", "AWAITING_PAYMENT"] }, issuedOn: { gte: yearAgo } } }, select: { name: true, totalCents: true } }),
@@ -71,6 +85,16 @@ export default async function Reports() {
         ))}
       </div>
       <div className="grid gap-5 lg:grid-cols-2">
+        <Card title="Hours by person · past 30 days">
+          {hours.length ? <ul className="space-y-1.5 text-sm">{hours.map((h) => <li key={h.name} className="flex justify-between"><span className="flex items-center gap-1.5"><span className="size-2.5 rounded-full" style={{ background: h.color }} />{h.name}</span><span className="font-semibold">{hm(h.minutes)}</span></li>)}</ul> : <p className="text-sm text-ink-soft">No time tracked yet. Start timers on visits.</p>}
+        </Card>
+        <Card title="Profit by job · past 90 days">
+          {profits.length ? (
+            <ul className="divide-y divide-line text-sm">
+              {profits.map((p) => <li key={p.id}><Link href={`/jobs/${p.id}`} className="flex justify-between gap-2 py-1.5"><span className="truncate">#{p.number} {p.title}</span><span className={`font-semibold ${p.profitCents < 0 ? "text-red-700" : "text-emerald-700"}`}>{money(p.profitCents)}{p.marginPct != null && <span className="ml-1 font-normal text-ink-soft">{p.marginPct}%</span>}</span></Link></li>)}
+            </ul>
+          ) : <p className="text-sm text-ink-soft">Profit shows once jobs have time or expenses logged.</p>}
+        </Card>
         <Card title="Money in by month"><Bars rows={[...byMonth].map(([k, v]) => [monthLabel(k), v])} empty="No payments yet." /></Card>
         <Card title="Invoiced by service"><Bars rows={top(byService)} empty="No invoices yet." /></Card>
         <Card title="Money in by community"><Bars rows={top(byCommunity)} empty="No payments yet." /></Card>

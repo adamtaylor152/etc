@@ -74,3 +74,12 @@ describe("task repeats", () => {
     expect(seriesDates("2026-12-01", "WEEKLY").length).toBe(53);
   });
 });
+
+import { profitOf } from "@/server/ops/costing";
+describe("job profit", () => {
+  it("subtracts labour at each person's rate and expenses from revenue", () => {
+    expect(profitOf(12000, [{ minutes: 90, hourlyCostCents: 2000 }, { minutes: 30, hourlyCostCents: 1500 }, { minutes: null, hourlyCostCents: 9999 }], [{ amountCents: 1500 }]))
+      .toEqual({ revenueCents: 12000, labourCents: 3750, expenseCents: 1500, profitCents: 6750, marginPct: 56, minutes: 120 });
+    expect(profitOf(0, [], [{ amountCents: 500 }])).toMatchObject({ profitCents: -500, marginPct: null });
+  });
+});

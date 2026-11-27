@@ -1,5 +1,8 @@
 import { assignPeople } from "../../schedule-actions";
-import { team } from "@/server/schedule";
+import { personName, team } from "@/server/schedule";
+import { VisitTimer } from "@/components/visit-timer";
+import { hm } from "@/server/ops/costing";
+import { requireOwner } from "@/server/auth";
 // Field view: what Silas sees standing in the driveway. Big buttons, everything on one screen.
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -55,6 +58,11 @@ export default async function VisitPage({ params, searchParams }: PageProps<"/vi
   const hidden = (to: string) => <><input type="hidden" name="id" value={v.id} /><input type="hidden" name="to" value={to} /><input type="hidden" name="back" value={here} /></>;
 
   const people = await team(v.businessId);
+  const user = await requireOwner();
+  const [running, visitTime] = await Promise.all([
+    db.timeEntry.findFirst({ where: { businessId: v.businessId, userId: user.id, endedAt: null } }),
+    db.timeEntry.findMany({ where: { businessId: v.businessId, visitId: v.id, endedAt: { not: null } }, include: { user: true } }),
+  ]);
   return (
     <div className="mx-auto max-w-xl">
       <Flash error={sp.error} />
@@ -81,6 +89,11 @@ export default async function VisitPage({ params, searchParams }: PageProps<"/vi
       )}
 
 
+      <Card title="Time" className="my-4">
+        <VisitTimer visitId={v.id} runningSince={running?.visitId === v.id ? running.startedAt.toISOString() : null} back={`/visits/${v.id}`} />
+        {running && running.visitId !== v.id && <p className="mt-2 text-xs text-ink-soft">Your timer is running on another visit. Starting here stops that one.</p>}
+        {visitTime.length > 0 && <p className="mt-2 text-sm text-ink-soft">Logged: {visitTime.map((t) => `${personName(t.user)} ${hm(t.minutes ?? 0)}`).join(" · ")}</p>}
+      </Card>
       <Card title="Who's on it" className="my-4">
         <form action={assignPeople} className="flex flex-wrap items-center gap-3">
           <input type="hidden" name="kind" value="visit" /><input type="hidden" name="id" value={v.id} /><input type="hidden" name="back" value={`/visits/${v.id}`} />

@@ -1,3 +1,5 @@
+import { JobCosting } from "@/components/job-costing";
+import { team } from "@/server/schedule";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Flash } from "@/components/flash";
@@ -142,6 +144,7 @@ export default async function JobPage({ params, searchParams }: PageProps<"/jobs
             ) : <Empty>{plan ? "Visits appear here when a storm starts." : "No visits yet."}</Empty>}
           </Card>
 
+          <JobCosting businessId={bid} jobId={job.id} people={await team(bid)} back={here} />
           <Card title="Photos">
             {photos.length ? <Gallery photos={photos} back={here} /> : <p className="text-sm text-ink-soft">Before &amp; after photos are taken on each visit. Photos the client sent with their request show here too.</p>}
             <div className="mt-3 max-w-xs"><PhotoUploader endpoint="/api/uploads" fields={{ jobId: job.id, kind: "OTHER" }} label="Add photos" camera={false} /></div>
