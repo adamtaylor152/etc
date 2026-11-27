@@ -35,6 +35,7 @@ export default async function ClientPage({ params, searchParams }: PageProps<"/c
         title={<>{clientName(c)} {c.archivedAt ? <Badge>Archived</Badge> : <Badge tone={jobs.length ? "green" : "blue"}>{jobs.length ? "Active" : "Lead"}</Badge>}</>}
         sub={<>Client since {prettyDateTime(c.createdAt)}{c.tags.map((t) => <span key={t} className="ml-1.5"><Badge>{t}</Badge></span>)}</>}
         actions={<>
+          {c.phone && <Link href={`/messages/${c.id}`} className="inline-flex min-h-11 items-center rounded-full border-2 border-line bg-white px-5 text-sm font-semibold">Text</Link>}
           {tel && <a href={tel} className="inline-flex min-h-11 items-center rounded-full border-2 border-blue bg-blue px-5 text-sm font-semibold text-white">Call</a>}
           <a href={`mailto:${c.email}`} className="inline-flex min-h-11 items-center rounded-full border-2 border-line bg-white px-5 text-sm font-semibold">Email</a>
           <form action={sendHubLink}><input type="hidden" name="clientId" value={c.id} /><button className="inline-flex min-h-11 items-center rounded-full border-2 border-line bg-white px-5 text-sm font-semibold">{sp.hub === "sent" ? "Hub link sent ✓" : "Send hub link"}</button></form>
