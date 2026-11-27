@@ -12,7 +12,7 @@ export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 
 export class MediaError extends Error {}
 
-type Links = { clientId?: string | null; propertyId?: string | null; requestId?: string | null; quoteId?: string | null; jobId?: string | null; visitId?: string | null; textMessageId?: string | null };
+type Links = { clientId?: string | null; propertyId?: string | null; requestId?: string | null; quoteId?: string | null; jobId?: string | null; visitId?: string | null; textMessageId?: string | null; noteId?: string | null };
 
 export async function saveImage(businessId: string, file: { bytes: Buffer; contentType: string }, meta: Links & {
   kind: AttachmentKind; uploadedByType: ActorType; uploadedById?: string; capturedLat?: number | null; capturedLng?: number | null;
@@ -43,7 +43,7 @@ export async function saveImage(businessId: string, file: { bytes: Buffer; conte
       uploadedByType: meta.uploadedByType, uploadedById: meta.uploadedById, caption: meta.caption || null,
       sharedWithClient: meta.sharedWithClient ?? false,
       clientId: meta.clientId, propertyId: meta.propertyId, requestId: meta.requestId, quoteId: meta.quoteId, jobId: meta.jobId, visitId: meta.visitId,
-      textMessageId: meta.textMessageId,
+      textMessageId: meta.textMessageId, noteId: meta.noteId,
     },
   });
 }
@@ -59,7 +59,7 @@ export async function saveFile(businessId: string, file: { bytes: Buffer; conten
     data: {
       id, businessId, kind: meta.kind, mediaType: ct.startsWith("video/") ? "VIDEO" : ct === "application/pdf" ? "PDF" : "FILE",
       storageKey: prefix, contentType: ct, bytes: file.bytes.length, sha256: createHash("sha256").update(file.bytes).digest("hex"),
-      uploadedByType: meta.uploadedByType, filename: file.filename?.slice(0, 200) ?? null, clientId: meta.clientId, textMessageId: meta.textMessageId,
+      uploadedByType: meta.uploadedByType, filename: file.filename?.slice(0, 200) ?? null, clientId: meta.clientId, textMessageId: meta.textMessageId, noteId: meta.noteId,
     },
   });
 }

@@ -19,10 +19,12 @@ export function listHref(base: string, current: Record<string, string | undefine
   return s ? `${base}?${s}` : base;
 }
 
-export function ListPage({ title, base, params, newHref, newLabel, actions, overview, metrics = [], filters = [], searchPlaceholder, columns, rows, empty, footer }: {
+export function ListPage({ title, base, params, newHref, newLabel, actions, overview, metrics = [], filters = [], searchPlaceholder, columns, rows, empty, footer, bulk }: {
   title: string; base: string; params: Record<string, string | undefined>; newHref?: string; newLabel?: string; actions?: ReactNode;
   overview?: OverviewRow[]; metrics?: Metric[]; filters?: Filter[]; searchPlaceholder?: string;
   columns: Column[]; rows: Row[]; empty?: ReactNode; footer?: ReactNode;
+  /** Bulk actions: rows get checkboxes tied to this form (by id, so forms don't nest). */
+  bulk?: { action: (f: FormData) => Promise<void>; controls: ReactNode };
 }) {
   const sort = params.sort, dir = params.dir === "asc" ? "asc" : "desc";
   const filtered = filters.some((f) => f.value) || !!params.q;
@@ -82,6 +84,7 @@ export function ListPage({ title, base, params, newHref, newLabel, actions, over
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-ink-soft">
+                  {bulk && <th className="w-8 px-3"><span className="sr-only">Select</span></th>}
                   {columns.map((c) => {
                     const on = sort === c.key;
                     const next = on && dir === "desc" ? "asc" : "desc";
@@ -100,6 +103,7 @@ export function ListPage({ title, base, params, newHref, newLabel, actions, over
               <tbody>
                 {rows.map((r) => (
                   <tr key={r.id} className="group relative border-b border-line/70 last:border-0 hover:bg-tint">
+                    {bulk && <td className="px-3 py-3 align-top"><input type="checkbox" name="ids" value={r.id} form="bulk-form" aria-label="Select row" className="relative z-10 size-4" /></td>}
                     {columns.map((c, i) => (
                       <td key={c.key} className={`px-4 py-3 align-top ${c.align === "right" ? "text-right" : ""} ${c.className ?? ""}`}>
                         {i === 0 ? <Link href={r.href} className="font-semibold after:absolute after:inset-0">{r.cells[c.key]}</Link> : r.cells[c.key]}
@@ -111,6 +115,11 @@ export function ListPage({ title, base, params, newHref, newLabel, actions, over
             </table>
           </div>
         ) : <div className="p-8 text-center text-sm text-ink-soft">{empty ?? "Nothing here yet."}</div>}
+        {bulk && rows.length > 0 && (
+          <form id="bulk-form" action={bulk.action} className="flex flex-wrap items-center gap-2 border-t border-line p-3 text-sm">
+            <span className="font-semibold text-ink-soft">With selected:</span>{bulk.controls}
+          </form>
+        )}
         {footer}
       </section>
     </>

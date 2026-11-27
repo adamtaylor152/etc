@@ -131,7 +131,7 @@ export function AppShell({ children, counts, email, signOut }: { children: React
           <MessageSquare className="size-5 text-navy" />
           {counts.unread > 0 && <span className="absolute -right-0.5 -top-0.5 min-w-4 rounded-full bg-blue px-1 text-center text-[10px] font-bold leading-4 text-white">{counts.unread}</span>}
         </Link>
-        <Link href="/payments/unmatched" className="relative hidden rounded-full p-2 hover:bg-tint sm:block" aria-label={`Payments to match: ${counts.toMatch}`}>
+        <Link href={counts.toMatch ? "/payments/unmatched" : "/activity"} className="relative hidden rounded-full p-2 hover:bg-tint sm:block" aria-label={counts.toMatch ? `Payments to match: ${counts.toMatch}` : "Activity"}>
           <Bell className="size-5 text-navy" />
           {counts.toMatch > 0 && <span className="absolute -right-0.5 -top-0.5 min-w-4 rounded-full bg-amber-500 px-1 text-center text-[10px] font-bold leading-4 text-white">{counts.toMatch}</span>}
         </Link>

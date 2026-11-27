@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Flash } from "@/components/flash";
 import { InvoiceBadge } from "@/components/status";
-import { Timeline } from "@/components/timeline";
+import { RecordPanel } from "@/components/record-panel";
 import { Button, Card, Dl, Input, PageHeader, inputCls } from "@/components/ui";
 import { invoiceView } from "@/server/billing/invoice";
 import { dateOnly, prettyDate, prettyDateTime, todayLocal } from "@/server/dates";
@@ -23,10 +23,6 @@ export default async function InvoicePage({ params, searchParams }: PageProps<"/
   });
   if (!inv) notFound();
   const biz = await business();
-  const [notes, events] = await Promise.all([
-    db.note.findMany({ where: { businessId: bid, invoiceId: id }, orderBy: { createdAt: "desc" } }),
-    db.activityEvent.findMany({ where: { businessId: bid, entityType: "Invoice", entityId: id }, orderBy: { at: "desc" } }),
-  ]);
   const view = invoiceView({ ...inv, dueOn: dateOnly(inv.dueOn) }, todayLocal());
   const balance = Math.max(0, inv.totalCents - inv.amountPaidCents);
   const here = `/invoices/${id}`;
@@ -116,7 +112,7 @@ export default async function InvoicePage({ params, searchParams }: PageProps<"/
             </div>
           </Card>
         </div>
-        <Timeline notes={notes} events={events} target={{ clientId: inv.clientId }} path={here} />
+        <RecordPanel businessId={bid} target={{ invoiceId: inv.id }} clientId={inv.clientId} path={here} />
       </div>
     </>
   );

@@ -5,6 +5,8 @@ const nextConfig: NextConfig = {
   // rather than Cache Components.
   output: "standalone",
   poweredByHeader: false,
+  // Notes and forms can carry photos (phones shrink them first, but a few full-size ones still pass 1 MB).
+  experimental: { serverActions: { bodySizeLimit: "30mb" } },
   turbopack: {
     rules: {
       "*.css": { loaders: ["@tailwindcss/turbopack"], as: "*.css" },
