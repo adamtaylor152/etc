@@ -32,3 +32,14 @@ export async function requestPhotos(f: FormData) {
   kickOutbox();
   redirect(`${back(f)}?sent=photos`);
 }
+
+/** Feature a before/after photo in etccrew.ca's "Our work" (the owner confirms the client said OK). */
+export async function photoShowcase(f: FormData) {
+  const user = await requireOwner();
+  const on = f.get("on") === "1";
+  await db.attachment.updateMany({
+    where: { id: String(f.get("id")), businessId: user.businessId, kind: { in: ["BEFORE", "AFTER"] } },
+    data: on ? { showcase: true, showcaseConsentAt: new Date() } : { showcase: false, showcaseConsentAt: null },
+  });
+  revalidatePath(back(f));
+}
