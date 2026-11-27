@@ -10,7 +10,7 @@ const LABEL: Record<string, string> = {
   "plan.created": "Snow plan started", "plan.updated": "Snow plan changed", "plan.paused": "Snow plan paused", "plan.resumed": "Snow plan resumed",
   "visit.en_route": "On the way", "visit.in_progress": "Arrived", "visit.completed": "Visit done", "visit.skipped": "Visit skipped",
   "invoice.created": "Invoice created", "invoice.sent": "Invoice sent", "invoice.voided": "Invoice voided",
-  "payment.received": "Payment received", "payment.deleted": "Payment removed",
+  "payment.received": "Payment received", "payment.matched": "Payment matched by hand", "payment.deleted": "Payment removed",
   "storm.created": "Storm created", "storm.started": "Storm started", "storm.depth": "Storm depth changed", "storm.push": "Another push added",
   "storm.finished": "Storm finished", "storm.cancelled": "Storm cancelled",
   "quote.created": "Quote created", "quote.sent": "Quote sent", "quote.approved": "Quote approved", "quote.changes_requested": "Client asked for changes",

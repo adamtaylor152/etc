@@ -20,6 +20,7 @@ export default async function Dashboard() {
     db.visitCharge.aggregate({ where: { businessId: bid, invoiceLineItemId: null }, _sum: { totalCents: true } }),
     db.invoice.findMany({ where: { businessId: bid, status: "AWAITING_PAYMENT" }, select: { totalCents: true, amountPaidCents: true, dueOn: true } }),
   ]);
+  const toMatch = await db.unmatchedPayment.count({ where: { businessId: bid, status: "OPEN" } });
   const owingCents = owing.reduce((a, i) => a + i.totalCents - i.amountPaidCents, 0);
   const pastDue = owing.filter((i) => i.dueOn && i.dueOn.toISOString().slice(0, 10) < today).length;
   const count = (s: string) => jobs.filter((j) => j.status === s).length;
@@ -29,6 +30,7 @@ export default async function Dashboard() {
     <>
       <PageHeader title="Today" sub={prettyDate(today)} />
       <Suspense fallback={null}><SnowBanner businessId={bid} /></Suspense>
+      {toMatch > 0 && <Link href="/payments/unmatched" className="mb-5 block rounded-2xl border border-amber-300 bg-amber-50 p-4 font-semibold text-amber-900">💸 {toMatch} payment{toMatch === 1 ? "" : "s"} to match →</Link>}
       <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[
           ["New requests", newRequests.length, "/requests"],
