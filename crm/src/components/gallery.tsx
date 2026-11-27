@@ -1,6 +1,6 @@
 // Owner photo grid: thumbnails, tap for full size, share-with-client toggle and delete.
 import type { Attachment } from "@/generated/prisma/client";
-import { photoDelete, photoShare } from "@/app/(owner)/photo-actions";
+import { photoDelete, photoShare, photoShowcase } from "@/app/(owner)/photo-actions";
 import { prettyDateTime } from "@/server/dates";
 
 const KIND: Record<string, string> = { BEFORE: "Before", AFTER: "After", REQUEST_PHOTO: "From client", PROOF: "Proof", OTHER: "Photo", DOCUMENT: "File" };
@@ -24,6 +24,12 @@ export function Gallery({ photos, back, controls = true }: { photos: Attachment[
                   <input type="hidden" name="id" value={p.id} /><input type="hidden" name="back" value={back} /><input type="hidden" name="shared" value={p.sharedWithClient ? "0" : "1"} />
                   <button className={`font-semibold ${p.sharedWithClient ? "text-emerald-700" : "text-ink-soft"}`}>{p.sharedWithClient ? "✓ Client sees" : "Internal"}</button>
                 </form>
+                {(p.kind === "BEFORE" || p.kind === "AFTER") && (
+                  <form action={photoShowcase}>
+                    <input type="hidden" name="id" value={p.id} /><input type="hidden" name="back" value={back} /><input type="hidden" name="on" value={p.showcase ? "0" : "1"} />
+                    <button className={`font-semibold ${p.showcase ? "text-blue" : "text-ink-soft"}`} title="Show on etccrew.ca (only with the client's OK)">{p.showcase ? "★ Website" : "☆ Website"}</button>
+                  </form>
+                )}
                 <form action={photoDelete}>
                   <input type="hidden" name="id" value={p.id} /><input type="hidden" name="back" value={back} />
                   <button className="text-ink-soft" aria-label="Delete photo">Delete</button>

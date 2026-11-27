@@ -143,3 +143,40 @@ export async function updateRecurrence(user: Actor, jobId: string, repeat: Repea
   });
   await generateRecurringVisits(user.businessId, jobId);
 }
+
+// ---------- plan renewals ----------
+/** The season renewals target: the next one if it's been set up, otherwise the current one. */
+export async function renewalSeason(businessId: string) {
+  const today = toDbDate(todayLocal());
+  return (await db.season.findFirst({ where: { businessId, startsOn: { gt: today } }, orderBy: { startsOn: "asc" } }))
+    ?? db.season.findFirst({ where: { businessId, startsOn: { lte: today }, endsOn: { gte: today } } });
+}
+
+/** Clients who had an every-snowfall plan before but not yet in the target season. */
+export async function renewalCandidates(businessId: string, seasonId: string) {
+  const had = await db.job.findMany({ where: { businessId, kind: "SNOW_PLAN", seasonId: { not: seasonId } }, select: { clientId: true }, distinct: ["clientId"] });
+  const has = new Set((await db.job.findMany({ where: { businessId, kind: "SNOW_PLAN", seasonId, closedAt: null }, select: { clientId: true } })).map((j) => j.clientId));
+  return had.map((h) => h.clientId).filter((id) => !has.has(id));
+}
+
+/** Copy a client's most recent plan (same address, trigger, price, ice melt) into the target season. */
+export async function renewPlan(businessId: string, clientId: string, actor: { userId?: string; clientId?: string }) {
+  const season = await renewalSeason(businessId);
+  if (!season) throw new Error("No season set up to renew into");
+  const last = await db.job.findFirst({ where: { businessId, clientId, kind: "SNOW_PLAN" }, orderBy: { createdAt: "desc" } });
+  if (!last) throw new Error("No previous plan");
+  return db.$transaction(async (tx) => {
+    const existing = await tx.job.findFirst({ where: { propertyId: last.propertyId, seasonId: season.id, kind: "SNOW_PLAN", closedAt: null } });
+    if (existing) return existing;
+    const job = await tx.job.create({
+      data: {
+        businessId, number: await nextNumber(tx, businessId, "JOB"), clientId, propertyId: last.propertyId, seasonId: season.id, kind: "SNOW_PLAN",
+        title: "Every snowfall", billingType: "PER_VISIT", invoiceSchedule: last.invoiceSchedule, snowBillingMode: last.snowBillingMode,
+        triggerCm: last.triggerCm, pricePerPushCents: last.pricePerPushCents, iceMelt: last.iceMelt, instructions: last.instructions,
+        lineItems: { create: [{ name: "Snow shovelling, every snowfall (per push)", unitPriceCents: last.pricePerPushCents ?? 3000, totalCents: last.pricePerPushCents ?? 3000 }] },
+      },
+    });
+    await logActivity(tx, { businessId, type: "plan.renewed", entityType: "Job", entityId: job.id, actorType: actor.clientId ? "CLIENT" : "USER", actorUserId: actor.userId, actorClientId: actor.clientId, clientId, jobId: job.id, data: { season: season.name } });
+    return job;
+  });
+}

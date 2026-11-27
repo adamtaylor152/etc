@@ -4,7 +4,7 @@ import type { ReactElement } from "react";
 import { BookingConfirmation, OwnerNewBooking, type BookingEmailProps } from "@/emails/booking";
 import { OwnerLogin } from "@/emails/login";
 import { InvoiceSent, OwnerPaymentReceived, PaymentReceipt, type InvoiceEmailData } from "@/emails/invoice";
-import { HubLink, OwnerNotice, QuoteApproved, QuoteSent, type QuoteEmailData } from "@/emails/quote";
+import { HubLink, OwnerNotice, PlanRenewal, QuoteApproved, QuoteSent, type QuoteEmailData } from "@/emails/quote";
 import { DailyDigest, ReviewRequest, VisitScheduled } from "@/emails/schedule";
 import { OnMyWay, OwnerSnowAlert, StormHeadsUp } from "@/emails/snow";
 import { OwnerPhotosUploaded, PhotoUploadRequest, VisitDone } from "@/emails/visit";
@@ -246,6 +246,18 @@ const ownerDailyDigest: Template<{ day: string }> = {
   },
 };
 
+const planRenewal: Template<{ clientId: string; seasonId: string }> = {
+  subject: () => "Keep your every-snowfall plan?",
+  async render(p, ctx) {
+    const [c, season, last] = await Promise.all([
+      db.client.findUniqueOrThrow({ where: { id: p.clientId } }), db.season.findUniqueOrThrow({ where: { id: p.seasonId } }),
+      db.job.findFirst({ where: { clientId: p.clientId, kind: "SNOW_PLAN" }, orderBy: { createdAt: "desc" } }),
+    ]);
+    const raw = await mintToken(db, ctx.businessId, "CLIENT_HUB", { clientId: c.id });
+    return <PlanRenewal name={clientName(c)} season={season.name} price={money(last?.pricePerPushCents ?? 3000)} url={`${env.appUrl}/hub/${raw}`} site={env.siteUrl} phone={env.phone} />;
+  },
+};
+
 export const templates = {
   "owner.login": ownerLogin,
   "owner.new_booking": ownerNewBooking,
@@ -269,6 +281,7 @@ export const templates = {
   "visit.reminder": visitReminder,
   "review.request": reviewRequest,
   "owner.daily_digest": ownerDailyDigest,
+  "plan.renewal": planRenewal,
 } as const;
 
 export type TemplateName = keyof typeof templates;

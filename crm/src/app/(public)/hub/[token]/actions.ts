@@ -4,6 +4,7 @@ import { db } from "@/server/db";
 import { enqueue, kickOutbox } from "@/server/email/outbox";
 import { env } from "@/server/env";
 import { logActivity, nextNumber } from "@/server/records";
+import { renewPlan } from "@/server/ops/jobs";
 import { peekToken } from "@/server/tokens";
 
 async function hubClient(f: FormData) {
@@ -51,4 +52,12 @@ export async function hubRequestWork(f: FormData) {
   });
   await tellOwners(client.businessId, `New request #${r.number} from ${client.firstName}`, notes, `/requests/${r.id}`);
   redirect(`/hub/${token}?requested=1`);
+}
+
+export async function hubRenewPlan(f: FormData) {
+  const { token, client } = await hubClient(f);
+  const job = await renewPlan(client.businessId, client.id, { clientId: client.id }).catch(() => null);
+  if (!job) redirect(`/hub/${token}?error=${encodeURIComponent("Couldn't renew online. Give us a call!")}`);
+  await tellOwners(client.businessId, `${client.firstName} renewed their snow plan`, `${client.firstName} ${client.lastName} renewed every-snowfall service from their client page.`, `/jobs/${job.id}`);
+  redirect(`/hub/${token}?renewed=1`);
 }

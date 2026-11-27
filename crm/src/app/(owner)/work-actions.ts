@@ -7,7 +7,10 @@ import { z } from "zod";
 import type { SkipReason, VisitState } from "@/generated/prisma/client";
 import { requireOwner } from "@/server/auth";
 import { addVisit, deleteVisit, scheduleVisit, transitionVisit } from "@/server/ops/visits";
-import { createOneOffJob, createRecurringJob, createSnowPlan, setJobClosed, setPlanPaused, updatePlan, updateRecurrence } from "@/server/ops/jobs";
+import { createOneOffJob, createRecurringJob, createSnowPlan, renewalCandidates, renewalSeason, setJobClosed, setPlanPaused, updatePlan, updateRecurrence } from "@/server/ops/jobs";
+import { db } from "@/server/db";
+import { enqueue, kickOutbox } from "@/server/email/outbox";
+import { env } from "@/server/env";
 import { addPush, cancelStorm, createStorm, finishStorm, setStormDepth, startStorm } from "@/server/ops/storms";
 import { TransitionError } from "@/server/status/visit";
 
@@ -175,4 +178,20 @@ export async function recurringCreate(f: FormData) {
 export async function recurringUpdate(f: FormData) {
   const user = await requireOwner();
   await run(f, () => updateRecurrence(user, str(f, "id"), repeatFrom(f)));
+}
+
+export async function sendRenewals() {
+  const user = await requireOwner();
+  const season = await renewalSeason(user.businessId);
+  if (!season) redirect("/snow?error=" + encodeURIComponent("Set up next season in Settings first"));
+  const ids = await renewalCandidates(user.businessId, season.id);
+  const clients = await db.client.findMany({ where: { id: { in: ids }, marketingOptOut: false, emailBouncedAt: null, archivedAt: null } });
+  for (const c of clients) {
+    await enqueue(db, {
+      businessId: user.businessId, template: "plan.renewal", to: c.email, replyTo: env.helpEmail, priority: 7, props: { clientId: c.id, seasonId: season.id },
+      dedupeKey: `renewal:${season.id}:${c.id}`, clientId: c.id,
+    });
+  }
+  kickOutbox();
+  redirect(`/snow?renewals=${clients.length}`);
 }

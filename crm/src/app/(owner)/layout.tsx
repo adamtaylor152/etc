@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ServiceWorker } from "@/components/sw-register";
 import { Logo } from "@/components/ui";
 import { requireOwner } from "@/server/auth";
 import { signOutAction } from "../auth/go/actions";
@@ -13,6 +14,7 @@ const NAV = [
   { href: "/jobs", label: "Jobs", icon: "✓", phone: true },
   { href: "/clients", label: "Clients", icon: "☺", phone: true },
   { href: "/invoices", label: "Invoices", icon: "$", phone: false },
+  { href: "/reports", label: "Reports", icon: "▤", phone: false },
   { href: "/settings", label: "Settings", icon: "⚙", phone: false },
 ];
 
@@ -33,6 +35,7 @@ export default async function OwnerLayout({ children }: LayoutProps<"/">) {
         </div>
       </header>
       <main className="mx-auto max-w-6xl p-4 sm:p-6">{children}</main>
+      <ServiceWorker />
       {/* Bottom nav on phones: big targets for gloves */}
       <nav className="no-print fixed inset-x-0 bottom-0 z-20 grid grid-cols-5 border-t border-line bg-white sm:hidden">
         {NAV.filter((n) => n.phone).map((n) => (

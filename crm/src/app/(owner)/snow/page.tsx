@@ -5,12 +5,16 @@ import { todayLocal, toDbDate } from "@/server/dates";
 import { businessId, db } from "@/server/db";
 import { money } from "@/server/money";
 import { clientName } from "@/server/queries";
-import { stormCreate } from "../work-actions";
+import { renewalCandidates, renewalSeason } from "@/server/ops/jobs";
+import { sendRenewals, stormCreate } from "../work-actions";
 
 export const metadata = { title: "Snow" };
 
-export default async function Snow() {
+export default async function Snow({ searchParams }: PageProps<"/snow">) {
+  const sp = await searchParams;
   const bid = await businessId();
+  const renewTarget = await renewalSeason(bid);
+  const renewCount = renewTarget ? (await renewalCandidates(bid, renewTarget.id)).length : 0;
   const today = toDbDate(todayLocal());
   const season = await db.season.findFirst({ where: { businessId: bid, startsOn: { lte: today }, endsOn: { gte: today } } });
   const [storms, plans] = await Promise.all([
@@ -70,6 +74,11 @@ export default async function Snow() {
             <Button className="w-full">Start storm</Button>
             <p className="text-xs text-ink-soft">Creates today&apos;s visits for every plan whose trigger this meets, plus one-time bookings waiting for snow.</p>
           </form>
+        </Card>
+        <Card title="Plan renewals" className="lg:col-start-3">
+          {sp.renewals != null && <p className="mb-2 text-sm font-semibold text-emerald-700">{String(sp.renewals)} renewal email(s) queued.</p>}
+          <p className="text-sm text-ink-soft">{renewTarget ? <>Email everyone who had a plan before but isn&apos;t on <b>{renewTarget.name}</b> yet ({renewCount}). They renew in one tap from their page.</> : "Set up next season in Settings first."}</p>
+          {renewTarget && renewCount > 0 && <form action={sendRenewals} className="mt-3"><Button variant="secondary" className="w-full">Send renewal emails</Button></form>}
         </Card>
       </div>
     </>

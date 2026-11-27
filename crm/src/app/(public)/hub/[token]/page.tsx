@@ -8,7 +8,8 @@ import { env } from "@/server/env";
 import { signedMediaPath } from "@/server/media";
 import { money } from "@/server/money";
 import { mintToken, peekToken } from "@/server/tokens";
-import { hubPausePlan, hubRequestWork } from "./actions";
+import { renewalSeason } from "@/server/ops/jobs";
+import { hubPausePlan, hubRenewPlan, hubRequestWork } from "./actions";
 
 export const metadata = { title: { absolute: "Your etc. page" } };
 
@@ -37,6 +38,9 @@ export default async function Hub({ params, searchParams }: PageProps<"/hub/[tok
   const quoteLinks = await Promise.all(quotes.map((q) => link("QUOTE", { quoteId: q.id })));
   const invoiceLinks = await Promise.all(invoices.map((i) => link("INVOICE", { invoiceId: i.id })));
   const reportLinks = await Promise.all(past.map((v) => link("VISIT_REPORT", { visitId: v.id })));
+  const renewTo = await renewalSeason(c.businessId);
+  const hadPlan = await db.job.count({ where: { clientId: c.id, kind: "SNOW_PLAN" } });
+  const canRenew = !!renewTo && hadPlan > 0 && !plans.some((p) => p.seasonId === renewTo.id);
   const owing = invoices.filter((i) => i.status === "AWAITING_PAYMENT").reduce((a, i) => a + i.totalCents - i.amountPaidCents, 0);
   const hidden = <input type="hidden" name="t" value={token} />;
   return (
@@ -47,6 +51,13 @@ export default async function Hub({ params, searchParams }: PageProps<"/hub/[tok
       <h1 className="font-display text-3xl font-bold">Hi {c.firstName}!</h1>
       {owing > 0 && <Card className="border-blue/30"><p className="font-semibold">{money(owing)} owing. Pay from an invoice below.</p></Card>}
 
+      {sp.renewed && <p className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 font-medium text-emerald-800">You&apos;re renewed. See you after the next snowfall!</p>}
+      {canRenew && (
+        <Card title={`Renew your snow plan for ${renewTo!.name}?`} className="border-blue/30">
+          <p className="text-sm">Same address, same price per clearing. Nothing to pay now.</p>
+          <form action={hubRenewPlan} className="mt-3">{hidden}<button className="min-h-12 rounded-full bg-blue px-6 font-semibold text-white">Renew my plan</button></form>
+        </Card>
+      )}
       {plans.map((p) => (
         <Card key={p.id} title="Every-snowfall plan">
           <p className="text-sm">{p.property.formatted} · {p.season?.name} · we come when {p.triggerCm ?? p.season?.defaultTriggerCm ?? 2} cm or more falls · {money(p.pricePerPushCents ?? 3000)} per clearing{p.iceMelt ? " + ice melt" : ""}.</p>

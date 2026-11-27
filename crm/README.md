@@ -1,8 +1,23 @@
 # etc. CRM
 
-The back office for etc.: bookings, clients, jobs, visits, snow plans, and (in later milestones) storms, routes, photos, invoices, payments and quotes. Built with Next.js 16, Postgres 17 and Prisma 7, and served at `app.etccrew.ca`.
+The back office for etc. Built with Next.js 16, Postgres 17 and Prisma 7, and served at `app.etccrew.ca`.
 
-The full plan, milestones M0 to M8, is in the PR description.
+**What it does**
+- **Bookings:** from etccrew.ca or `/book`, each becoming a client, a property (with its Calgary community), a request, and a job or snow plan.
+- **Snow:** every-snowfall plans with trigger depths. "It's snowing" starts a storm and creates visits in route order. Extra pushes, depth changes, cancelling, a printable proof-of-service report, and forecast alerts from MET Norway.
+- **Field view on the phone:** On my way, Arrived, Done (depth, ice melt, GPS), Skip, before/after photos, and Got cash / Got e-Transfer.
+- **Routes:** a map with community outlines and numbered stops, auto-ordered by distance from home, nudged with ↑/↓, printable, with one-tap multi-stop navigation.
+- **Billing:**
+  - Visits make charges, and charges make invoices (per visit, per storm, monthly, or fixed price).
+  - e-Transfer reference codes, Stripe Checkout for cards, an Interac email auto-match.
+  - Receipts for every payment, reminders at 3 and 10 days, and a payments CSV.
+- **Quotes:**
+  - Built from a request with the client's photos alongside; optional extras.
+  - The client approves online or asks for changes; follow-ups go out by themselves.
+  - Convert to a job, and the client's photos carry onto it.
+- **Client hub:** a no-password page with visits, photos, quotes and invoices. Clients can pause or renew their snow plan and request more work.
+- **Schedule:** a calendar with drag-to-reschedule, recurring jobs (weekly, every 2 weeks, monthly) and reminder emails.
+- **Extras:** Reports, Settings (business, GST, automations, seasons, price book), review requests, a daily digest, an installable phone app with offline route pages, and live tuition and "Our work" feeds for etccrew.ca.
 
 ## Run locally
 
@@ -79,8 +94,63 @@ GOOGLE_GEOCODING_KEY=... pnpm import:legacy bookings.json
 | `HELP_EMAIL`, `ETRANSFER_EMAIL`, `SITE_URL` | Shown in emails |
 | `MEDIA_SIGNING_SECRET` | 32+ random bytes (photo links, M3) |
 | `EMAIL_DAILY_CAP` | Default 300 (Brevo free). Low-priority mail waits once you're within 30 of the cap. |
+| `UPLOAD_DIR` | Default `/data/uploads` (the volume) |
+| `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | Optional: card payments. Stripe account in an adult's name; webhook → `https://app.etccrew.ca/api/stripe/webhook`, event `checkout.session.completed` |
+| `INTERAC_INBOUND_SECRET` | Optional: 32+ random chars, shared with the Cloudflare Email Worker below |
+| `WEATHER_USER_AGENT` | Sent to MET Norway, e.g. `etc-crm/1.0 help@etccrew.ca` |
+| `GOOGLE_GEOCODING_KEY` | Optional: only for `import:legacy` |
 
 4. **Cloudflare:** add a proxied A record for `app`. Turn Rocket Loader off for `app.`.
 5. **Switch the site over:** set `CRM_BOOKING_URL=https://app.etccrew.ca/api/public/bookings` on the Python site.
+
+### Stripe (card payments)
+
+Create the Stripe account in Dad's name (Silas is a minor). Use test keys first: run `stripe listen --forward-to localhost:3000/api/stripe/webhook`, pay a test invoice, and confirm the receipt arrives. Card fees are absorbed, with no surcharge.
+
+### Interac e-Transfer auto-match (optional)
+
+1. Turn on Autodeposit at the bank for `ETRANSFER_EMAIL`.
+2. In Cloudflare Email Routing, route that address to an Email Worker. The worker forwards a copy to the inbox and posts the notice to the CRM:
+
+```js
+export default {
+  async email(message, env) {
+    await message.forward(env.FORWARD_TO);
+    const text = await new Response(message.raw).text();
+    await fetch("https://app.etccrew.ca/api/interac", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-etc-secret": env.INTERAC_INBOUND_SECRET },
+      body: JSON.stringify({ from: message.from, subject: message.headers.get("subject"), text }),
+    });
+  },
+};
+```
+
+What the CRM does with each notice:
+- If the client put `ETC-<invoice number>` in their message (or the amount and last name match exactly one open invoice), the payment is recorded and the receipt emailed.
+- Anything else goes to the owners as "e-Transfer to match".
+
+### Booking page cutover
+
+- `book.html` on etccrew.ca posts to the CRM when `CRM_BOOKING_URL` is set, and falls back to the Python endpoint.
+- The CRM also serves its own `/book`, priced from the price book.
+- Retiring the Python endpoint is a later step, after this season:
+  1. Point the site's Book links at `https://app.etccrew.ca/book`.
+  2. Run a final `import:legacy`.
+  3. Delete `/api/bookings` from `server.py`.
+
+### Marketing-site feeds
+
+When `CRM_BOOKING_URL` is set, etccrew.ca's tuition tracker and "Our work" gallery load from `GET /api/public/site`:
+- **Tracker:** money earned and jobs done.
+- **Gallery:** before/after photos an owner starred "★ Website", which they should only do with the client's OK.
+
+Captions show only the community and month.
+
+### Support scripts
+
+```bash
+pnpm tsx scripts/mint-hub-link.ts client@example.com   # print a client-hub link
+```
 
 **Backups:** turn on Coolify's scheduled Postgres backups (daily, keep 14), and copy that directory off the box (for example, rclone to B2 or R2). Take a manual dump before every schema migration.
