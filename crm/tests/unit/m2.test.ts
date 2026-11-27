@@ -55,3 +55,18 @@ describe("plansTriggered", () => {
     expect(plansTriggered(plans, cm as number, 2).map((x) => x.id)).toEqual(ids);
   });
 });
+
+import { signedMediaPath, verifyMediaSig } from "@/server/media";
+describe("signed media URLs", () => {
+  const parse = (p: string) => { const u = new URL(p, "http://x"); return [u.searchParams.get("exp"), u.searchParams.get("sig")] as const; };
+  it("verifies, rejects tampering, other variants and expiry", () => {
+    const now = Date.UTC(2026, 10, 27);
+    const [exp, sig] = parse(signedMediaPath("abc", "md", 1, now));
+    expect(verifyMediaSig("abc", "md", exp, sig, now)).toBe(true);
+    expect(verifyMediaSig("abd", "md", exp, sig, now)).toBe(false);
+    expect(verifyMediaSig("abc", "lg", exp, sig, now)).toBe(false);
+    expect(verifyMediaSig("abc", "md", String(Number(exp) + 1), sig, now)).toBe(false);
+    expect(verifyMediaSig("abc", "md", exp, sig, now + 2 * 86_400_000)).toBe(false);
+    expect(verifyMediaSig("abc", "md", null, null, now)).toBe(false);
+  });
+});

@@ -2,7 +2,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Flash } from "@/components/flash";
+import { Gallery } from "@/components/gallery";
 import { GeoFields } from "@/components/geo-fields";
+import { PhotoUploader } from "@/components/photo-uploader";
 import { VisitBadge } from "@/components/status";
 import { Button, Card, Dl, inputCls } from "@/components/ui";
 import { dateOnly, prettyDate, prettyDateTime, todayLocal } from "@/server/dates";
@@ -24,7 +26,10 @@ export default async function VisitPage({ params, searchParams }: PageProps<"/vi
   const bid = await businessId();
   const v = await db.visit.findFirst({
     where: { id, businessId: bid },
-    include: { job: { include: { client: true, lineItems: true } }, property: { include: { community: true } }, snowEvent: true, charges: true },
+    include: {
+      job: { include: { client: true, lineItems: true } }, property: { include: { community: true } }, snowEvent: true, charges: true,
+      attachments: { where: { deletedAt: null }, orderBy: { createdAt: "asc" } },
+    },
   });
   if (!v) notFound();
   const here = `/visits/${id}`;
@@ -69,6 +74,15 @@ export default async function VisitPage({ params, searchParams }: PageProps<"/vi
         </Card>
       )}
 
+
+      <Card title="Before & after" className="my-4">
+        <div className="grid grid-cols-2 gap-2">
+          <PhotoUploader endpoint="/api/uploads" fields={{ visitId: v.id, kind: "BEFORE" }} label="Before" geo />
+          <PhotoUploader endpoint="/api/uploads" fields={{ visitId: v.id, kind: "AFTER" }} label="After" geo />
+        </div>
+        <div className="mt-3"><Gallery photos={v.attachments} back={here} /></div>
+        {v.state === "COMPLETED" && !v.attachments.some((a) => a.kind === "AFTER") && <p className="mt-2 text-sm text-amber-800">No after photo yet. The client&apos;s &quot;all done&quot; email goes out 5 minutes after Done, so add one now.</p>}
+      </Card>
       {open ? (
         <div className="space-y-3">
           {v.state === "SCHEDULED" && (

@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Flash } from "@/components/flash";
+import { Gallery } from "@/components/gallery";
+import { PhotoUploader } from "@/components/photo-uploader";
 import { JobBadge, VisitBadge } from "@/components/status";
 import { Timeline } from "@/components/timeline";
 import { Button, Card, Dl, Empty, Input, PageHeader } from "@/components/ui";
@@ -24,9 +26,14 @@ export default async function JobPage({ params, searchParams }: PageProps<"/jobs
       visits: { orderBy: [{ scheduledDate: { sort: "desc", nulls: "first" } }, { createdAt: "desc" }], include: { charges: true, snowEvent: true } },
     },
   });
-  const [notes, events] = await Promise.all([
+  const [notes, events, photos] = await Promise.all([
     db.note.findMany({ where: { businessId: bid, jobId: id }, orderBy: { createdAt: "desc" } }),
     db.activityEvent.findMany({ where: { businessId: bid, jobId: id }, orderBy: { at: "desc" }, take: 60 }),
+    // Photos the client sent with their request show up on the job too.
+    db.attachment.findMany({
+      where: { businessId: bid, deletedAt: null, OR: [{ jobId: id }, ...(job.requestId ? [{ requestId: job.requestId }] : [])] },
+      orderBy: { createdAt: "desc" }, take: 60,
+    }),
   ]);
   const today = todayLocal();
   const here = `/jobs/${id}`;
@@ -117,6 +124,11 @@ export default async function JobPage({ params, searchParams }: PageProps<"/jobs
                 })}
               </ul>
             ) : <Empty>{plan ? "Visits appear here when a storm starts." : "No visits yet."}</Empty>}
+          </Card>
+
+          <Card title="Photos">
+            {photos.length ? <Gallery photos={photos} back={here} /> : <p className="text-sm text-ink-soft">Before &amp; after photos are taken on each visit. Photos the client sent with their request show here too.</p>}
+            <div className="mt-3 max-w-xs"><PhotoUploader endpoint="/api/uploads" fields={{ jobId: job.id, kind: "OTHER" }} label="Add photos" camera={false} /></div>
           </Card>
 
           <Card title="Charges" actions={unbilled.length > 0 && <span className="text-sm font-semibold text-amber-800">{money(unbilled.reduce((a, c) => a + c.totalCents, 0))} not invoiced</span>}>

@@ -7,18 +7,22 @@ import { dateOnly, prettyDate, prettyDateTime } from "@/server/dates";
 import { businessId, db } from "@/server/db";
 import { clientName } from "@/server/queries";
 import { setRequestArchived } from "../../actions";
+import { requestPhotos } from "../../photo-actions";
+import { Gallery } from "@/components/gallery";
 
-export default async function RequestPage({ params }: PageProps<"/requests/[id]">) {
+export default async function RequestPage({ params, searchParams }: PageProps<"/requests/[id]">) {
   const { id } = await params;
+  const sp = await searchParams;
   const bid = await businessId();
   const r = await db.request.findFirst({
     where: { id, businessId: bid },
     include: { client: true, property: { include: { community: true } }, jobs: true },
   });
   if (!r) notFound();
-  const [notes, events] = await Promise.all([
+  const [notes, events, photos] = await Promise.all([
     db.note.findMany({ where: { businessId: bid, requestId: id }, orderBy: { createdAt: "desc" } }),
     db.activityEvent.findMany({ where: { businessId: bid, entityType: "Request", entityId: id }, orderBy: { at: "desc" } }),
+    db.attachment.findMany({ where: { businessId: bid, requestId: id, deletedAt: null }, orderBy: { createdAt: "asc" } }),
   ]);
   const archived = r.status === "ARCHIVED";
   return (
@@ -48,6 +52,12 @@ export default async function RequestPage({ params }: PageProps<"/requests/[id]"
               ["Access", r.accessNotes],
               ["Notes", r.notes],
             ]} />
+          </Card>
+          <Card title="Photos" actions={
+            <form action={requestPhotos}><input type="hidden" name="requestId" value={r.id} /><input type="hidden" name="back" value={`/requests/${r.id}`} />
+              <Button variant="secondary">{sp.sent === "photos" ? "Sent ✓ Send again" : "Ask client for photos"}</Button></form>
+          }>
+            {photos.length ? <Gallery photos={photos} back={`/requests/${r.id}`} /> : <p className="text-sm text-ink-soft">No photos yet. Quote requests get a &quot;send us photos&quot; link in their confirmation email.</p>}
           </Card>
           <Card title="Jobs from this request">
             {r.jobs.length ? (

@@ -13,13 +13,13 @@ const CAP_RESERVE = 30; // keep headroom for priority <= 3 (logins, receipts, bo
 
 export async function enqueue<T extends TemplateName>(tx: Db, m: {
   businessId: string; template: T; to: string; props: PropsOf<T>; cc?: string[]; replyTo?: string;
-  priority?: number; dedupeKey?: string; clientId?: string; entityType?: string; entityId?: string;
+  priority?: number; dedupeKey?: string; clientId?: string; entityType?: string; entityId?: string; sendAfter?: Date;
 }) {
   const subject = (templates[m.template].subject as (p: PropsOf<T>) => string)(m.props);
   const data = {
     businessId: m.businessId, template: m.template, to: m.to, cc: m.cc ?? [], replyTo: m.replyTo, subject,
     props: m.props as Prisma.InputJsonValue, priority: m.priority ?? 5, dedupeKey: m.dedupeKey,
-    clientId: m.clientId, entityType: m.entityType, entityId: m.entityId,
+    clientId: m.clientId, entityType: m.entityType, entityId: m.entityId, nextAttemptAt: m.sendAfter ?? new Date(),
   };
   if (!m.dedupeKey) return tx.emailMessage.create({ data });
   // Dedupe: automations can re-run safely; the second enqueue is a no-op.

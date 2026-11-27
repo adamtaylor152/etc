@@ -7,6 +7,7 @@ import { db, type Tx } from "../db";
 import { env } from "../env";
 import { enqueue, kickOutbox } from "../email/outbox";
 import { logActivity, nextNumber } from "../records";
+import { mintToken } from "../tokens";
 import { serviceLines, whenText, type Booking } from "./validate";
 
 export type BookingMeta = {
@@ -156,11 +157,14 @@ export async function createBooking(b: Booking, meta: BookingMeta) {
         });
       }
       await enqueue(tx, {
-        businessId, template: "booking.confirmation", to: b.email, replyTo: env.helpEmail, priority: 2, props,
+        businessId, template: "booking.confirmation", to: b.email, replyTo: env.helpEmail, priority: 2,
+        props: { ...props, requestId: request.id, wantsPhotos: quoted.length > 0 },
         dedupeKey: `request:${request.id}:confirmation`, clientId: client.id, entityType: "Request", entityId: request.id,
       });
     }
-    return { requestId: request.id, number, clientId: client.id, jobId };
+    // A link for the "send us photos" step on book.html's done screen.
+    const uploadToken = quoted.length && meta.sendEmails !== false ? await mintToken(tx, businessId, "PHOTO_UPLOAD", { requestId: request.id }) : null;
+    return { requestId: request.id, number, clientId: client.id, jobId, uploadUrl: uploadToken ? `${env.appUrl}/u/${uploadToken}` : null };
   });
 
   if (meta.sendEmails !== false) kickOutbox();

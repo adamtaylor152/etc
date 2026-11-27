@@ -3,6 +3,8 @@ import type { SkipReason, VisitState } from "@/generated/prisma/client";
 import { chargesForVisit } from "../billing/charges";
 import { toDbDate } from "../dates";
 import { db, type Tx } from "../db";
+import { enqueue } from "../email/outbox";
+import { env } from "../env";
 import { logActivity } from "../records";
 import { assertTransition, TransitionError } from "../status/visit";
 
@@ -46,6 +48,16 @@ export async function transitionVisit(user: Actor, visitId: string, to: VisitSta
       const job = { ...v.job, lineItems: v.job.lineItems.map((l) => ({ ...l, quantity: Number(l.quantity) })) };
       const lines = chargesForVisit(job, { pushNumber: v.pushNumber, iceMeltApplied: updated.iceMeltApplied }, await iceMeltPrice(tx, user.businessId));
       if (lines.length) await tx.visitCharge.createMany({ data: lines.map((l) => ({ ...l, businessId: user.businessId, visitId })) });
+      // "All done" email with before/after photos. Waits 5 minutes so photos taken right after tapping Done make it in;
+      // the dedupe key means reopening and completing again never sends it twice.
+      const settings = (await tx.business.findUniqueOrThrow({ where: { id: user.businessId } })).settings as { visitDoneEmail?: boolean };
+      const client = await tx.client.findUniqueOrThrow({ where: { id: v.job.clientId } });
+      if (settings.visitDoneEmail !== false && client.email && !client.emailBouncedAt) {
+        await enqueue(tx, {
+          businessId: user.businessId, template: "visit.done", to: client.email, replyTo: env.helpEmail, priority: 5, props: { visitId },
+          dedupeKey: `visit:${visitId}:done`, sendAfter: new Date(Date.now() + 5 * 60_000), clientId: client.id, entityType: "Visit", entityId: visitId,
+        });
+      }
     }
     await logActivity(tx, {
       businessId: user.businessId, type: `visit.${to.toLowerCase()}`, entityType: "Visit", entityId: visitId,

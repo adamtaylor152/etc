@@ -46,5 +46,5 @@ export async function POST(req: Request) {
     businessId: await businessId(), source: "BOOKING_FORM", ip: clientIp(req), userAgent: req.headers.get("user-agent") ?? undefined, raw: data,
   });
   console.info(`booking ${res.number} saved`);
-  return json(req, 201, { ok: true, id: res.number, estimate: booking.estimate });
+  return json(req, 201, { ok: true, id: res.number, estimate: booking.estimate, ...(res.uploadUrl ? { uploadUrl: res.uploadUrl } : {}) });
 }
