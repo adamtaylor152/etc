@@ -25,10 +25,10 @@ ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3000 HOSTNAME=0.0.0.0 UPL
 COPY --from=build --chown=app /app/.next/standalone ./
 COPY --from=build --chown=app /app/.next/static ./.next/static
 COPY --from=build --chown=app /app/public ./public
-COPY --from=migrate /opt/migrate/node_modules /opt/migrate/node_modules
-COPY --from=build /app/prisma /opt/migrate/prisma
-COPY --from=build /app/prisma.config.ts /opt/migrate/
-COPY --from=build /app/src/generated /opt/migrate/src/generated
+COPY --from=migrate --chown=app /opt/migrate/node_modules /opt/migrate/node_modules
+COPY --from=build --chown=app /app/prisma /opt/migrate/prisma
+COPY --from=build --chown=app /app/prisma.config.ts /opt/migrate/
+COPY --from=build --chown=app /app/src/generated /opt/migrate/src/generated
 USER app
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=3s --start-period=40s CMD node -e "fetch('http://127.0.0.1:3000/api/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
