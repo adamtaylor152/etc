@@ -1,6 +1,6 @@
 // Sidebar + Create menu entries. Add items here as pages land.
 import {
-  Banknote, CalendarDays, FileText, Hammer, Home, Inbox, LineChart, MapPinned, MessageSquare, Receipt, Settings, Snowflake, Users,
+  Activity, Phone, UserPlus, Banknote, CalendarDays, FileText, Hammer, Home, Inbox, LineChart, MapPinned, MessageSquare, Receipt, Settings, Snowflake, Users,
   type LucideIcon,
 } from "lucide-react";
 
@@ -23,6 +23,7 @@ export const NAV: NavItem[][] = [
     { href: "/snow", label: "Snow", icon: Snowflake },
     { href: "/routes", label: "Route", icon: MapPinned },
     { href: "/messages", label: "Messages", icon: MessageSquare, badge: "unread" },
+    { href: "/activity", label: "Activity", icon: Activity },
   ],
   [
     { href: "/reports", label: "Reports", icon: LineChart },
@@ -33,8 +34,10 @@ export const NAV: NavItem[][] = [
 export type CreateItem = { href: string; label: string; icon: LucideIcon; color: string };
 // Object colours (Jobber's convention): request orange, quote rose, job green, invoice blue, task navy.
 export const CREATE: CreateItem[] = [
+  { href: "/clients/new", label: "Client", icon: UserPlus, color: "text-navy" },
   { href: "/quotes/new", label: "Quote", icon: FileText, color: "text-rose-700" },
   { href: "/jobs/new", label: "Job", icon: Hammer, color: "text-emerald-700" },
   { href: "/messages/new", label: "Text message", icon: MessageSquare, color: "text-blue" },
+  { href: "/calls/new", label: "Log a call", icon: Phone, color: "text-violet-700" },
   { href: "/snow", label: "Storm", icon: Snowflake, color: "text-sky-700" },
 ];

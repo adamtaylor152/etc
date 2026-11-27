@@ -51,13 +51,3 @@ export async function updateClient(form: FormData) {
   revalidatePath(`/clients/${f.id}`);
 }
 
-export async function addNote(form: FormData) {
-  const user = await requireOwner();
-  const body = z.string().trim().min(1).max(5000).parse(form.get("body"));
-  const clientId = String(form.get("clientId") || "") || null;
-  const jobId = String(form.get("jobId") || "") || null;
-  const requestId = String(form.get("requestId") || "") || null;
-  if (clientId) await db.client.findFirstOrThrow({ where: { id: clientId, businessId: user.businessId } });
-  await db.note.create({ data: { businessId: user.businessId, authorId: user.id, body, clientId, jobId, requestId } });
-  revalidatePath(String(form.get("path") || "/"));
-}

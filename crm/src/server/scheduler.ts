@@ -2,6 +2,7 @@
 // The outbox is already safe across containers (SKIP LOCKED). Automations added later (reminders, snow alerts)
 // run inside `exclusive()`, a transaction-scoped advisory lock, plus per-message dedupe keys.
 import { retryTextMedia } from "./ops/texts";
+import { syncTelnyxCalls } from "./ops/calls";
 import { db } from "./db";
 import { env } from "./env";
 import { reminderDue } from "./billing/invoice";
@@ -27,6 +28,10 @@ let lastHourly = 0;
 export async function tick() {
   await processOutbox();
   await retryTextMedia();
+  if (Date.now() - lastCallSync > 5 * 60_000) {
+    lastCallSync = Date.now();
+    await exclusive(LOCK_CALLS, async () => { for (const b of await db.business.findMany({ select: { id: true } })) await syncTelnyxCalls(b.id).catch((e) => console.error("call sync failed", e)); });
+  }
   if (Date.now() - lastHourly > 3_600_000) {
     lastHourly = Date.now();
     await exclusive(LOCK_HOURLY, hourly);
@@ -34,6 +39,8 @@ export async function tick() {
 }
 
 const LOCK_HOURLY = 724_001;
+const LOCK_CALLS = 724_002;
+let lastCallSync = 0;
 
 /** Hourly automations. Each one is idempotent (dedupe keys / state checks), so a missed or doubled run is harmless. */
 async function hourly() {
@@ -68,7 +75,7 @@ async function monthlyInvoices() {
 async function visitReminders() {
   const tomorrow = addDays(todayLocal(), 1);
   const visits = await db.visit.findMany({
-    where: { scheduledDate: toDbDate(tomorrow), state: "SCHEDULED", job: { kind: { not: "SNOW_PLAN" }, closedAt: null } },
+    where: { scheduledDate: toDbDate(tomorrow), state: "SCHEDULED", job: { kind: { not: "SNOW_PLAN" }, closedAt: null, client: { visitReminders: true } } },
     include: { job: { include: { client: true } } },
   });
   for (const v of visits) {
@@ -117,7 +124,7 @@ async function dailyDigest() {
 /** One nudge, 3 days after sending, for quotes still waiting on the client. */
 async function quoteFollowUps() {
   const cutoff = new Date(Date.now() - 3 * 86_400_000);
-  const quotes = await db.quote.findMany({ where: { status: "AWAITING_RESPONSE", sentAt: { lte: cutoff } }, include: { client: true } });
+  const quotes = await db.quote.findMany({ where: { status: "AWAITING_RESPONSE", sentAt: { lte: cutoff }, client: { followUpQuotes: true } }, include: { client: true } });
   for (const q of quotes) {
     const biz = await db.business.findUniqueOrThrow({ where: { id: q.businessId } });
     if (!parseSettings(biz.settings).quoteFollowUp || q.client.emailBouncedAt) continue;
@@ -154,7 +161,7 @@ async function snowAlert() {
 async function invoiceReminders() {
   const today = todayLocal();
   const due = await db.invoice.findMany({
-    where: { status: "AWAITING_PAYMENT", dueOn: { lt: toDbDate(today) }, remindersSent: { lt: 2 } },
+    where: { status: "AWAITING_PAYMENT", dueOn: { lt: toDbDate(today) }, remindersSent: { lt: 2 }, client: { followUpInvoices: true } },
     include: { client: true },
   });
   for (const inv of due) {

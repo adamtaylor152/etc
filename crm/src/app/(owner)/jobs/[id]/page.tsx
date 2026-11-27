@@ -4,7 +4,7 @@ import { Flash } from "@/components/flash";
 import { Gallery } from "@/components/gallery";
 import { PhotoUploader } from "@/components/photo-uploader";
 import { JobBadge, VisitBadge } from "@/components/status";
-import { Timeline } from "@/components/timeline";
+import { RecordPanel } from "@/components/record-panel";
 import { Button, Card, Dl, Empty, Input, PageHeader } from "@/components/ui";
 import { dateOnly, prettyDate, todayLocal } from "@/server/dates";
 import { businessId, db } from "@/server/db";
@@ -30,9 +30,7 @@ export default async function JobPage({ params, searchParams }: PageProps<"/jobs
       invoices: { orderBy: { number: "desc" } },
     },
   });
-  const [notes, events, photos] = await Promise.all([
-    db.note.findMany({ where: { businessId: bid, jobId: id }, orderBy: { createdAt: "desc" } }),
-    db.activityEvent.findMany({ where: { businessId: bid, jobId: id }, orderBy: { at: "desc" }, take: 60 }),
+  const [photos] = await Promise.all([
     // Photos the client sent with their request show up on the job too.
     db.attachment.findMany({
       where: { businessId: bid, deletedAt: null, OR: [{ jobId: id }, ...(job.requestId ? [{ requestId: job.requestId }] : [])] },
@@ -186,7 +184,7 @@ export default async function JobPage({ params, searchParams }: PageProps<"/jobs
             ]} />
           </Card>
         </div>
-        <Timeline notes={notes} events={events} target={{ jobId: job.id, clientId: job.clientId }} path={here} />
+        <RecordPanel businessId={bid} target={{ jobId: job.id }} clientId={job.clientId} path={here} />
       </div>
     </>
   );

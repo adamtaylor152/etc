@@ -4,7 +4,7 @@ import { Flash } from "@/components/flash";
 import { QUOTE } from "@/components/status";
 import { Gallery } from "@/components/gallery";
 import { QuoteLinesEditor } from "@/components/quote-lines";
-import { Timeline } from "@/components/timeline";
+import { RecordPanel } from "@/components/record-panel";
 import { Badge, Button, Card, Dl, Field, Input, PageHeader, Textarea, inputCls } from "@/components/ui";
 import { dateOnly, prettyDate, prettyDateTime, todayLocal } from "@/server/dates";
 import { businessId, db } from "@/server/db";
@@ -19,10 +19,9 @@ export default async function QuotePage({ params, searchParams }: PageProps<"/qu
   const bid = await businessId();
   const q = await db.quote.findFirst({ where: { id, businessId: bid }, include: { client: true, property: true, request: true, lineItems: { orderBy: { sortOrder: "asc" } } } });
   if (!q) notFound();
-  const [services, photos, events] = await Promise.all([
+  const [services, photos] = await Promise.all([
     db.service.findMany({ where: { businessId: bid, active: true }, orderBy: { sortOrder: "asc" } }),
     db.attachment.findMany({ where: { businessId: bid, deletedAt: null, OR: [{ quoteId: id }, ...(q.requestId ? [{ requestId: q.requestId }] : [])] }, orderBy: { createdAt: "asc" } }),
-    db.activityEvent.findMany({ where: { businessId: bid, entityType: "Quote", entityId: id }, orderBy: { at: "desc" } }),
   ]);
   const editable = quoteEditable(q.status);
   const here = `/quotes/${id}`;
@@ -101,7 +100,7 @@ export default async function QuotePage({ params, searchParams }: PageProps<"/qu
             {q.status !== "CONVERTED" && q.status !== "ARCHIVED" && <form action={quoteArchive} className="mt-3">{hidden}<Button variant="secondary">Archive</Button></form>}
           </Card>
         </div>
-        <Timeline notes={[]} events={events} target={{ clientId: q.clientId }} path={here} />
+        <RecordPanel businessId={bid} target={{ quoteId: q.id }} clientId={q.clientId} path={here} />
       </div>
     </>
   );

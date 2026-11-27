@@ -1,135 +1,237 @@
+// Client profile, Jobber layout: header (+ Create / More), contact info, properties, contacts, tabbed work/activity/
+// communication/files, billing history; right column: lifetime value + balance, last communication, notes.
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { JobBadge, RequestBadge } from "@/components/status";
-import { Timeline } from "@/components/timeline";
-import { Badge, Button, Card, Dl, Empty, Field, Input, PageHeader, Textarea } from "@/components/ui";
-import { prettyDateTime } from "@/server/dates";
-import { money } from "@/server/money";
-import { businessId, db } from "@/server/db";
-import { clientName, jobsWithStatus } from "@/server/queries";
-import { updateClient } from "../../actions";
+import { Archive, FileText, Hammer, Mail, MapPin, MessageSquare, Pencil, Phone, Plus, Repeat, Snowflake } from "lucide-react";
+import { clientArchive, propertyArchive } from "../../client-actions";
 import { sendHubLink } from "../../quote-actions";
+import { ActivityFeed, parseTypes } from "@/components/activity-feed";
+import { DetailHeader } from "@/components/detail-header";
+import { Gallery } from "@/components/gallery";
+import { Menu } from "@/components/menu";
+import { NotesCard } from "@/components/notes-card";
+import { InvoiceBadge, JobBadge, QUOTE, RequestBadge, VisitBadge } from "@/components/status";
+import { Badge, Card, Empty, Tabs } from "@/components/ui";
+import { activityFeed } from "@/server/activity";
+import { invoiceView } from "@/server/billing/invoice";
+import { ledger } from "@/server/billing/ledger";
+import { dateOnly, prettyDate, prettyDateTime, todayLocal, toDbDate } from "@/server/dates";
+import { businessId, db } from "@/server/db";
+import { money } from "@/server/money";
+import { notesFor } from "@/server/ops/notes";
+import { clientName, jobsWithStatus } from "@/server/queries";
+import { visitStatus } from "@/server/status/job";
+
+export async function generateMetadata({ params }: PageProps<"/clients/[id]">) {
+  const c = await db.client.findFirst({ where: { id: (await params).id, businessId: await businessId() }, select: { firstName: true, lastName: true, companyName: true } });
+  return { title: c ? clientName(c) : "Client" };
+}
+
+const TABS = ["overview", "activity", "communication", "files"] as const;
+const WORK = ["requests", "quotes", "jobs", "invoices"] as const;
 
 export default async function ClientPage({ params, searchParams }: PageProps<"/clients/[id]">) {
   const { id } = await params;
   const sp = await searchParams;
-  const editing = sp.edit === "1";
+  const tab = TABS.find((t) => t === sp.tab) ?? "overview";
+  const work = WORK.find((t) => t === sp.work) ?? "jobs";
   const bid = await businessId();
+  const today = todayLocal();
   const c = await db.client.findFirst({
     where: { id, businessId: bid },
     include: {
-      properties: { include: { community: true }, orderBy: { createdAt: "asc" } }, requests: { orderBy: { createdAt: "desc" } },
+      properties: { where: { archivedAt: null }, include: { community: true }, orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }] },
+      contacts: { orderBy: { createdAt: "asc" } },
+      requests: { orderBy: { createdAt: "desc" } }, quotes: { orderBy: { number: "desc" } },
       invoices: { where: { status: { not: "VOID" } }, orderBy: { number: "desc" } },
+      payments: { include: { invoice: { select: { number: true } } }, orderBy: { receivedAt: "desc" } },
     },
   });
   if (!c) notFound();
-  const [jobs, notes, events, texts, textCount] = await Promise.all([
-    jobsWithStatus({ businessId: bid, clientId: id }),
-    db.note.findMany({ where: { businessId: bid, clientId: id }, orderBy: { createdAt: "desc" } }),
-    db.activityEvent.findMany({ where: { businessId: bid, clientId: id }, orderBy: { at: "desc" }, take: 50 }),
-    db.textMessage.findMany({ where: { businessId: bid, clientId: id }, orderBy: { createdAt: "desc" }, take: 8, include: { media: { where: { deletedAt: null, mediaType: "IMAGE" } } } }),
-    db.textMessage.count({ where: { businessId: bid, clientId: id } }),
+  const [jobs, visits, notes, lastText, lastEmail, lastCall, feed, files] = await Promise.all([
+    jobsWithStatus({ businessId: bid, clientId: id }, today),
+    db.visit.findMany({ where: { businessId: bid, job: { clientId: id }, state: "SCHEDULED", OR: [{ scheduledDate: { gte: toDbDate(today) } }, { scheduledDate: null }] }, include: { job: true }, orderBy: { scheduledDate: { sort: "asc", nulls: "last" } }, take: 8 }),
+    notesFor(bid, { clientId: id }),
+    db.textMessage.findFirst({ where: { businessId: bid, clientId: id }, orderBy: { createdAt: "desc" } }),
+    db.emailMessage.findFirst({ where: { businessId: bid, clientId: id, status: "SENT", template: { not: { startsWith: "sms." } } }, orderBy: { sentAt: "desc" } }),
+    db.callLog.findFirst({ where: { businessId: bid, clientId: id }, orderBy: { startedAt: "desc" } }),
+    tab === "activity" || tab === "communication"
+      ? activityFeed({ businessId: bid, clientId: id }, { types: tab === "communication" ? ["text", "call", "email"] : parseTypes(sp.types), before: typeof sp.before === "string" ? new Date(sp.before) : undefined, limit: 60 })
+      : Promise.resolve([]),
+    tab === "files" ? db.attachment.findMany({ where: { businessId: bid, clientId: id, deletedAt: null }, orderBy: { createdAt: "desc" }, take: 120 }) : Promise.resolve([]),
   ]);
-  const tel = c.phone ? `tel:${c.phone.replace(/[^\d+]/g, "")}` : null;
+  const books = ledger(c.invoices, c.payments);
+  const lifetime = c.payments.reduce((n, p) => n + p.amountCents - p.refundedCents, 0);
+  const lead = !jobs.length && !c.invoices.some((i) => i.status !== "DRAFT") && !c.quotes.some((q) => q.status === "APPROVED" || q.status === "CONVERTED");
+  const phones = (Array.isArray(c.phones) && c.phones.length ? c.phones : c.phone ? [{ number: c.phone, label: "Mobile", sms: c.smsOptIn }] : []) as { number: string; label: string; sms: boolean }[];
+  const emails = (Array.isArray(c.emails) && c.emails.length ? c.emails : c.email ? [{ address: c.email, label: "Main" }] : []) as { address: string; label: string }[];
+  const last = [
+    lastText && { at: lastText.createdAt, icon: <MessageSquare className="size-4" />, text: `${lastText.direction === "IN" ? "Texted us" : "Texted"}: ${lastText.body || "photo"}`, href: `/messages/${id}` },
+    lastEmail && { at: lastEmail.sentAt ?? lastEmail.createdAt, icon: <Mail className="size-4" />, text: `Email: ${lastEmail.subject}`, href: `/clients/${id}?tab=communication` },
+    lastCall && { at: lastCall.startedAt, icon: <Phone className="size-4" />, text: `${lastCall.direction === "IN" ? "Called us" : "Called"}${lastCall.notes ? `: ${lastCall.notes}` : ""}`, href: `/clients/${id}?tab=communication` },
+  ].filter(Boolean).sort((a, b) => b!.at.getTime() - a!.at.getTime())[0];
+  const here = `/clients/${id}${tab !== "overview" ? `?tab=${tab}` : ""}`;
+  const tel = phones[0] ? `tel:${phones[0].number.replace(/[^\d+]/g, "")}` : null;
+
   return (
     <>
-      <PageHeader
-        title={<>{clientName(c)} {c.archivedAt ? <Badge>Archived</Badge> : <Badge tone={jobs.length ? "green" : "blue"}>{jobs.length ? "Active" : "Lead"}</Badge>}</>}
-        sub={<>Client since {prettyDateTime(c.createdAt)}{c.tags.map((t) => <span key={t} className="ml-1.5"><Badge>{t}</Badge></span>)}</>}
+      <DetailHeader
+        back={{ href: "/clients", label: "Clients" }}
+        kind={<span>Client</span>}
+        status={c.archivedAt ? <Badge>Archived</Badge> : lead ? <Badge tone="blue">Lead</Badge> : <Badge tone="green">Active</Badge>}
+        title={<>{c.title && <span className="text-ink-soft">{c.title} </span>}{clientName(c)}</>}
+        sub={<>{c.companyName && `${c.firstName} ${c.lastName} · `}Client since {prettyDate(dateOnly(c.createdAt))}{c.tags.map((t) => <span key={t} className="ml-1.5"><Badge>{t}</Badge></span>)}</>}
         actions={<>
-          {c.phone && <Link href={`/messages/${c.id}`} className="inline-flex min-h-11 items-center rounded-full border-2 border-line bg-white px-5 text-sm font-semibold">Text</Link>}
-          {tel && <a href={tel} className="inline-flex min-h-11 items-center rounded-full border-2 border-blue bg-blue px-5 text-sm font-semibold text-white">Call</a>}
-          <a href={`mailto:${c.email}`} className="inline-flex min-h-11 items-center rounded-full border-2 border-line bg-white px-5 text-sm font-semibold">Email</a>
-          <form action={sendHubLink}><input type="hidden" name="clientId" value={c.id} /><button className="inline-flex min-h-11 items-center rounded-full border-2 border-line bg-white px-5 text-sm font-semibold">{sp.hub === "sent" ? "Hub link sent ✓" : "Send hub link"}</button></form>
-          <Link href={`/quotes/new?client=${id}`} className="inline-flex min-h-11 items-center rounded-full border-2 border-line bg-white px-5 text-sm font-semibold">New quote</Link>
-          <Link href={`/jobs/new?client=${id}`} className="inline-flex min-h-11 items-center rounded-full border-2 border-line bg-white px-5 text-sm font-semibold">New job</Link>
-          <Link href={`/jobs/new?client=${id}&kind=recurring`} className="inline-flex min-h-11 items-center rounded-full border-2 border-line bg-white px-5 text-sm font-semibold">Recurring</Link>
-          <Link href={`/jobs/new?client=${id}&kind=plan`} className="inline-flex min-h-11 items-center rounded-full border-2 border-line bg-white px-5 text-sm font-semibold">Snow plan</Link>
-          <Link href={editing ? `/clients/${id}` : `/clients/${id}?edit=1`} className="inline-flex min-h-11 items-center rounded-full border-2 border-line bg-white px-5 text-sm font-semibold">{editing ? "Cancel" : "Edit"}</Link>
+          {tel && <a href={tel} className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-line bg-white px-3 text-sm font-semibold hover:bg-tint"><Phone className="size-4" />Call</a>}
+          {phones[0] && <Link href={`/messages/${id}`} className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-line bg-white px-3 text-sm font-semibold hover:bg-tint"><MessageSquare className="size-4" />Text</Link>}
+          <Menu label="Create" primary items={[
+            { label: "Quote", href: `/quotes/new?client=${id}`, icon: <FileText className="size-4 text-rose-700" /> },
+            { label: "Job", href: `/jobs/new?client=${id}`, icon: <Hammer className="size-4 text-emerald-700" /> },
+            { label: "Recurring job", href: `/jobs/new?client=${id}&kind=recurring`, icon: <Repeat className="size-4 text-emerald-700" /> },
+            { label: "Snow plan", href: `/jobs/new?client=${id}&kind=plan`, icon: <Snowflake className="size-4 text-sky-700" /> },
+            { divider: true },
+            { label: "Log a call", href: `/calls/new?client=${id}&back=${encodeURIComponent(`/clients/${id}?tab=activity`)}`, icon: <Phone className="size-4 text-violet-700" /> },
+            { label: "Property", href: `/clients/${id}/properties/new`, icon: <MapPin className="size-4" /> },
+          ]} />
+          <Menu label="More" items={[
+            { label: "Edit client", href: `/clients/${id}/edit`, icon: <Pencil className="size-4" /> },
+            { label: "Email client hub link", action: sendHubLink, fields: { clientId: id }, icon: <Mail className="size-4" /> },
+            { divider: true },
+            c.archivedAt
+              ? { label: "Restore client", action: clientArchive, fields: { id, archive: "0" }, icon: <Archive className="size-4" /> }
+              : { label: "Archive client", action: clientArchive, fields: { id, archive: "1" }, icon: <Archive className="size-4" />, danger: true, confirm: "Archive this client? Their history stays." },
+          ]} />
         </>}
       />
+
       <div className="grid gap-5 lg:grid-cols-3">
-        <div className="space-y-5 lg:col-span-2">
-          {editing ? (
-            <Card title="Edit client">
-              <form action={updateClient} className="grid gap-3 sm:grid-cols-2">
-                <input type="hidden" name="id" value={c.id} />
-                <Field label="First name"><Input name="firstName" defaultValue={c.firstName} required /></Field>
-                <Field label="Last name"><Input name="lastName" defaultValue={c.lastName} /></Field>
-                <Field label="Company"><Input name="companyName" defaultValue={c.companyName ?? ""} /></Field>
-                <Field label="Email"><Input name="email" type="email" defaultValue={c.email} required /></Field>
-                <Field label="Phone"><Input name="phone" type="tel" defaultValue={c.phone ?? ""} /></Field>
-                <Field label="Tags" hint="Comma-separated, e.g. senior, corner lot"><Input name="tags" defaultValue={c.tags.join(", ")} /></Field>
-                <div className="sm:col-span-2"><Field label="Notes"><Textarea name="notes" rows={3} defaultValue={c.notes ?? ""} /></Field></div>
-                <label className="flex items-center gap-2 text-sm sm:col-span-2"><input type="checkbox" name="smsOptIn" defaultChecked={c.smsOptIn} className="size-5" /> Texts OK (client said yes to text updates)</label>
-                <label className="flex items-center gap-2 text-sm sm:col-span-2"><input type="checkbox" name="marketingOptOut" defaultChecked={c.marketingOptOut} className="size-5" /> No marketing emails (reviews, renewals)</label>
-                <div className="sm:col-span-2"><Button>Save</Button></div>
-              </form>
-            </Card>
-          ) : (
-            <Card title="Contact">
-              <Dl rows={[["Email", c.email], ["Phone", c.phone ? `${c.phone}${c.smsOptIn ? " · texts OK" : ""}` : null], ["Payment", c.preferredPayment === "ETRANSFER" ? "e-Transfer" : c.preferredPayment === "CASH" ? "Cash" : c.preferredPayment], ["Source", c.source.replaceAll("_", " ").toLowerCase()], ["Notes", c.notes]]} />
-            </Card>
-          )}
-          <Card title="Texts" actions={<Link href={`/messages/${c.id}`} className="text-sm font-semibold text-blue">{textCount ? `Open conversation (${textCount})` : c.phone ? "Send a text" : ""}</Link>}>
-            {texts.length ? (
-              <ol className="space-y-1.5">
-                {[...texts].reverse().map((t) => (
-                  <li key={t.id} className={`flex flex-col ${t.direction === "OUT" ? "items-end" : "items-start"}`}>
-                    {t.media.length > 0 && (
-                      <div className="mb-1 flex gap-1">
-                        {t.media.slice(0, 4).map((m) => (
-                          <a key={m.id} href={`/api/media/${m.id}/lg`} target="_blank" rel="noreferrer">
-                            {/* eslint-disable-next-line @next/next/no-img-element -- private media, our own variants */}
-                            <img src={`/api/media/${m.id}/sm`} alt="Texted photo" loading="lazy" className="size-16 rounded-lg object-cover" />
-                          </a>
-                        ))}
+        <div className="min-w-0 space-y-5 lg:col-span-2">
+          <Card title="Contact info" actions={<Link href={`/clients/${id}/edit`} className="text-sm font-semibold text-blue">Edit</Link>}>
+            <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
+              <div><dt className="text-xs font-semibold uppercase text-ink-soft">Phone</dt>{phones.length ? phones.map((p) => <dd key={p.number}><a href={`tel:${p.number}`} className="font-semibold text-blue">{p.number}</a> <span className="text-ink-soft">{p.label}{p.sms ? " · texts" : ""}</span></dd>) : <dd className="text-ink-soft">—</dd>}</div>
+              <div><dt className="text-xs font-semibold uppercase text-ink-soft">Email</dt>{emails.length ? emails.map((m) => <dd key={m.address}><a href={`mailto:${m.address}`} className="font-semibold text-blue">{m.address}</a> <span className="text-ink-soft">{m.label}</span></dd>) : <dd className="text-ink-soft">—</dd>}</div>
+              <div><dt className="text-xs font-semibold uppercase text-ink-soft">Lead source</dt><dd>{c.leadSource ?? c.source.replaceAll("_", " ").toLowerCase()}</dd></div>
+              <div><dt className="text-xs font-semibold uppercase text-ink-soft">Payment</dt><dd>{c.preferredPayment === "ETRANSFER" ? "e-Transfer" : c.preferredPayment ? c.preferredPayment.toLowerCase() : "—"}</dd></div>
+              <div className="sm:col-span-2"><dt className="text-xs font-semibold uppercase text-ink-soft">Messages</dt><dd className="text-ink-soft">
+                {[c.smsOptOutAt ? "Texted STOP" : c.smsOptIn ? "Text updates on" : "No text updates", c.visitReminders ? "visit reminders" : null, c.followUpQuotes ? "quote follow-ups" : null, c.followUpInvoices ? "invoice reminders" : null, c.marketingOptOut ? "no marketing" : null].filter(Boolean).join(" · ")}
+              </dd></div>
+              {c.notes && <div className="sm:col-span-2"><dt className="text-xs font-semibold uppercase text-ink-soft">Client notes</dt><dd className="whitespace-pre-line">{c.notes}</dd></div>}
+            </dl>
+          </Card>
+
+          <div className="grid gap-5 md:grid-cols-2">
+            <Card title={`Properties (${c.properties.length})`} actions={<Link href={`/clients/${id}/properties/new`} className="inline-flex items-center gap-1 text-sm font-semibold text-blue"><Plus className="size-4" />Add</Link>}>
+              {c.properties.length ? (
+                <ul className="divide-y divide-line">
+                  {c.properties.map((p) => (
+                    <li key={p.id} className="py-2.5 text-sm">
+                      <div className="flex items-start gap-2">
+                        <MapPin className="mt-0.5 size-4 shrink-0 text-ink-soft" aria-hidden />
+                        <div className="min-w-0 flex-1">
+                          <a className="font-semibold text-blue" href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(p.formatted)}`} target="_blank" rel="noreferrer">{p.label ? `${p.label}: ` : ""}{p.formatted}</a>
+                          <div className="text-xs text-ink-soft">{[p.isDefault && "Main", p.community?.name ?? "No community", p.gateCode && `Gate ${p.gateCode}`, p.accessNotes, p.petNotes && `Pets: ${p.petNotes}`].filter(Boolean).join(" · ")}</div>
+                        </div>
+                        <Link href={`/properties/${p.id}/edit`} className="text-xs font-semibold text-blue">Edit</Link>
+                        {c.properties.length > 1 && <form action={propertyArchive}><input type="hidden" name="id" value={p.id} /><input type="hidden" name="archive" value="1" /><button className="text-xs text-ink-soft hover:text-red-700">Remove</button></form>}
                       </div>
-                    )}
-                    {t.body && <div className={`max-w-[85%] whitespace-pre-line rounded-2xl px-3 py-1.5 text-sm ${t.direction === "OUT" ? "bg-blue text-white" : "bg-tint"}`}>{t.body}</div>}
-                    <span className="px-1 text-[11px] text-ink-soft">{prettyDateTime(t.createdAt)}</span>
-                  </li>
-                ))}
-              </ol>
-            ) : <Empty>{c.phone ? "No texts yet." : "Add a mobile number to text this client."}</Empty>}
-          </Card>
-          <Card title="Properties">
-            <ul className="divide-y divide-line">
-              {c.properties.map((p) => (
-                <li key={p.id} className="py-3 text-sm">
-                  <a className="font-semibold text-blue" href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(p.formatted)}`}>{p.formatted}</a>
-                  <div className="text-ink-soft">{p.community?.name ?? "No community (no map pin yet)"}{p.accessNotes && ` · ${p.accessNotes}`}</div>
-                </li>
-              ))}
-            </ul>
-          </Card>
-          <Card title="Jobs">
-            {jobs.length ? (
-              <ul className="divide-y divide-line">
-                {jobs.map((j) => (
-                  <li key={j.id}><Link href={`/jobs/${j.id}`} className="flex items-center justify-between gap-3 py-2.5"><span className="font-semibold">#{j.number} {j.title}</span><JobBadge s={j.status} /></Link></li>
-                ))}
-              </ul>
-            ) : <Empty>No jobs yet.</Empty>}
-          </Card>
-          <Card title="Invoices" actions={<span className="text-sm font-semibold">{money(c.invoices.filter((i) => i.status === "AWAITING_PAYMENT").reduce((a, i) => a + i.totalCents - i.amountPaidCents, 0))} owing</span>}>
-            {c.invoices.length ? (
-              <ul className="divide-y divide-line">
-                {c.invoices.map((i) => (
-                  <li key={i.id}><Link href={`/invoices/${i.id}`} className="flex justify-between gap-3 py-2.5 text-sm"><span className="font-semibold">#{i.number} {i.subject}</span><span>{money(i.totalCents)} · {i.status === "PAID" ? "Paid" : i.status === "DRAFT" ? "Draft" : i.status === "BAD_DEBT" ? "Written off" : "Unpaid"}</span></Link></li>
-                ))}
-              </ul>
-            ) : <Empty>No invoices yet.</Empty>}
-          </Card>
-          <Card title="Requests">
-            <ul className="divide-y divide-line">
-              {c.requests.map((r) => (
-                <li key={r.id}><Link href={`/requests/${r.id}`} className="flex items-center justify-between gap-3 py-2.5"><span><span className="font-semibold">#{r.number} {r.title}</span><span className="block text-xs text-ink-soft">{prettyDateTime(r.createdAt)}</span></span><RequestBadge s={r.status} /></Link></li>
-              ))}
-            </ul>
-          </Card>
+                    </li>
+                  ))}
+                </ul>
+              ) : <Empty>No property yet.</Empty>}
+            </Card>
+            <Card title="Contacts" actions={<Link href={`/clients/${id}/edit`} className="inline-flex items-center gap-1 text-sm font-semibold text-blue"><Plus className="size-4" />Add</Link>}>
+              {c.contacts.length ? (
+                <ul className="divide-y divide-line">
+                  {c.contacts.map((x) => (
+                    <li key={x.id} className="py-2.5 text-sm">
+                      <span className="font-semibold">{x.firstName} {x.lastName}</span>{x.role && <span className="text-ink-soft"> · {x.role}</span>}{x.isBilling && <span className="ml-1"><Badge tone="blue">Billing</Badge></span>}
+                      <div className="text-xs">{x.phone && <a href={`tel:${x.phone}`} className="text-blue">{x.phone}</a>}{x.phone && x.email && " · "}{x.email && <a href={`mailto:${x.email}`} className="text-blue">{x.email}</a>}</div>
+                    </li>
+                  ))}
+                </ul>
+              ) : <p className="text-sm text-ink-soft">Just {c.firstName}. Add a spouse, tenant or property manager.</p>}
+            </Card>
+          </div>
+
+          <section className="rounded-lg border border-line bg-white p-4 shadow-card sm:p-5">
+            <Tabs active={{ overview: "Overview", activity: "Activity", communication: "Communication", files: "Files" }[tab]} items={[
+              { href: `/clients/${id}`, label: "Overview" }, { href: `/clients/${id}?tab=activity`, label: "Activity" },
+              { href: `/clients/${id}?tab=communication`, label: "Communication" }, { href: `/clients/${id}?tab=files`, label: "Files" },
+            ]} />
+            {tab === "overview" && (
+              <div className="space-y-6">
+                <div>
+                  <h3 className="mb-2 text-sm font-bold">Work overview</h3>
+                  <div className="mb-2 flex gap-1.5">
+                    {WORK.map((w) => {
+                      const n = { requests: c.requests.length, quotes: c.quotes.length, jobs: jobs.length, invoices: c.invoices.length }[w];
+                      return <Link key={w} href={`/clients/${id}?work=${w}`} className={`rounded-full px-3 py-1 text-xs font-semibold capitalize ${work === w ? "bg-navy text-white" : "bg-tint text-ink-soft"}`}>{w} {n}</Link>;
+                    })}
+                  </div>
+                  <ul className="divide-y divide-line text-sm">
+                    {work === "jobs" && jobs.map((j) => <li key={j.id}><Link href={`/jobs/${j.id}`} className="flex items-center justify-between gap-3 py-2"><span><span className="font-semibold">Job #{j.number}</span> {j.title}<span className="block text-xs text-ink-soft">{j.property.formatted.split(",")[0]}</span></span><JobBadge s={j.status} /></Link></li>)}
+                    {work === "quotes" && c.quotes.map((q) => <li key={q.id}><Link href={`/quotes/${q.id}`} className="flex items-center justify-between gap-3 py-2"><span><span className="font-semibold">Quote #{q.number}</span> {q.title}<span className="block text-xs text-ink-soft">{money(q.totalCents)}</span></span><Badge tone={QUOTE[q.status][1]}>{QUOTE[q.status][0]}</Badge></Link></li>)}
+                    {work === "requests" && c.requests.map((r) => <li key={r.id}><Link href={`/requests/${r.id}`} className="flex items-center justify-between gap-3 py-2"><span><span className="font-semibold">Request #{r.number}</span> {r.title}<span className="block text-xs text-ink-soft">{prettyDateTime(r.createdAt)}</span></span><RequestBadge s={r.status} /></Link></li>)}
+                    {work === "invoices" && c.invoices.map((i) => <li key={i.id}><Link href={`/invoices/${i.id}`} className="flex items-center justify-between gap-3 py-2"><span><span className="font-semibold">Invoice #{i.number}</span> {i.subject}<span className="block text-xs text-ink-soft">{money(i.totalCents)}{i.dueOn && ` · due ${prettyDate(dateOnly(i.dueOn))}`}</span></span><InvoiceBadge s={invoiceView({ ...i, dueOn: dateOnly(i.dueOn) }, today)} /></Link></li>)}
+                    {!{ requests: c.requests, quotes: c.quotes, jobs, invoices: c.invoices }[work].length && <li className="py-4 text-center text-ink-soft">None yet.</li>}
+                  </ul>
+                </div>
+                <div>
+                  <h3 className="mb-2 text-sm font-bold">Schedule</h3>
+                  {visits.length ? (
+                    <ul className="divide-y divide-line text-sm">
+                      {visits.map((v) => <li key={v.id}><Link href={`/visits/${v.id}`} className="flex items-center justify-between gap-3 py-2"><span><span className="font-semibold">{v.scheduledDate ? prettyDate(dateOnly(v.scheduledDate)) : "Unscheduled"}</span> · Job #{v.job.number} {v.job.title}</span><VisitBadge s={visitStatus({ state: v.state, scheduledDate: dateOnly(v.scheduledDate) }, today)} /></Link></li>)}
+                    </ul>
+                  ) : <p className="text-sm text-ink-soft">Nothing scheduled.</p>}
+                </div>
+                <div>
+                  <h3 className="mb-2 text-sm font-bold">Billing history</h3>
+                  {books.rows.length ? (
+                    <table className="w-full text-sm">
+                      <thead><tr className="border-b border-line text-left text-xs uppercase text-ink-soft"><th className="py-1.5 font-semibold">Date</th><th className="font-semibold">Item</th><th className="text-right font-semibold">Amount</th><th className="hidden text-right font-semibold sm:table-cell">Balance</th></tr></thead>
+                      <tbody>
+                        {[...books.rows].reverse().slice(0, 12).map((r) => (
+                          <tr key={r.kind + r.id} className="border-b border-line/60">
+                            <td className="py-2 text-ink-soft">{prettyDate(dateOnly(r.date))}</td>
+                            <td><Link href={r.href} className="font-semibold text-blue">{r.label}</Link></td>
+                            <td className={`text-right ${r.amountCents < 0 ? "text-emerald-700" : ""}`}>{r.amountCents < 0 ? `−${money(-r.amountCents)}` : money(r.amountCents)}</td>
+                            <td className="hidden text-right sm:table-cell">{money(r.balanceCents)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot><tr><td colSpan={2} className="pt-2 font-bold">Current balance</td><td colSpan={2} className="pt-2 text-right font-bold">{money(books.balanceCents)}</td></tr></tfoot>
+                    </table>
+                  ) : <p className="text-sm text-ink-soft">No invoices or payments yet.</p>}
+                </div>
+              </div>
+            )}
+            {(tab === "activity" || tab === "communication") && (
+              <ActivityFeed items={feed} base={`/clients/${id}?tab=${tab}`} types={tab === "communication" ? ["text", "call", "email"] : parseTypes(sp.types)}
+                moreHref={feed.length >= 60 ? `/clients/${id}?tab=${tab}${typeof sp.types === "string" ? `&types=${sp.types}` : ""}&before=${feed.at(-1)!.at.toISOString()}` : undefined} />
+            )}
+            {tab === "files" && (files.length ? <Gallery photos={files} back={here} /> : <Empty>No photos or files yet. Photos from visits, texts, notes and quote uploads collect here.</Empty>)}
+          </section>
         </div>
-        <Timeline notes={notes} events={events} target={{ clientId: c.id }} path={`/clients/${c.id}`} />
+
+        <aside className="space-y-5">
+          <section className="rounded-lg border border-line bg-white p-4 shadow-card">
+            <h2 className="mb-3 text-base font-bold">Overview</h2>
+            <dl className="grid grid-cols-2 gap-3">
+              <div><dt className="text-xs font-semibold uppercase text-ink-soft">Lifetime value</dt><dd className="font-display text-xl font-bold">{money(lifetime)}</dd></div>
+              <div><dt className="text-xs font-semibold uppercase text-ink-soft">Balance</dt><dd className={`font-display text-xl font-bold ${books.balanceCents > 0 ? "text-amber-700" : ""}`}>{money(books.balanceCents)}</dd></div>
+            </dl>
+          </section>
+          <section className="rounded-lg border border-line bg-white p-4 shadow-card">
+            <h2 className="mb-2 text-base font-bold">Last communication</h2>
+            {last ? (
+              <Link href={last.href} className="flex gap-2 text-sm hover:text-blue">
+                <span className="mt-0.5 text-ink-soft">{last.icon}</span>
+                <span className="min-w-0"><span className="line-clamp-2">{last.text}</span><span className="block text-xs text-ink-soft">{prettyDateTime(last.at)}</span></span>
+              </Link>
+            ) : <p className="text-sm text-ink-soft">No texts, emails or calls yet.</p>}
+          </section>
+          <NotesCard notes={notes} target={{ clientId: id }} path={`/clients/${id}`} isClient />
+        </aside>
       </div>
     </>
   );

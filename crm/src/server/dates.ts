@@ -41,3 +41,16 @@ export function localDayStart(s: string): Date {
   const [y, m, d] = s.split("-").map(Number);
   return new Date(new TZDate(y, m - 1, d, TZ).getTime());
 }
+
+/** "2026-12-01T14:30" from a datetime-local input, read as Calgary time (the server runs in UTC). */
+export function fromLocalInput(s: string): Date | null {
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+  if (!m) return null;
+  const [y, mo, d, h, mi] = m.slice(1).map(Number);
+  return new Date(new TZDate(y, mo - 1, d, h, mi, TZ).getTime());
+}
+
+/** A Date as a datetime-local value in Calgary time. */
+export function toLocalInput(d: Date): string {
+  return format(new TZDate(d, TZ), "yyyy-MM-dd'T'HH:mm");
+}

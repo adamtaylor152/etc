@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { RequestBadge } from "@/components/status";
-import { Timeline } from "@/components/timeline";
+import { RecordPanel } from "@/components/record-panel";
 import { Button, Card, Dl, PageHeader } from "@/components/ui";
 import { dateOnly, prettyDate, prettyDateTime } from "@/server/dates";
 import { businessId, db } from "@/server/db";
@@ -19,9 +19,7 @@ export default async function RequestPage({ params, searchParams }: PageProps<"/
     include: { client: true, property: { include: { community: true } }, jobs: true },
   });
   if (!r) notFound();
-  const [notes, events, photos] = await Promise.all([
-    db.note.findMany({ where: { businessId: bid, requestId: id }, orderBy: { createdAt: "desc" } }),
-    db.activityEvent.findMany({ where: { businessId: bid, entityType: "Request", entityId: id }, orderBy: { at: "desc" } }),
+  const [photos] = await Promise.all([
     db.attachment.findMany({ where: { businessId: bid, requestId: id, deletedAt: null }, orderBy: { createdAt: "asc" } }),
   ]);
   const archived = r.status === "ARCHIVED";
@@ -68,7 +66,7 @@ export default async function RequestPage({ params, searchParams }: PageProps<"/
             <Link href={`/quotes/new?request=${r.id}`} className="mt-3 inline-flex min-h-11 items-center rounded-full border-2 border-blue bg-blue px-5 text-sm font-semibold text-white">Create quote</Link>
           </Card>
         </div>
-        <Timeline notes={notes} events={events} target={{ requestId: r.id, clientId: r.clientId }} path={`/requests/${r.id}`} />
+        <RecordPanel businessId={bid} target={{ requestId: r.id }} clientId={r.clientId} path={`/requests/${r.id}`} />
       </div>
     </>
   );

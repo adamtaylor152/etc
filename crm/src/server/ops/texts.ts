@@ -4,16 +4,20 @@ import { db } from "../db";
 import { enqueue, kickOutbox } from "../email/outbox";
 import { env } from "../env";
 import { clientName } from "../queries";
+import { numbersOf } from "../clients";
 import { MAX_UPLOAD_BYTES, mmsJpeg, saveAny, saveImage, signedMediaPath } from "../media";
 import { clip, keyword, rcsFeatures, sendRcs, sendSms, smsEnabled, smsFrom, toE164, withReplyHint } from "../sms";
 import { TransitionError } from "../status/visit";
 
 type Actor = { id: string; businessId: string };
 
-/** Find the client a phone number belongs to. ponytail: scans clients with a phone (hundreds); index a normalized column if it grows. */
+/**
+ * Find the client a phone number belongs to: any of their phones, or a contact's phone.
+ * ponytail: scans active clients (hundreds); index a normalized numbers column if it grows.
+ */
 export async function clientByPhone(businessId: string, e164: string) {
-  const clients = await db.client.findMany({ where: { businessId, phone: { not: null }, archivedAt: null }, orderBy: { createdAt: "asc" } });
-  return clients.find((c) => toE164(c.phone) === e164) ?? null;
+  const clients = await db.client.findMany({ where: { businessId, archivedAt: null }, include: { contacts: { select: { phone: true } } }, orderBy: { createdAt: "asc" } });
+  return clients.find((c) => numbersOf(c).includes(e164)) ?? null;
 }
 
 export const MAX_MMS_FILES = 5;

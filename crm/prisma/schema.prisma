@@ -306,6 +306,13 @@ model Client {
   email            String // lowercased
   altEmails        String[]
   phone            String?
+  title            String? // Mr., Ms., Dr. ...
+  leadSource       String? // how they found us (Google, referral, door hanger...)
+  phones           Json           @default("[]") // [{number,label,sms}]; phone above mirrors the first
+  emails           Json           @default("[]") // [{address,label}]; email above mirrors the first
+  followUpQuotes   Boolean        @default(true)
+  followUpInvoices Boolean        @default(true)
+  visitReminders   Boolean        @default(true)
   preferredPayment PaymentMethod?
   source           ClientSource
   referredBy       String?
@@ -328,6 +335,8 @@ model Client {
   attachments Attachment[]
   notesList   Note[]
   texts       TextMessage[]
+  contacts    ClientContact[]
+  calls       CallLog[]
 
   @@index([businessId, email])
 }
@@ -808,6 +817,8 @@ model Attachment {
   visit             Visit?         @relation(fields: [visitId], references: [id])
   textMessageId     String?
   textMessage       TextMessage?   @relation(fields: [textMessageId], references: [id])
+  noteId            String?
+  note              Note?          @relation(fields: [noteId], references: [id], onDelete: SetNull)
   filename          String?
   caption           String?
   sharedWithClient  Boolean        @default(false)
@@ -818,6 +829,7 @@ model Attachment {
   createdAt         DateTime       @default(now())
 
   @@index([textMessageId])
+  @@index([noteId])
 }
 
 model Note {
@@ -835,7 +847,13 @@ model Note {
   jobId            String?
   visitId          String?
   invoiceId        String?
+  linkDownstream   Boolean  @default(true) // a client note also shows on that client's requests, quotes, jobs, invoices
+  editedAt         DateTime?
+  attachments      Attachment[]
   createdAt        DateTime @default(now())
+
+  @@index([businessId, clientId])
+  @@index([businessId, jobId])
 }
 
 model ActivityEvent {
@@ -934,4 +952,42 @@ model TextMessage {
 enum TextDirection {
   IN
   OUT
+}
+
+/** More people on a client account: spouse, tenant, property manager. */
+model ClientContact {
+  id            String   @id @default(cuid())
+  businessId    String
+  clientId      String
+  client        Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  role          String? // Spouse, Tenant, Property manager...
+  firstName     String
+  lastName      String   @default("")
+  phone         String?
+  email         String?
+  isBilling     Boolean  @default(false)
+  receivesTexts Boolean  @default(false)
+  createdAt     DateTime @default(now())
+
+  @@index([clientId])
+}
+
+/** Phone calls: logged by hand, or pulled from Telnyx call records (providerId dedupes). */
+model CallLog {
+  id          String        @id @default(cuid())
+  businessId  String
+  clientId    String?
+  client      Client?       @relation(fields: [clientId], references: [id])
+  direction   TextDirection
+  from        String
+  to          String
+  status      String        @default("answered") // answered | missed | voicemail | no_answer
+  startedAt   DateTime      @default(now())
+  durationSec Int?
+  notes       String?
+  loggedById  String?
+  providerId  String?       @unique
+  createdAt   DateTime      @default(now())
+
+  @@index([businessId, clientId, startedAt])
 }
