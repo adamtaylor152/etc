@@ -1,8 +1,9 @@
 // Open assessment times for etccrew.ca/book.html's time picker (cross-origin, read-only, cached a minute).
 import { publicTimes } from "@/server/booking/slots";
-import { businessId } from "@/server/db";
+import { businessId, db } from "@/server/db";
+import { getSettings } from "@/server/settings";
 import { env } from "@/server/env";
-import { WINDOWS } from "@/server/windows";
+import { withHints } from "@/server/windows";
 
 function cors(req: Request): Record<string, string> {
   const origin = req.headers.get("origin");
@@ -11,5 +12,6 @@ function cors(req: Request): Record<string, string> {
 }
 
 export async function GET(req: Request) {
-  return Response.json({ windows: WINDOWS, days: await publicTimes(await businessId()) }, { headers: { ...cors(req), "Cache-Control": "public, max-age=60" } });
+  const bid = await businessId();
+  return Response.json({ windows: withHints((await getSettings(db, bid)).arrivalWindows), days: await publicTimes(bid) }, { headers: { ...cors(req), "Cache-Control": "public, max-age=60" } });
 }

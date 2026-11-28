@@ -1,4 +1,5 @@
 // Text message bodies. Short, plain, signed "- etc." Links are minted at send time (no raw tokens stored).
+import { dateOnly, dayWord, todayLocal } from "../dates";
 import { db } from "../db";
 import { env } from "../env";
 import { mintToken } from "../tokens";
@@ -30,7 +31,7 @@ export const smsTemplates = {
   "sms.visit_reminder": async (p: { visitId: string }, ctx: Ctx) => {
     const v = await db.visit.findUniqueOrThrow({ where: { id: p.visitId }, include: { job: { include: { client: true } }, property: true } });
     const raw = await mintToken(db, ctx.businessId, "VISIT_CONFIRM", { visitId: v.id, clientId: v.job.clientId });
-    return `Hi ${first(v.job.client.firstName)}, etc. is booked for ${v.property.formatted.split(",")[0]} tomorrow. Confirm or change: ${env.appUrl}/c/${raw} - etc.`;
+    return `Hi ${first(v.job.client.firstName)}, etc. is booked for ${v.property.formatted.split(",")[0]} ${dayWord(dateOnly(v.scheduledDate) ?? todayLocal())}. Reply YES to confirm, or change it here: ${env.appUrl}/c/${raw} - etc.`;
   },
   "sms.price_change": async (p: { jobId: string }, ctx: Ctx) => {
     const job = await db.job.findUniqueOrThrow({ where: { id: p.jobId }, include: { client: true, property: true } });

@@ -6,7 +6,7 @@ import { business, businessId, db } from "@/server/db";
 import { env } from "@/server/env";
 import { parseSettings, SETTING_LABELS, type ToggleKey } from "@/server/settings";
 import { stripeEnabled } from "@/server/stripe";
-import { saveAutomations, saveBusiness, saveSeason, saveTax } from "./actions";
+import { saveAutomations, saveBusiness, saveSchedule, saveSeason, saveTax } from "./actions";
 
 export const metadata = { title: "Settings" };
 
@@ -24,6 +24,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
   return (
     <>
       <PageHeader title="Settings" actions={<><Link href="/settings/price-book" className="inline-flex min-h-10 items-center rounded-lg border border-line bg-white px-4 text-sm font-semibold hover:bg-tint">Price book</Link><Link href="/settings/checklists" className="inline-flex min-h-10 items-center rounded-lg border border-line bg-white px-4 text-sm font-semibold hover:bg-tint">Checklists</Link><Link href="/settings/team" className="inline-flex min-h-10 items-center rounded-lg border border-line bg-white px-4 text-sm font-semibold hover:bg-tint">Team &amp; people</Link></>} />
+      {typeof sp.error === "string" && <p role="alert" className="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-medium text-red-800">{sp.error}</p>}
       {sp.saved && <p className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-medium text-emerald-800">Saved.</p>}
       <div className="grid gap-5 lg:grid-cols-2">
         <Card title="Business">
@@ -54,6 +55,28 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
               </label>
             ))}
             <Button>Save automations</Button>
+          </form>
+        </Card>
+
+        <Card title="Reminders & arrival windows">
+          <form id="schedule" action={saveSchedule} className="space-y-3">
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              Remind clients <input name="reminderDaysBefore" type="number" min={1} max={7} defaultValue={settings.reminderDaysBefore} aria-label="Days before" className="h-9 w-16 rounded-lg border border-line px-2" /> day(s) before, at
+              <select name="reminderHour" defaultValue={settings.reminderHour} aria-label="Hour" className="h-9 rounded-lg border border-line bg-white px-2">
+                {Array.from({ length: 16 }, (_, i) => i + 6).map((h) => <option key={h} value={h}>{h % 12 || 12} {h < 12 ? "am" : "pm"}</option>)}
+              </select>
+            </div>
+            <p className="text-sm font-semibold">Arrival windows <span className="font-normal text-ink-soft">(offered in online booking and as one-tap times on the schedule forms)</span></p>
+            {[...settings.arrivalWindows, ...Array.from({ length: Math.max(0, 6 - settings.arrivalWindows.length) }, () => ({ key: "", label: "", from: "", to: "" }))].map((w, i) => (
+              <div key={i} className="grid grid-cols-[1fr_7rem_7rem] gap-2">
+                <input type="hidden" name="winKey" value={w.key} />
+                <Input name="winLabel" defaultValue={w.label} placeholder={w.key ? undefined : "Add a window"} maxLength={20} aria-label="Window name" />
+                <Input name="winFrom" type="time" defaultValue={w.from} aria-label="From" />
+                <Input name="winTo" type="time" defaultValue={w.to} aria-label="To" />
+              </div>
+            ))}
+            <p className="text-xs text-ink-soft">Clear a name to remove that window. Times already booked keep their own start and end.</p>
+            <Button>Save</Button>
           </form>
         </Card>
 

@@ -5,7 +5,8 @@ import { addDays, fromLocalInput, todayLocal, toDbDate } from "../dates";
 import { db } from "../db";
 import { logActivity } from "../records";
 import { loadAvailability } from "../schedule-data";
-import { WINDOWS, windowOf, type WindowKey } from "../windows";
+import { getSettings } from "../settings";
+import { WINDOWS, windowHint, windowOf, type Win } from "../windows";
 
 export const ASSESS_MIN = 60, LEAD_DAYS = 1, WINDOW_DAYS = 14;
 type Av = { people: { id: string; hours: WorkHours }[]; timeOff: TimeOffRow[]; busy: Busy[] };
@@ -21,8 +22,7 @@ export function whoIsFree(av: Av, date: string, start: number, durationMin = ASS
 }
 
 /** First person and start time free for an assessment inside a window (30-min steps), or null. */
-export function freeInWindow(av: Av, date: string, key: WindowKey) {
-  const w = windowOf(key)!;
+export function freeInWindow(av: Av, date: string, w: Pick<Win, "from" | "to">) {
   for (let t = toMin(w.from); t + ASSESS_MIN <= toMin(w.to); t += 30) {
     const userId = whoIsFree(av, date, t);
     if (userId) return { userId, start: t };
@@ -31,8 +31,8 @@ export function freeInWindow(av: Av, date: string, key: WindowKey) {
 }
 
 /** Open hourly start times per day (union across people). Pure. */
-export function openTimes(av: Av, from: string, days: number, durationMin = ASSESS_MIN) {
-  const out: { date: string; windows: WindowKey[]; times: { start: number; label: string }[] }[] = [];
+export function openTimes(av: Av, from: string, days: number, durationMin = ASSESS_MIN, wins: Win[] = WINDOWS) {
+  const out: { date: string; windows: string[]; times: { start: number; label: string }[] }[] = [];
   for (let i = 0; i < days; i++) {
     const date = addDays(from, i);
     const set = new Set<number>();
@@ -41,7 +41,7 @@ export function openTimes(av: Av, from: string, days: number, durationMin = ASSE
       const mine = av.busy.filter((b) => b.date === date && (b.userIds.includes(p.id) || !b.userIds.length));
       for (const t of freeSlots(p.hours[String(weekday(date))], mine, durationMin, 60)) set.add(t);
     }
-    const windows = WINDOWS.filter((w) => freeInWindow(av, date, w.key)).map((w) => w.key);
+    const windows = wins.filter((w) => freeInWindow(av, date, w)).map((w) => w.key);
     if (set.size || windows.length) out.push({ date, windows, times: [...set].sort((a, b) => a - b).map((start) => ({ start, label: fmtMin(start) })) });
   }
   return out;
@@ -49,7 +49,7 @@ export function openTimes(av: Av, from: string, days: number, durationMin = ASSE
 
 export async function publicTimes(businessId: string) {
   const from = addDays(todayLocal(), LEAD_DAYS);
-  return openTimes(await loadAvailability(businessId, from, addDays(from, WINDOW_DAYS)), from, WINDOW_DAYS);
+  return openTimes(await loadAvailability(businessId, from, addDays(from, WINDOW_DAYS)), from, WINDOW_DAYS, ASSESS_MIN, (await getSettings(db, businessId)).arrivalWindows);
 }
 
 /** Validates a requested window ({date, window}) or exact time ({date, start}) against live availability; null if it's gone. */
@@ -59,10 +59,10 @@ export async function claimSlot(businessId: string, slot: unknown) {
   const first = addDays(todayLocal(), LEAD_DAYS);
   if (s.date < first || s.date > addDays(first, WINDOW_DAYS)) return null;
   const av = await loadAvailability(businessId, s.date, s.date);
-  const w = windowOf(s.window);
+  const w = windowOf((await getSettings(db, businessId)).arrivalWindows, s.window);
   if (w) {
-    const hit = freeInWindow(av, s.date, w.key);
-    return hit ? { date: s.date, ...hit, window: w } : null;
+    const hit = freeInWindow(av, s.date, w);
+    return hit ? { date: s.date, ...hit, window: { ...w, hint: windowHint(w) } } : null;
   }
   if (typeof s.start !== "number" || !Number.isInteger(s.start)) return null;
   const userId = whoIsFree(av, s.date, s.start);
