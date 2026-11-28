@@ -43,7 +43,7 @@ export function PropertyForm({ clientId, p, mapsKey, communities, error }: {
           <h2 className={`${heading} mb-1`}>Routing</h2>
           <div className="divide-y divide-line-soft">
             <label className="flex items-start gap-3 py-2.5 text-sm"><input type="checkbox" name="routePriority" defaultChecked={p?.routePriority} className="mt-0.5 size-4 shrink-0" /><span><span className="font-medium">Do first on the route</span><span className="block text-xs text-ink-soft">Seniors, medical needs, early commuters: goes to the front of its community.</span></span></label>
-            <label className="flex items-start gap-3 py-2.5 text-sm"><input type="checkbox" name="isDefault" defaultChecked={p?.isDefault} className="mt-0.5 size-4 shrink-0" /><span className="font-medium">Main property for this client</span></label>
+            <label className="flex items-start gap-3 py-2.5 text-sm max-sm:min-h-11 max-sm:items-center"><input type="checkbox" name="isDefault" defaultChecked={p?.isDefault} className="mt-0.5 size-4 shrink-0" /><span className="font-medium">Main property for this client</span></label>
           </div>
         </section>
         <div className="flex items-center justify-end gap-2 border-t border-line-soft pt-4">

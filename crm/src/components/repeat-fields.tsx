@@ -61,7 +61,7 @@ export function RepeatFields({ freq: freq0 = "WEEKLY", interval = 1, byDay = [],
         </div>
       )}
       {freq !== "AS_NEEDED" && (
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(9.5rem,1fr))] gap-3">
           <Field label="Starting"><Input type="date" name="startsOn" defaultValue={startsOn} required /></Field>
           <Field label="Ends">
             <select name="endMode" value={endMode} onChange={(e) => setEndMode(e.target.value)} className={inputCls}>

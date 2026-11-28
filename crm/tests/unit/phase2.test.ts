@@ -222,8 +222,8 @@ describe("availability", () => {
   const off = [{ userId: "u1", startDate: "2026-12-08", endDate: "2026-12-08", reason: "exam" }, { userId: null, startDate: "2026-12-25", endDate: "2026-12-25", reason: "Christmas" }];
   it("knows days off, time off, holidays and working hours", () => {
     expect(unavailable(hours, off, "u1", "2026-12-07", 9 * 60, 10 * 60)).toBeNull(); // Mon 9-10
-    expect(unavailable(hours, off, "u1", "2026-12-07", 16 * 60 + 30, 17 * 60 + 30)).toMatch(/outside/);
-    expect(unavailable(hours, off, "u1", "2026-12-08", null, null)).toMatch(/time off \(exam\)/);
+    expect(unavailable(hours, off, "u1", "2026-12-07", 16 * 60 + 30, 17 * 60 + 30)).toBe("outside their hours, 8:00 a.m.–5:00 p.m.");
+    expect(unavailable(hours, off, "u1", "2026-12-08", null, null)).toBe("time off: exam");
     expect(unavailable(hours, off, "u1", "2026-12-09", null, null)).toBe("their day off"); // Wed
     expect(unavailable({ ...hours, "5": ["08:00", "17:00"] }, off, "u2", "2026-12-25", null, null)).toMatch(/closed/);
   });

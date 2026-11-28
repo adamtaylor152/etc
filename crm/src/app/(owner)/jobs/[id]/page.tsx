@@ -179,7 +179,7 @@ export default async function JobPage({ params, searchParams }: PageProps<"/jobs
                               <summary className={`list-none ${btn("secondary", small)}`}>Skip</summary>
                               <form action={visitTransition} className="absolute left-0 top-full z-10 mt-1 w-64 max-w-full space-y-2 rounded-xl border border-line bg-white p-3 shadow-lift">
                                 <input type="hidden" name="id" value={v.id} /><input type="hidden" name="to" value="SKIPPED" /><input type="hidden" name="back" value={here} />
-                                <select name="skipReason" className={inputCls} aria-label="Reason">{SKIP.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
+                                <select name="skipReason" className={inputCls} aria-label="Reason">{SKIP.filter(([k]) => k !== "ALREADY_CLEARED" || plan || !!v.snowEventId).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
                                 <input name="skipNote" placeholder="Note (optional)" aria-label="Note (optional)" maxLength={500} className={inputCls} />
                                 <button className={btn("secondary", "w-full")}>Skip this visit</button>
                               </form>

@@ -207,7 +207,7 @@ export default async function VisitPage({ params, searchParams }: PageProps<"/vi
                 <summary className="flex min-h-8 max-sm:min-h-11 items-center text-sm font-semibold">Couldn&apos;t do it</summary>
                 <form action={visitTransition} className="mt-3 space-y-3">
                   {hidden("SKIPPED")}
-                  <Field label="Reason"><select name="skipReason" className={inputCls} defaultValue="ALREADY_CLEARED">{SKIP.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></Field>
+                  <Field label="Reason"><select name="skipReason" className={inputCls}>{SKIP.filter(([k]) => k !== "ALREADY_CLEARED" || isSnowVisit(v)).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></Field>
                   <Input name="skipNote" placeholder="Note (optional)" aria-label="Note (optional)" maxLength={500} />
                   <Button variant="secondary" className="min-h-11! w-full">Skip this visit</Button>
                 </form>

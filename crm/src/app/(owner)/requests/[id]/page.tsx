@@ -85,7 +85,7 @@ export default async function RequestPage({ params, searchParams }: PageProps<"/
           <Card title="Jobs from this request">
             {r.jobs.length ? (
               <ul className="-my-1 divide-y divide-line-soft">
-                {r.jobs.map((j) => <li key={j.id}><Link href={`/jobs/${j.id}`} className={`block py-2.5 text-sm ${link}`}><span className="tabular-nums">Job #{j.number}</span>: {j.title}</Link></li>)}
+                {r.jobs.map((j) => <li key={j.id}><Link href={`/jobs/${j.id}`} className={`block py-2.5 text-sm max-sm:flex max-sm:min-h-11 max-sm:items-center max-sm:gap-1 ${link}`}><span className="tabular-nums">Job #{j.number}</span>: {j.title}</Link></li>)}
               </ul>
             ) : <Empty action={<ButtonLink href={`/quotes/new?request=${r.id}`}>Convert to quote</ButtonLink>}>No jobs yet. This needs a quote.</Empty>}
           </Card>
