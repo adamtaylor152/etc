@@ -27,6 +27,7 @@ export function TeamBoard({ lanes, dates, cards, today }: { lanes: Lane[]; dates
   }
   const day = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString("en-CA", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
   const week = dates.length > 1;
+  const cap = week ? 4 : 8;
   const head = "border-b border-line bg-tint/60 px-3 py-2 text-xs font-medium text-ink-soft";
   const msgCls = msg.startsWith("Moved, but") ? "bg-amber-50 text-amber-950" : msg.startsWith("Couldn't") ? "bg-red-50 text-red-900" : "text-ink-soft";
   return (
@@ -39,6 +40,24 @@ export function TeamBoard({ lanes, dates, cards, today }: { lanes: Lane[]; dates
           </div>
           {lanes.map((l, li) => {
             const last = li === lanes.length - 1;
+            // A cell shows its first few cards; the rest open in place under "+N more".
+            const card = (c: BoardCard) => (
+              <div key={c.key} draggable={c.movable} onDragStart={(e) => { e.dataTransfer.setData("text/plain", `${c.kind}:${c.id}`); e.dataTransfer.effectAllowed = "move"; setDragging(true); }} onDragEnd={() => { setDragging(false); setOver(null); }}
+                title={c.movable ? undefined : "This one stays where it is (done, or part of a storm)"}
+                className={`relative rounded-md border-l-[3px] px-2 py-1.5 text-xs ${c.done ? "bg-tint/60 text-ink-soft" : "bg-tint"} ${c.movable ? "cursor-grab hover:bg-line-soft active:cursor-grabbing" : ""}`} style={{ borderLeftColor: l.color }}>
+                <Link href={c.href} className="flex items-baseline gap-1.5 font-semibold hover:text-blue-deep">
+                  {c.done ? <Check className="size-3 shrink-0 self-center text-emerald-700" strokeWidth={2.5} aria-label="Done" /> : c.confirmed && !c.warnings.length ? <CheckCheck className="size-3 shrink-0 self-center text-emerald-700" strokeWidth={2} aria-label="Client confirmed" /> : null}
+                  {c.time && <span className="shrink-0 font-medium tabular-nums text-ink-soft">{c.time}</span>}
+                  <span className="min-w-0 truncate">{c.title}</span>
+                </Link>
+                <span className="block truncate text-ink-soft">{c.sub}</span>
+                {c.warnings.length > 0 && (
+                  <ul className="mt-1 space-y-0.5 rounded border border-amber-200 bg-amber-50 px-1.5 py-1 font-medium text-amber-950">
+                    {c.warnings.map((w) => <li key={w} className="flex gap-1"><TriangleAlert className="mt-px size-3 shrink-0 text-amber-700" strokeWidth={2} aria-hidden />{w}</li>)}
+                  </ul>
+                )}
+              </div>
+            );
             const mine = cards.filter((c) => (l.id ? c.userIds.includes(l.id) : !c.userIds.length));
             return (
               <div key={l.id ?? "none"} role="row" className="contents">
@@ -58,23 +77,15 @@ export function TeamBoard({ lanes, dates, cards, today }: { lanes: Lane[]; dates
                       {/* While a card is in the air every cell shows as a place to drop it; the one under the pointer fills in. */}
                       {dragging && <span aria-hidden className={`pointer-events-none absolute inset-1 rounded-lg border-2 border-dashed ${target ? "border-blue" : "border-blue/25"}`} />}
                       {off && <p className="inline-block rounded bg-white/90 px-1.5 py-0.5 text-[11px] font-medium text-ink-soft">{off.charAt(0).toUpperCase() + off.slice(1)}</p>}
-                      {here.map((c) => (
-                        <div key={c.key} draggable={c.movable} onDragStart={(e) => { e.dataTransfer.setData("text/plain", `${c.kind}:${c.id}`); e.dataTransfer.effectAllowed = "move"; setDragging(true); }} onDragEnd={() => { setDragging(false); setOver(null); }}
-                          title={c.movable ? undefined : "This one stays where it is (done, or part of a storm)"}
-                          className={`relative rounded-md border-l-[3px] px-2 py-1.5 text-xs ${c.done ? "bg-tint/60 text-ink-soft" : "bg-tint"} ${c.movable ? "cursor-grab hover:bg-line-soft active:cursor-grabbing" : ""}`} style={{ borderLeftColor: l.color }}>
-                          <Link href={c.href} className="flex items-baseline gap-1.5 font-semibold hover:text-blue-deep">
-                            {c.done ? <Check className="size-3 shrink-0 self-center text-emerald-700" strokeWidth={2.5} aria-label="Done" /> : c.confirmed && !c.warnings.length ? <CheckCheck className="size-3 shrink-0 self-center text-emerald-700" strokeWidth={2} aria-label="Client confirmed" /> : null}
-                            {c.time && <span className="shrink-0 font-medium tabular-nums text-ink-soft">{c.time}</span>}
-                            <span className="min-w-0 truncate">{c.title}</span>
-                          </Link>
-                          <span className="block truncate text-ink-soft">{c.sub}</span>
-                          {c.warnings.length > 0 && (
-                            <ul className="mt-1 space-y-0.5 rounded border border-amber-200 bg-amber-50 px-1.5 py-1 font-medium text-amber-950">
-                              {c.warnings.map((w) => <li key={w} className="flex gap-1"><TriangleAlert className="mt-px size-3 shrink-0 text-amber-700" strokeWidth={2} aria-hidden />{w}</li>)}
-                            </ul>
-                          )}
-                        </div>
-                      ))}
+                      {here.slice(0, cap).map(card)}
+                      {here.length > cap && (
+                        <details className="group">
+                          <summary className="flex min-h-8 list-none items-center rounded-md px-2 text-xs font-semibold text-blue hover:bg-tint hover:text-blue-deep">
+                            <span className="tabular-nums group-open:hidden">+{here.length - cap} more</span><span className="hidden group-open:inline">Show fewer</span>
+                          </summary>
+                          <div className="mt-1.5 space-y-1.5">{here.slice(cap).map(card)}</div>
+                        </details>
+                      )}
                     </div>
                   );
                 })}
