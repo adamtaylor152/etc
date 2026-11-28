@@ -45,7 +45,7 @@ export default async function MyTime({ searchParams }: PageProps<"/time">) {
         {running ? (
           <form action={clockOutAction}>
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <Badge tone={isGeneral(running) ? "green" : "navy"}>{isGeneral(running) ? "On the clock" : "Timing a visit"}</Badge>
+              <Badge tone={isGeneral(running) ? "green" : "blue"}>{isGeneral(running) ? "On the clock" : "Timing a visit"}</Badge>
               <span className="text-sm tabular-nums text-ink-soft">since {clockTime(running.startedAt)}</span>
             </div>
             <p className="mt-3 text-center font-display text-[3.25rem] font-semibold leading-none"><RunningClock since={running.startedAt.toISOString()} /></p>

@@ -13,6 +13,12 @@ import { setRequestArchived } from "../../actions";
 import { requestPhotos } from "../../photo-actions";
 import { Gallery } from "@/components/gallery";
 
+export async function generateMetadata({ params }: PageProps<"/requests/[id]">) {
+  await requireOwner();
+  const r = await db.request.findFirst({ where: { id: (await params).id, businessId: await businessId() }, select: { number: true } });
+  return { title: r ? `Request #${r.number}` : "Request" };
+}
+
 export default async function RequestPage({ params, searchParams }: PageProps<"/requests/[id]">) {
   await requireOwner();
   const { id } = await params;
