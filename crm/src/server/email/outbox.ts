@@ -116,6 +116,7 @@ async function drain() {
 
 /** Fire-and-forget after a commit so mail goes out now instead of on the next tick. */
 export function kickOutbox() {
+  if (process.env.VITEST) return; // tests queue mail but never send it
   processOutbox().catch((e) => console.error("outbox", e));
 }
 

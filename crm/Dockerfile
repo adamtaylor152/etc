@@ -31,6 +31,6 @@ COPY --from=build --chown=app /app/prisma.config.ts /opt/migrate/
 COPY --from=build --chown=app /app/src/generated /opt/migrate/src/generated
 USER app
 EXPOSE 3000
-HEALTHCHECK --interval=30s --timeout=3s --start-period=40s CMD node -e "fetch('http://127.0.0.1:3000/api/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+HEALTHCHECK --interval=30s --timeout=3s --start-period=40s CMD node -e "fetch('http://127.0.0.1:3000/api/healthz?live=1').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 # Prisma takes an advisory lock, so two containers starting together won't both migrate. Seed is idempotent.
 CMD ["sh", "-c", "cd /opt/migrate && node_modules/.bin/prisma migrate deploy && node_modules/.bin/tsx prisma/seed.ts && cd /app && exec node server.js"]

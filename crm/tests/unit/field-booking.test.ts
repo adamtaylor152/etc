@@ -90,3 +90,23 @@ describe("driveway size", () => {
     expect(sizeNote(false, { sizeCheckedAt: null, driveSize: null })).toBeNull();
   });
 });
+
+import { verdict } from "@/server/health";
+
+describe("health verdict", () => {
+  const ok = { dbOk: true, cronEnabled: true, lastTickMs: 30_000, upMs: 3_600_000, emailStuck: 0, emailFailed: 0, smsFailed: 0 };
+  it("up when the database answers and the scheduler ticked recently", () => {
+    expect(verdict(ok)).toEqual({ up: true, checks: { db: true, scheduler: true, emails: true, texts: true } });
+  });
+  it("down when the database or scheduler is out; fresh boots get a grace period", () => {
+    expect(verdict({ ...ok, dbOk: false }).up).toBe(false);
+    expect(verdict({ ...ok, lastTickMs: 6 * 60_000 }).up).toBe(false);
+    expect(verdict({ ...ok, lastTickMs: null, upMs: 60_000 }).up).toBe(true);
+    expect(verdict({ ...ok, lastTickMs: null, cronEnabled: false }).up).toBe(true);
+  });
+  it("mail and text trouble is flagged but isn't 'down'; one bad address doesn't alert", () => {
+    expect(verdict({ ...ok, emailStuck: 1 })).toMatchObject({ up: true, checks: { emails: false } });
+    expect(verdict({ ...ok, emailFailed: 1 }).checks.emails).toBe(true);
+    expect(verdict({ ...ok, smsFailed: 3 }).checks.texts).toBe(false);
+  });
+});

@@ -2,6 +2,7 @@
 // The outbox is already safe across containers (SKIP LOCKED). Automations added later (reminders, snow alerts)
 // run inside `exclusive()`, a transaction-scoped advisory lock, plus per-message dedupe keys.
 import { createStorm } from "./ops/storms";
+import { health, markTick } from "./health";
 import { retryTextMedia } from "./ops/texts";
 import { sendReviewRequests } from "./ops/marketing";
 import { syncTelnyxCalls } from "./ops/calls";
@@ -29,6 +30,7 @@ export function startScheduler() {
 let lastHourly = 0;
 export async function tick() {
   await processOutbox();
+  markTick(); // heartbeat for /api/healthz: set once the outbox run finishes
   await retryTextMedia();
   if (Date.now() - lastCallSync > 5 * 60_000) {
     lastCallSync = Date.now();
@@ -55,6 +57,20 @@ async function hourly() {
   if (hour === 17) await visitReminders();
   if (hour >= 10 && hour < 18) await reviewRequests();
   if (hour === 6) await dailyDigest();
+  await opsAlerts();
+}
+
+/** Texts failing: email the owners (once a day). Emails failing can't be emailed: the outside monitor catches those. */
+async function opsAlerts() {
+  const h = await health();
+  if (h.checks.texts) return;
+  const biz = await db.business.findUnique({ where: { slug: env.businessSlug } });
+  if (!biz) return;
+  for (const to of env.ownerEmails) {
+    await enqueue(db, { businessId: biz.id, template: "owner.notice", to, priority: 2, dedupeKey: `ops:texts:${todayLocal()}:${to}`, props: {
+      title: "Texts are failing", body: `${h.counts.smsFailed} text messages failed in the last 2 hours. Check the Telnyx number and balance.`, path: "/messages",
+    } });
+  }
 }
 
 /** 1st of the month: draft invoices for recurring (monthly-billed) work. Re-runs find nothing left to bill. */
