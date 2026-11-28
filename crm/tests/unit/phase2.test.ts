@@ -99,3 +99,20 @@ describe("checklists", () => {
     expect(missingRequired(items, { a: false, b: "maybe", c: "" }, ["checklist:x"])).toEqual(["Driveway", "Ice melt", "Windows", "After photo"]);
   });
 });
+
+import { decodeSignature, docHash, inkPixels } from "@/server/ops/signatures";
+describe("signatures", () => {
+  it("rejects anything that isn't a reasonable PNG data URL", () => {
+    expect(() => decodeSignature("not a data url")).toThrow();
+    expect(() => decodeSignature("data:image/png;base64,AAAA")).toThrow(); // too small
+    expect(decodeSignature(`data:image/png;base64,${Buffer.alloc(200, 1).toString("base64")}`).length).toBe(200);
+  });
+  it("counts only dark, opaque pixels as ink", () => {
+    const raw = new Uint8Array([20, 30, 60, 255, 255, 255, 255, 255, 10, 10, 10, 0, 0, 0, 0, 200]);
+    expect(inkPixels(raw)).toBe(2);
+  });
+  it("hashes the document deterministically", () => {
+    expect(docHash({ a: 1, l: [["x", "1", 100]] })).toBe(docHash({ a: 1, l: [["x", "1", 100]] }));
+    expect(docHash({ a: 1 })).not.toBe(docHash({ a: 2 }));
+  });
+});

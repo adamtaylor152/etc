@@ -607,6 +607,7 @@ model Job {
   @@index([businessId, kind, seasonId])
   // raw SQL in migration: one open snow plan per property per season
   checklistTemplateId String? // each visit gets a copy of this checklist
+  requireSignature Boolean @default(false) // client signs on the phone before a visit can be marked Done
 }
 
 model JobLineItem {
@@ -1110,4 +1111,32 @@ model VisitChecklist {
   answers      Json      @default("{}")
   completedAt  DateTime?
   updatedAt    DateTime  @updatedAt
+}
+
+enum SignatureKind {
+  QUOTE
+  VISIT
+  INVOICE
+}
+
+/** A drawn signature: who, what they agreed to, a hash of the document at that moment, and where from. */
+model Signature {
+  id           String        @id @default(cuid())
+  businessId   String
+  kind         SignatureKind
+  quoteId      String?
+  visitId      String?
+  invoiceId    String?
+  attachmentId String
+  signerName   String
+  statement    String
+  docHash      String?
+  ip           String?
+  userAgent    String?
+  inPerson     Boolean       @default(false) // signed on the owner's phone
+  signedAt     DateTime      @default(now())
+
+  @@index([quoteId])
+  @@index([visitId])
+  @@index([invoiceId])
 }

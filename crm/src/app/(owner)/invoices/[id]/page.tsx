@@ -1,3 +1,4 @@
+import { SignatureCard } from "@/components/signatures";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Flash } from "@/components/flash";
@@ -112,7 +113,7 @@ export default async function InvoicePage({ params, searchParams }: PageProps<"/
             </div>
           </Card>
         </div>
-        <RecordPanel businessId={bid} target={{ invoiceId: inv.id }} clientId={inv.clientId} path={here} />
+        <div className="space-y-5"><SignatureCard where={{ invoiceId: inv.id }} signHref={`/sign/invoice/${inv.id}`} /><RecordPanel businessId={bid} target={{ invoiceId: inv.id }} clientId={inv.clientId} path={here} /></div>
       </div>
     </>
   );

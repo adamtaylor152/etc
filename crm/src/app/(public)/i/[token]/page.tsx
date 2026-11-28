@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-img-element -- private photos/signatures via signed URLs, not optimizable */
 // Client invoice page: view, pay by card (Stripe Checkout), e-Transfer instructions, print / save as PDF.
 import { Button, Card } from "@/components/ui";
 import { InvoiceBadge } from "@/components/status";
@@ -9,6 +10,11 @@ import { money } from "@/server/money";
 import { clientName } from "@/server/queries";
 import { stripeEnabled } from "@/server/stripe";
 import { peekToken } from "@/server/tokens";
+import { prettyDateTime } from "@/server/dates";
+import { signedMediaPath } from "@/server/media";
+import { SignaturePad } from "@/components/signature-pad";
+import { STATEMENTS } from "@/server/ops/signatures";
+import { clientSignInvoice } from "./actions";
 import { payByCard } from "./actions";
 
 export const metadata = { title: { absolute: "Your invoice · etc." } };
@@ -27,6 +33,7 @@ export default async function PublicInvoice({ params, searchParams }: PageProps<
   const view = invoiceView({ ...inv, dueOn: dateOnly(inv.dueOn) }, todayLocal());
   const balance = Math.max(0, inv.totalCents - inv.amountPaidCents);
   const etransfer = biz.etransferEmail || env.etransferEmail;
+  const sig = await db.signature.findFirst({ where: { invoiceId: inv.id }, orderBy: { signedAt: "desc" } });
   return (
     <div className="space-y-4">
       {sp.paid && balance > 0 && <p className="no-print rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-medium text-emerald-800">Thanks! Your payment is processing; a receipt is on its way by email.</p>}
@@ -74,6 +81,20 @@ export default async function PublicInvoice({ params, searchParams }: PageProps<
       ) : inv.status === "PAID" ? (
         <Card className="border-emerald-200 bg-emerald-50"><p className="font-semibold text-emerald-800">Paid in full. Thank you!</p></Card>
       ) : null}
+      {sig ? (
+        <Card title="Signed"><div className="flex items-center gap-3"><img src={signedMediaPath(sig.attachmentId, "sm", 30)} alt="Signature" className="h-14 w-36 rounded border border-line object-contain" /><span className="text-sm">{sig.signerName}<span className="block text-xs text-ink-soft">{prettyDateTime(sig.signedAt)}</span></span></div></Card>
+      ) : (
+        <details className="no-print rounded-lg border border-line bg-white p-4">
+          <summary className="cursor-pointer text-sm font-semibold">Sign to confirm (optional)</summary>
+          <form action={clientSignInvoice} className="mt-3 space-y-3">
+            <input type="hidden" name="t" value={token} />
+            <p className="text-sm text-ink-soft">“{STATEMENTS.INVOICE}”</p>
+            <label className="block text-sm font-semibold">Name<input name="name" required className="mt-1 min-h-11 w-full rounded-lg border border-line px-3" /></label>
+            <SignaturePad />
+            <button className="min-h-11 rounded-lg bg-navy px-4 font-semibold text-white">Sign</button>
+          </form>
+        </details>
+      )}
       <p className="no-print text-center"><a href="javascript:print()" className="text-sm font-semibold text-blue">Print or save as PDF</a></p>
     </div>
   );
