@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assertQuoteTransition, followUpDue, quoteDiscountCents, quoteEditable, quoteExpired, quoteTotal, quoteTotals } from "@/server/status/quote";
+import { assertQuoteTransition, followUpDue, optionLines, optionTotal, quoteDiscountCents, quoteEditable, quoteExpired, quoteOptions, quoteTotal, quoteTotals, valuedOption } from "@/server/status/quote";
 
 describe("quote transitions", () => {
   it("allows the normal flow", () => {
@@ -63,6 +63,50 @@ describe("quote money", () => {
     expect(quoteTotals(lines, 500, reg)).toMatchObject({ subtotalCents: 14500, taxCents: 700, totalCents: 14700 });
     // registered, prices include GST: total unchanged, GST is the portion inside it
     expect(quoteTotals(lines, 500, { ...reg, pricesIncludeTax: true })).toMatchObject({ taxCents: 667, totalCents: 14000 });
+  });
+  describe("option sets", () => {
+    const none = { discountType: "FIXED", discountValue: 0, discountCents: 0 };
+    const pct = { discountType: "PERCENT", discountValue: 1000, discountCents: 0 }; // 10%
+    const opts = [{ key: "a", name: "Basic", recommended: false }, { key: "b", name: "Full", recommended: false }, { key: "c", name: "Full + wash", recommended: false }];
+    const set = [
+      { totalCents: 2000, isOptional: false, isSelected: true }, // common: dump fee
+      { totalCents: 16000, isOptional: false, isSelected: true, optionKey: "a" },
+      { totalCents: 30000, isOptional: false, isSelected: true, optionKey: "b" },
+      { totalCents: 30000, isOptional: false, isSelected: true, optionKey: "c" },
+      { totalCents: 13000, isOptional: false, isSelected: true, optionKey: "c" },
+      { totalCents: 5000, isOptional: true, isSelected: false, optionKey: "b" }, // extra offered only with "Full"
+    ];
+    it("without options every line counts, exactly as before", () => {
+      for (const key of [null, undefined, "a"]) expect(optionLines(lines, key)).toEqual(lines);
+      expect(quoteTotal(optionLines(lines, null), 500)).toBe(quoteTotal(lines, 500));
+      expect(valuedOption([], lines, none)).toBeNull();
+      expect(quoteOptions([])).toEqual([]);
+      expect(quoteOptions(null)).toEqual([]);
+      expect(quoteOptions("nope")).toEqual([]);
+      expect(quoteOptions([{ key: "a", name: "Basic", recommended: true }, { key: 1 }, null])).toEqual([{ key: "a", name: "Basic", recommended: true }]);
+    });
+    it("an option's total is its own lines plus the common ones", () => {
+      expect(optionTotal(set, none, "a")).toBe(18000);
+      expect(optionTotal(set, none, "b")).toBe(32000);
+      expect(optionTotal(set, none, "c")).toBe(45000);
+      expect(optionLines(set, null)).toHaveLength(1); // nothing chosen yet: just the common line
+    });
+    it("ticked extras, percent discounts and GST follow the chosen option", () => {
+      const ticked = set.map((l) => ({ ...l, isSelected: true }));
+      expect(optionTotal(ticked, none, "b")).toBe(37000);
+      expect(optionTotal(ticked, none, "a")).toBe(18000); // the extra belongs to another option
+      expect(optionTotal(set, pct, "a")).toBe(16200);
+      expect(optionTotal(set, pct, "c")).toBe(40500);
+      const c = optionLines(set, "c");
+      expect(quoteTotals(c, quoteDiscountCents(c, pct), { taxRegistered: true, taxRateBps: 500, pricesIncludeTax: false })).toMatchObject({ subtotalCents: 45000, taxCents: 2025, totalCents: 42525 });
+    });
+    it("is valued at the chosen option, else the recommended one, else the cheapest", () => {
+      expect(valuedOption(opts, set, none)).toBe("a");
+      expect(valuedOption([opts[2], opts[1], opts[0]], set, none)).toBe("a"); // cheapest, whatever the order
+      expect(valuedOption(opts.map((o) => ({ ...o, recommended: o.key === "b" })), set, none)).toBe("b");
+      expect(valuedOption(opts.map((o) => ({ ...o, recommended: o.key === "b" })), set, none, "c")).toBe("c");
+      expect(valuedOption(opts, set, none, "gone")).toBe("a"); // an unknown key is ignored
+    });
   });
   it("expires after valid-until while awaiting a response", () => {
     expect(quoteExpired({ status: "AWAITING_RESPONSE", validUntil: "2026-12-01" }, "2026-12-02")).toBe(true);

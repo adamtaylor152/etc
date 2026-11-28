@@ -3,6 +3,9 @@ import { BLUE, BODY_FONT, Button, EtcEmail, Eyebrow, FONT, Footer, H1, Header, I
 export type QuoteEmailData = {
   name: string; number: number; title: string; message: string | null; validUntil: string | null; total: string;
   lines: { name: string; amount: string; optional: boolean }[]; url: string; site: string; phone: string;
+  /** Options still to choose between, each with what the client would pay; `lines` are then only the ones common to all. */
+  options?: { name: string; total: string; recommended: boolean }[];
+  chosen?: string; // the option they approved
 };
 
 function QuoteLines({ d }: { d: QuoteEmailData }) {
@@ -18,12 +21,21 @@ function QuoteLines({ d }: { d: QuoteEmailData }) {
               <td align="right" style={{ padding: "10px 0", borderTop: i ? `1px solid ${LINE}` : undefined, fontFamily: BODY_FONT, fontSize: 14, fontWeight: 600, color: NAVY }}>{l.amount}</td>
             </tr>
           ))}
-          <tr>
-            <td style={{ padding: "12px 0 6px", borderTop: `2px solid ${NAVY}`, fontFamily: BODY_FONT, fontSize: 15, fontWeight: 600, color: NAVY }}>Total</td>
-            <td align="right" style={{ padding: "12px 0 6px", borderTop: `2px solid ${NAVY}`, fontFamily: FONT, fontSize: 22, fontWeight: 700, color: BLUE }}>{d.total}</td>
-          </tr>
+          {d.options?.length ? d.options.map((o, i) => (
+            <tr key={`o${i}`}>
+              <td style={{ padding: "12px 0", borderTop: `${i ? 1 : 2}px solid ${i ? LINE : NAVY}`, fontFamily: BODY_FONT, fontSize: 15, fontWeight: 600, color: NAVY }}>
+                {o.name}{o.recommended && <span style={{ color: BLUE }}> (recommended)</span>}
+              </td>
+              <td align="right" style={{ padding: "12px 0", borderTop: `${i ? 1 : 2}px solid ${i ? LINE : NAVY}`, fontFamily: FONT, fontSize: 18, fontWeight: 700, color: BLUE }}>{o.total}</td>
+            </tr>
+          )) : (
+            <tr>
+              <td style={{ padding: "12px 0 6px", borderTop: `2px solid ${NAVY}`, fontFamily: BODY_FONT, fontSize: 15, fontWeight: 600, color: NAVY }}>Total{d.chosen && ` (${d.chosen})`}</td>
+              <td align="right" style={{ padding: "12px 0 6px", borderTop: `2px solid ${NAVY}`, fontFamily: FONT, fontSize: 22, fontWeight: 700, color: BLUE }}>{d.total}</td>
+            </tr>
+          )}
         </Table>
-        <div style={{ fontFamily: BODY_FONT, fontSize: 12, color: INK_SOFT, paddingBottom: 8 }}>Tax included. Optional items can be added or left off when you approve.</div>
+        <div style={{ fontFamily: BODY_FONT, fontSize: 12, color: INK_SOFT, paddingBottom: 8 }}>Tax included. {d.options?.length ? "Each option's price is the full total; choose one when you approve. " : ""}Optional items can be added or left off when you approve.</div>
       </td></tr>
     </Table>
   );
