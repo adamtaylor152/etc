@@ -1,5 +1,6 @@
 // Email outbox. Writers enqueue inside their own transaction (so a mail outage never loses a booking);
 // processOutbox() claims rows with FOR UPDATE SKIP LOCKED, so two containers during a deploy can't double-send.
+import { markBounced, permanentRejection } from "./bounce";
 import { render, toPlainText } from "@react-email/render";
 import nodemailer, { type Transporter } from "nodemailer";
 import type { EmailMessage, Prisma } from "@/generated/prisma/client";
@@ -68,7 +69,9 @@ async function sendOne(m: EmailMessage) {
     const info = await tx.sendMail({ from: env.mailFrom, to: m.to, cc: m.cc.length ? m.cc : undefined, replyTo: m.replyTo ?? undefined, subject: m.subject, html, text, headers });
     await db.emailMessage.update({ where: { id: m.id }, data: { status: "SENT", sentAt: new Date(), providerMessageId: info.messageId, lastError: null } });
   } catch (e) {
-    const failed = m.attempts >= MAX_ATTEMPTS;
+    const dead = permanentRejection(e); // no such mailbox: retrying won't help
+    if (dead) await markBounced(m.businessId, m.to);
+    const failed = dead || m.attempts >= MAX_ATTEMPTS;
     const backoffMin = Math.min(2 ** m.attempts, 120);
     console.error(`email ${m.id} (${m.template}) failed`, e);
     await db.emailMessage.update({
