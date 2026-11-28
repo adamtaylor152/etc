@@ -1,12 +1,22 @@
 "use client";
 // The CRM's own booking form (app.etccrew.ca/book). Posts to the same /api/public/bookings as etccrew.ca's wizard,
 // so validation, pricing and emails are identical. Services and prices come from the price book.
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import type { WindowKey } from "@/server/windows";
+import { AddressField } from "./address-field";
 import { shrink } from "./photo-uploader";
 
 type Service = { label: string; price: string | null };
+type Slots = { windows: { key: WindowKey; label: string; hint: string }[]; days: { date: string; windows: WindowKey[] }[] };
+const dayName = (d: string) => new Date(`${d}T12:00`).toLocaleDateString("en-CA", { weekday: "short", month: "short", day: "numeric" });
 
-export function BookingForm({ services, phone }: { services: Service[]; phone: string }) {
+export function BookingForm({ services, phone, mapsKey, refCode }: { services: Service[]; phone: string; mapsKey?: string; refCode?: string }) {
+  // Open times for the look-and-quote visit. ponytail: arrival windows only; the API also takes exact start times.
+  const [slots, setSlots] = useState<Slots | null>(null);
+  const [slot, setSlot] = useState<{ date: string; window: WindowKey } | null>(null);
+  const [dayPick, setDayPick] = useState<string | null>(null);
+  const loadSlots = () => fetch("/api/public/slots", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then(setSlots).catch(() => setSlots(null));
+  useEffect(() => { void loadSlots(); }, []);
   const [picked, setPicked] = useState<string[]>([]);
   const [plan, setPlan] = useState("One-time visit");
   const [size, setSize] = useState("Standard");
@@ -14,6 +24,10 @@ export function BookingForm({ services, phone }: { services: Service[]; phone: s
   const [state, setState] = useState<{ status: "idle" | "sending" | "done" | "error"; msg?: string; upload?: string; estimate?: string; id?: number; sent?: number; unsent?: number }>({ status: "idle" });
   const shovel = picked.includes("Snow shovelling");
   const quoted = picked.some((s) => s !== "Snow shovelling") || (shovel && size === "Oversized"); // same rule as the server
+  const assess = picked.some((s) => s !== "Snow shovelling"); // these get an on-site look first (same rule as the server)
+  const days = (slots?.days ?? []).filter((d) => d.windows.length);
+  const pickTime = assess && days.length > 0;
+  const day = days.find((d) => d.date === dayPick) ?? days[0];
   const input = "w-full min-h-11 rounded-xl border border-line bg-white px-3 py-2 text-base";
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
@@ -22,13 +36,17 @@ export function BookingForm({ services, phone }: { services: Service[]; phone: s
     if (!picked.length) return setState({ status: "error", msg: "Pick at least one service." });
     setState({ status: "sending" });
     const body = {
-      name: f.get("name"), email: f.get("email"), phone: f.get("phone"), address: f.get("address"), access: f.get("access"),
+      name: f.get("name"), email: f.get("email"), phone: f.get("phone"), address: f.get("formatted"), access: f.get("access"),
+      // set only when they picked a suggestion from the address list
+      ...(f.get("lat") ? { lat: Number(f.get("lat")), lng: Number(f.get("lng")), placeId: f.get("placeId"), postalCode: f.get("postalCode") } : {}),
       services: picked, plan: shovel ? plan : "", icemelt: shovel && f.get("icemelt") === "on",
       size: shovel ? f.get("size") : undefined, extraWalk: shovel && f.get("extraWalk") === "on",
       date: shovel && plan === "Every snowfall" ? "" : f.get("date"), notes: f.get("notes"), payment: f.get("payment"), website: f.get("website"), smsOptIn: f.get("smsOptIn") === "on",
+      offers: f.get("offers") === "on", ...(refCode ? { ref: refCode } : {}), ...(pickTime && slot ? { slot } : {}),
     };
     const res = await fetch("/api/public/bookings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).catch(() => null);
     const data = await res?.json().catch(() => ({}));
+    if (data?.slotTaken) { setSlot(null); void loadSlots(); }
     if (!res?.ok) return setState({ status: "error", msg: `${data?.error ?? "Couldn't reach us."} You can also call ${phone}.` });
     // Quote jobs come back with a photo link: send the photos they picked through it, one at a time.
     const send = quoted && data.uploadUrl ? photos : [];
@@ -65,7 +83,8 @@ export function BookingForm({ services, phone }: { services: Service[]; phone: s
         <label className="text-sm font-semibold">Email<input name="email" type="email" required autoComplete="email" className={input} /></label>
         <label className="text-sm font-semibold">Phone (optional)<input name="phone" type="tel" autoComplete="tel" className={input} />
           <span className="mt-1 flex items-center gap-2 font-normal text-ink-soft"><input type="checkbox" name="smsOptIn" className="size-4" /> Text me when you&apos;re on the way &amp; done</span></label>
-        <label className="text-sm font-semibold sm:col-span-2">Address<input name="address" required maxLength={300} autoComplete="street-address" placeholder="123 Evergreen Way SW, Calgary" className={input} /></label>
+        <label className="flex items-center gap-2 text-sm text-ink-soft sm:col-span-2"><input type="checkbox" name="offers" className="size-4" /> Email me seasonal offers from etc. (a few a year; unsubscribe any time)</label>
+        <div className="text-sm font-semibold sm:col-span-2">Address<AddressField mapsKey={mapsKey} /></div>
         <label className="text-sm font-semibold sm:col-span-2">Access notes (optional)<input name="access" maxLength={300} placeholder="Side gate code, dog in the yard…" className={input} /></label>
       </fieldset>
       <fieldset>
@@ -95,7 +114,25 @@ export function BookingForm({ services, phone }: { services: Service[]; phone: s
           <p className="text-xs text-ink-soft">Prices are for the size you pick. We check every driveway on the map before the first visit; if it&apos;s bigger, we&apos;ll send you the right price to OK first.</p>
         </fieldset>
       )}
-      {!(shovel && plan === "Every snowfall") && <label className="block text-sm font-semibold">Preferred date (optional)<input name="date" type="date" className={input} /></label>}
+      {pickTime && day && (
+        <fieldset>
+          <legend className="font-semibold">When can we come take a look? (optional)</legend>
+          <p className="mb-2 text-sm text-ink-soft">We&apos;ll come by, see the job and give you a price.</p>
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {days.map((d) => <button key={d.date} type="button" aria-pressed={d.date === day.date} onClick={() => { setDayPick(d.date); setSlot(null); }}
+              className={`flex-none rounded-xl border px-3 py-2 text-sm ${d.date === day.date ? "border-blue bg-blue/5 font-semibold" : "border-line"}`}>{dayName(d.date)}</button>)}
+          </div>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {slots!.windows.filter((w) => day.windows.includes(w.key)).map((w) => (
+              <label key={w.key} className={`rounded-xl border px-3 py-2 text-sm ${slot?.date === day.date && slot.window === w.key ? "border-blue bg-blue/5 font-semibold" : "border-line"}`}>
+                <input type="radio" name="slotWindow" className="sr-only" checked={slot?.date === day.date && slot.window === w.key} onChange={() => setSlot({ date: day.date, window: w.key })} />
+                {w.label} <span className="font-normal text-ink-soft">{w.hint}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      )}
+      {!(shovel && plan === "Every snowfall") && !(pickTime && !shovel) && <label className="block text-sm font-semibold">Preferred date (optional)<input name="date" type="date" className={input} /></label>}
       {quoted && (
         <label className="block text-sm font-semibold">Photos of the job (optional, up to 20)
           <span className="block font-normal text-ink-soft">The whole area, close-ups of the tricky bits, and how we get there. We can often quote from photos alone.</span>
