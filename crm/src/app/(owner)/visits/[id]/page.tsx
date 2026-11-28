@@ -1,3 +1,4 @@
+import { siteFacts } from "@/server/clients";
 import { SignatureCard } from "@/components/signatures";
 import { VisitChecklistCard } from "@/components/visit-checklist";
 import { assignPeople } from "../../schedule-actions";
@@ -86,9 +87,9 @@ export default async function VisitPage({ params, searchParams }: PageProps<"/vi
         </div>
       </div>
 
-      {(v.property.accessNotes || v.property.gateCode || v.property.hazards || v.property.petNotes || v.job.instructions || v.instructions) && (
+      {(v.property.accessNotes || v.property.gateCode || v.property.hazards || v.property.petNotes || v.job.instructions || v.instructions || siteFacts(v.property)) && (
         <Card className="mb-4 border-amber-200 bg-amber-50">
-          <Dl rows={[["Access", v.property.accessNotes], ["Gate code", v.property.gateCode], ["Pets", v.property.petNotes], ["Watch out", v.property.hazards], ["Instructions", v.instructions ?? v.job.instructions]]} />
+          <Dl rows={[["Access", v.property.accessNotes], ["Gate code", v.property.gateCode], ["Pets", v.property.petNotes], ["Watch out", v.property.hazards], ["Site", siteFacts(v.property)], ["Instructions", v.instructions ?? v.job.instructions]]} />
         </Card>
       )}
 

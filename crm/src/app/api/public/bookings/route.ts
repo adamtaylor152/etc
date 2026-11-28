@@ -1,5 +1,6 @@
 // Public booking endpoint for etccrew.ca/book.html (cross-origin). Same rules as the Python /api/bookings:
 // 16KB cap, honeypot, 5 bookings / 10 min / IP, identical validation and estimate.
+import { leadSourceFromUtm } from "@/server/clients";
 import { placeBooking } from "@/server/booking/create";
 import { recordReferral } from "@/server/ops/marketing";
 import { BookingError, bookingLabels, validate } from "@/server/booking/validate";
@@ -47,7 +48,7 @@ export async function POST(req: Request) {
     if (e instanceof BookingError) return json(req, 400, { error: e.message.charAt(0).toUpperCase() + e.message.slice(1) + "." });
     throw e;
   }
-  const res = await placeBooking(booking, data.slot, { businessId: bid, source: "BOOKING_FORM", ip: clientIp(req), userAgent: req.headers.get("user-agent") ?? undefined, raw: data });
+  const res = await placeBooking(booking, data.slot, { businessId: bid, source: "BOOKING_FORM", ip: clientIp(req), userAgent: req.headers.get("user-agent") ?? undefined, raw: data, leadSource: leadSourceFromUtm(data.utm) ?? (typeof data.ref === "string" && data.ref ? "Referral" : null) });
   if (!res) return json(req, 409, { error: "Sorry, that time just filled up. Please pick another.", slotTaken: true });
   if (data.smsOptIn === true && booking.phone) {
     const client = await db.client.update({ where: { id: res.clientId }, data: { smsOptIn: true } });

@@ -1,5 +1,6 @@
 // Client profile, Jobber layout: header (+ Create / More), contact info, properties, contacts, tabbed work/activity/
 // communication/files, billing history; right column: lifetime value + balance, last communication, notes.
+import { siteFacts } from "@/server/clients";
 import { requireOwner } from "@/server/auth";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -121,6 +122,7 @@ export default async function ClientPage({ params, searchParams }: PageProps<"/c
       />
 
       <Flash error={sp.error} />
+      {c.doNotService && <p role="alert" className="mb-5 rounded-lg border border-red-300 bg-red-50 p-3 text-sm font-semibold text-red-800">Do not service. Check the notes before booking anything for this client.</p>}
       {dups.length > 0 && !c.archivedAt && (
         <div className="mb-5 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm">
           <p className="font-semibold text-amber-900">Possible duplicate{dups.length === 1 ? "" : "s"}</p>
@@ -162,7 +164,7 @@ export default async function ClientPage({ params, searchParams }: PageProps<"/c
                         <MapPin className="mt-0.5 size-4 shrink-0 text-ink-soft" aria-hidden />
                         <div className="min-w-0 flex-1">
                           <a className="font-semibold text-blue" href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(p.formatted)}`} target="_blank" rel="noreferrer">{p.label ? `${p.label}: ` : ""}{p.formatted}</a>
-                          <div className="text-xs text-ink-soft">{[p.isDefault && "Main", p.community?.name ?? "No community", p.gateCode && `Gate ${p.gateCode}`, p.accessNotes, p.petNotes && `Pets: ${p.petNotes}`].filter(Boolean).join(" · ")}</div>
+                          <div className="text-xs text-ink-soft">{[p.isDefault && "Main", p.community?.name ?? "No community", p.gateCode && `Gate ${p.gateCode}`, p.accessNotes, p.petNotes && `Pets: ${p.petNotes}`, siteFacts(p)].filter(Boolean).join(" · ")}</div>
                         </div>
                         <Link href={`/properties/${p.id}/edit`} className="text-xs font-semibold text-blue">Edit</Link>
                         {c.properties.length > 1 && <form action={propertyArchive}><input type="hidden" name="id" value={p.id} /><input type="hidden" name="archive" value="1" /><button className="text-xs text-ink-soft hover:text-red-700">Remove</button></form>}
