@@ -67,15 +67,27 @@ export async function automation(name: string, fn: () => Promise<unknown>) {
   await db.automationRun.upsert({ where: { name }, create: { name, ...data }, update: data }).catch((e) => console.error(`automation ${name}: could not record the run`, e));
 }
 
+/**
+ * A job that should happen once a day at `atHour` (Calgary time). The hourly tick drifts and can skip a clock hour, and
+ * the container can be down at the wrong moment, so instead of "is it exactly that hour" this asks "is it that hour or
+ * later (up to `untilHour`), and has it not succeeded yet today". AutomationRun remembers the last success.
+ */
+async function daily(name: string, hour: number, atHour: number, untilHour: number, fn: () => Promise<unknown>) {
+  if (hour < atHour || hour > untilHour) return;
+  const last = (await db.automationRun.findUnique({ where: { name } }))?.lastOkAt;
+  if (last && todayLocal(last) === todayLocal()) return;
+  await automation(name, fn);
+}
+
 /** Hourly automations. Each one is idempotent (dedupe keys / state checks), so a missed or doubled run is harmless. */
 async function hourly() {
   const hour = Number(new Intl.DateTimeFormat("en-CA", { timeZone: TZ, hour: "numeric", hourCycle: "h23" }).format(new Date()));
-  if (hour === 9) await automation("lateFees", async () => { await applyLateFees(); }); // once a day, before that day's reminders go out
+  await daily("lateFees", hour, 9, 17, async () => { await applyLateFees(); }); // once a day, before that day's reminders go out
   if (hour >= 8 && hour < 20) await automation("invoiceReminders", invoiceReminders); // no reminder emails at night
   if (hour >= 7 && hour < 22) await automation("snowAlert", snowAlert);
   if (hour >= 9 && hour < 19) await automation("quoteFollowUps", () => quoteFollowUps());
   await automation("recurringVisits", async () => { for (const b of await db.business.findMany({ select: { id: true } })) await generateRecurringVisits(b.id); });
-  if (hour === 7) await automation("monthlyInvoices", monthlyInvoices);
+  await daily("monthlyInvoices", hour, 7, 20, monthlyInvoices);
   if (hour >= 7 && hour < 20) await automation("seasonalInstalments", invoiceSeasonalInstalments); // due instalments of seasonal snow plans; emails the client
   if (hour >= 7 && hour < 20) await automation("recurringInvoices", invoiceRecurringPeriods); // recurring jobs on a fixed monthly price: a draft per month due
   if (hour >= 8 && hour < 20) await automation("autoPay", runAutoPay); // saved cards: charge due invoices, retry failed ones
@@ -83,7 +95,7 @@ async function hourly() {
   if (hour >= 10 && hour < 18) await automation("reviewRequests", reviewRequests);
   if (hour >= 9 && hour < 19) await automation("marketingAutomations", async () => { await runAutomations(); }); // win-back and plan renewal emails, if switched on (Marketing)
   await automation("campaignsSent", async () => { await markScheduledSent(); });
-  if (hour === 6) await automation("dailyDigest", dailyDigest);
+  await daily("dailyDigest", hour, 6, 9, dailyDigest);
   await automation("rateLimitSweep", () => sweepRateLimits());
   if (hour === 4) await automation("linkTokenSweep", () => sweepExpiredTokens(db)); // once a day: links that expired
   await automation("opsAlerts", opsAlerts);
@@ -136,9 +148,9 @@ async function visitReminders(hour: number) {
       for (const v of visits) {
         if (!v.job.client.emailBouncedAt) await enqueue(db, {
           businessId: v.businessId, template: "visit.reminder", to: v.job.client.email, replyTo: env.helpEmail, priority: 5, props: { visitId: v.id },
-          dedupeKey: `visit:${v.id}:reminder:${date}:${date === today ? "day-of" : "ahead"}`, clientId: v.job.clientId, entityType: "Visit", entityId: v.id,
+          dedupeKey: `visit:${v.id}:reminder:${date}${date === today ? ":day-of" : ""}`, clientId: v.job.clientId, entityType: "Visit", entityId: v.id,
         });
-        await enqueueSms(db, { businessId: v.businessId, template: "sms.visit_reminder", client: v.job.client, props: { visitId: v.id }, dedupeKey: `visit:${v.id}:reminder-sms:${date}:${date === today ? "day-of" : "ahead"}`, entityType: "Visit", entityId: v.id });
+        await enqueueSms(db, { businessId: v.businessId, template: "sms.visit_reminder", client: v.job.client, props: { visitId: v.id }, dedupeKey: `visit:${v.id}:reminder-sms:${date}${date === today ? ":day-of" : ""}`, entityType: "Visit", entityId: v.id });
       }
     }
   }

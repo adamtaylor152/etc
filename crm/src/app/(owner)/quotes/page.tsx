@@ -48,13 +48,13 @@ export default async function Quotes({ searchParams }: PageProps<"/quotes">) {
         { label: "Converted", value: money(won._sum.totalCents ?? 0), sub: `${won._count._all} quotes · past 30 days` },
       ]}
       filters={[{ name: "status", label: "Status", value: status ?? "", options: [{ value: "", label: "All active" }, ...STATUSES.map((s) => ({ value: s, label: QUOTE[s][0] }))] }]}
-      columns={[{ key: "client", label: "Client", sortable: true }, { key: "number", label: "Quote", sortable: true }, { key: "property", label: "Property", className: "hidden md:table-cell" }, { key: "created", label: "Created", sortable: true, className: "hidden sm:table-cell" }, { key: "status", label: "Status", sortable: true }, { key: "total", label: "Total", sortable: true, align: "right" }]}
+      columns={[{ key: "client", label: "Client", sortable: true }, { key: "number", label: "Quote", sortable: true }, { key: "property", label: "Property", className: "hidden md:table-cell" }, { key: "created", label: "Created", sortable: true, align: "right", className: "hidden sm:table-cell" }, { key: "status", label: "Status", sortable: true }, { key: "total", label: "Total", sortable: true, align: "right" }]}
       rows={rows.map((x) => ({
         id: x.id, href: `/quotes/${x.id}`,
         cells: {
-          client: clientName(x.client), number: <><span className="font-semibold">#{x.number}</span> <span className="text-ink-soft">{x.title}</span></>,
-          property: x.property?.formatted.split(",")[0] ?? "—", created: prettyDate(dateOnly(x.createdAt)),
-          status: <Badge tone={QUOTE[x.status][1]}>{QUOTE[x.status][0]}</Badge>, total: money(x.totalCents),
+          client: clientName(x.client), number: <><span className="font-medium tabular-nums">#{x.number}</span> <span className="text-ink-soft">{x.title}</span></>,
+          property: x.property?.formatted.split(",")[0] ?? <span className="text-ink-faint">—</span>, created: <span className="text-ink-soft">{prettyDate(dateOnly(x.createdAt))}</span>,
+          status: <Badge tone={QUOTE[x.status][1]}>{QUOTE[x.status][0]}</Badge>, total: <span className="font-medium">{money(x.totalCents)}</span>,
         },
       }))}
       empty="No quotes match."

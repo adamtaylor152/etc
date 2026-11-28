@@ -6,7 +6,9 @@ import { db } from "../db";
 export function permanentRejection(e: unknown) {
   const err = e as { responseCode?: number; code?: string; command?: string; rejected?: unknown[] } | null;
   if (!err || typeof err.responseCode !== "number" || err.responseCode < 550 || err.responseCode > 554) return false;
-  return err.code === "EENVELOPE" || err.command === "RCPT TO" || (Array.isArray(err.rejected) && err.rejected.length > 0);
+  // EENVELOPE alone is not enough: nodemailer uses it for MAIL FROM and DATA refusals too (our sender blocked, quota),
+  // and flagging every client we tried to mail during such an incident would silently stop their reminders.
+  return err.command === "RCPT TO" || (Array.isArray(err.rejected) && err.rejected.length > 0);
 }
 
 /**

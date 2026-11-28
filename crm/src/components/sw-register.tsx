@@ -11,3 +11,14 @@ export function ServiceWorker() {
   }, []);
   return null;
 }
+
+/**
+ * On the sign-in page: forget the routes this device saved for offline use (client names, addresses, gate codes), so
+ * the next person to pick up a shared phone can't read them. Actions still waiting to send are kept.
+ */
+export function ForgetRoutes() {
+  useEffect(() => {
+    for (const k of Object.keys(localStorage)) if (/^etc-run-\d/.test(k)) localStorage.removeItem(k);
+  }, []);
+  return null;
+}

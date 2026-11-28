@@ -2,6 +2,11 @@
 // Address with Google Places autocomplete (same key as the booking page). Fills hidden lat/lng/placeId/postalCode so the
 // server can find the community. Without a key, or if Google refuses, it's a plain text box plus a manual community pick.
 import { useEffect, useRef, useState } from "react";
+import { Check } from "lucide-react";
+import { inputCls } from "./ui";
+
+// The public booking form (no community pick) is phone-first: 16px type at every width, as its other fields have.
+const PUBLIC = "min-h-10 w-full rounded-lg border border-line bg-white px-3 py-2 text-base outline-none hover:border-ink-faint/60 focus:border-blue focus:ring-2 focus:ring-blue/20";
 
 type Place = { formatted_address?: string; place_id?: string; geometry?: { location: { lat: () => number; lng: () => number } }; address_components?: { long_name: string; types: string[] }[] };
 type G = { maps: { places: { Autocomplete: new (el: HTMLInputElement, o: object) => { addListener: (e: string, f: () => void) => void; getPlace: () => Place } } } };
@@ -49,18 +54,18 @@ export function AddressField({ mapsKey, communities, defaults = {}, prefix = "",
     <div className="space-y-2">
       <input ref={input} name={n("formatted")} defaultValue={defaults.formatted ?? ""} required={required} autoComplete="off"
         placeholder={ready ? "Start typing an address…" : "Street address, Calgary"} onChange={() => setGeo(null)}
-        className="min-h-10 w-full rounded-lg border border-line bg-white px-3 py-2 text-base outline-none focus:border-blue focus:ring-2 focus:ring-blue/20" />
+        aria-label="Address" className={communities ? inputCls : PUBLIC} />
       {geo && <>
         <input type="hidden" name={n("lat")} value={geo.lat} /><input type="hidden" name={n("lng")} value={geo.lng} />
         <input type="hidden" name={n("placeId")} value={geo.placeId} /><input type="hidden" name={n("postalCode")} value={geo.postalCode} />
       </>}
-      {communities && <label className="flex items-center gap-2 text-xs text-ink-soft">
+      {communities && <label className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-normal text-ink-soft">
         Community
-        <select name={n("communityCode")} defaultValue={defaults.communityCode ?? ""} className="h-8 rounded-lg border border-line bg-white px-2 text-xs text-navy">
+        <select name={n("communityCode")} defaultValue={defaults.communityCode ?? ""} className="min-h-9 min-w-0 max-w-full rounded-lg border border-line bg-white px-2 text-base text-navy hover:border-ink-faint/60 sm:text-[13px]">
           <option value="">{geo || defaults.lat != null ? "From the map pin" : "Not set (pick one)"}</option>
           {communities.map((c) => <option key={c.code} value={c.code}>{c.name}</option>)}
         </select>
-        {geo && <span className="text-emerald-700">✓ pinned on the map</span>}
+        {geo && <span className="inline-flex items-center gap-1 font-medium text-emerald-700"><Check className="size-3.5" aria-hidden />Pinned on the map</span>}
       </label>}
     </div>
   );

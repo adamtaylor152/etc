@@ -64,7 +64,7 @@ export async function statementEmail(f: FormData) {
   if (!to.trim()) redirect(`${page}&error=${encodeURIComponent("This client has no email address")}`);
   await enqueue(db, {
     businessId: user.businessId, template: "client.statement", to, replyTo: env.helpEmail, priority: 3, props: { clientId, ...range },
-    dedupeKey: `statement:${clientId}:${Date.now()}`, clientId, entityType: "Client", entityId: clientId,
+    dedupeKey: `statement:${clientId}:${Math.floor(Date.now() / 60_000)}`, clientId, entityType: "Client", entityId: clientId,
   });
   kickOutbox();
   redirect(`${page}&sent=${encodeURIComponent(to)}`);

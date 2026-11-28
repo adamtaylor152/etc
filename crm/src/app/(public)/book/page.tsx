@@ -1,6 +1,7 @@
 // Booking page served by the CRM itself (prices from the price book). etccrew.ca/book.html keeps working too;
 // both post to the same endpoint. Point etccrew.ca's "Book" links here once the Python endpoint is retired.
 import { BookingForm } from "@/components/booking-form";
+import { PageTitle } from "@/components/public/kit";
 import { bookingMenu } from "@/server/booking/create";
 import { mapsKey } from "@/server/clients";
 import { businessId } from "@/server/db";
@@ -16,12 +17,9 @@ export default async function Book({ searchParams }: PageProps<"/book">) {
   const ref = sp.ref; // referral links: /book?ref=CODE
   const { list } = await bookingMenu(await businessId());
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="font-display text-3xl font-bold">Book etc.</h1>
-        <p className="mt-1 text-ink-soft">Snow shovelling &amp; odd jobs in Evergreen and SW Calgary. Prices include tax; pay after the job. Every job helps Silas get to electrician school.</p>
-      </div>
+    <>
+      <PageTitle title="Book etc." sub="Snow shovelling &amp; odd jobs in Evergreen and SW Calgary. Prices include tax; pay after the job. Every job helps Silas get to electrician school." />
       <BookingForm services={list} phone={env.phone} mapsKey={mapsKey()} refCode={typeof ref === "string" ? ref.slice(0, 20) : undefined} utm={typeof sp.utm_source === "string" ? sp.utm_source.slice(0, 40) : undefined} />
-    </div>
+    </>
   );
 }
