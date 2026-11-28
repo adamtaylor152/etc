@@ -18,15 +18,19 @@ export async function payByCard(f: FormData) {
   const asked = inv.allowPartial && f.get("amount") ? Math.round(Number(f.get("amount")) * 100) : owed;
   const balance = Number.isFinite(asked) ? Math.min(owed, Math.max(50, asked)) : owed;
   if (inv.status !== "AWAITING_PAYMENT" || balance < 50) redirect(`/i/${token}`); // Stripe's minimum is $0.50
+  // A deposit paid from its quote's page (right after approving) comes back to that page.
+  const qt = String(f.get("q") ?? "");
+  const q = qt ? await peekToken(db, qt, ["QUOTE"]) : null;
+  const back = q?.ok && inv.quoteId && q.token.quoteId === inv.quoteId ? `/q/${qt}` : `/i/${token}`;
   let url: string | null = null;
   try {
-    const s = await checkoutForInvoice({ id: inv.id, businessId: inv.businessId, number: inv.number, balanceCents: balance, email: inv.client.email }, token);
+    const s = await checkoutForInvoice({ id: inv.id, businessId: inv.businessId, number: inv.number, balanceCents: balance, email: inv.client.email }, back);
     await db.invoice.update({ where: { id: inv.id }, data: { stripeCheckoutSessionId: s.id } });
     url = s.url;
   } catch (e) {
     console.error("stripe checkout failed", e);
   }
-  redirect(url ?? `/i/${token}?error=${encodeURIComponent("Card payments aren't working right now. Please try e-Transfer or cash.")}`);
+  redirect(url ?? `${back}?error=${encodeURIComponent("Card payments aren't working right now. Please try e-Transfer or cash.")}`);
 }
 
 /** Optional "sign to confirm" on the invoice page. */

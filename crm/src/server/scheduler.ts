@@ -14,6 +14,7 @@ import { forecast, snowByDay } from "./forecast";
 import { generateRecurringVisits } from "./ops/jobs";
 import { billingEmailFor, invoiceSeasonalInstalments, invoiceUnbilled } from "./ops/invoices";
 import { parseSettings } from "./settings";
+import { followUpDue } from "./status/quote";
 import { plansTriggered } from "./snow/select";
 import { enqueue, enqueueSms, processOutbox } from "./email/outbox";
 
@@ -132,17 +133,25 @@ async function dailyDigest() {
   }
 }
 
-/** One nudge, 3 days after sending, for quotes still waiting on the client. */
-async function quoteFollowUps() {
-  const cutoff = new Date(Date.now() - 3 * 86_400_000);
-  const quotes = await db.quote.findMany({ where: { status: "AWAITING_RESPONSE", sentAt: { lte: cutoff }, client: { followUpQuotes: true } }, include: { client: true } });
+/**
+ * Up to two nudges (Settings: days after sending, each on/off) for quotes still waiting on the client, by the channel
+ * the quote was last sent by. Each goes once per quote (dedupe key), whatever the hourly run does.
+ */
+export async function quoteFollowUps(now = new Date()) {
+  const today = todayLocal();
+  const quotes = await db.quote.findMany({ where: { status: "AWAITING_RESPONSE", sentAt: { not: null }, client: { followUpQuotes: true } }, include: { client: true } });
   for (const q of quotes) {
-    const biz = await db.business.findUniqueOrThrow({ where: { id: q.businessId } });
-    if (!parseSettings(biz.settings).quoteFollowUp || q.client.emailBouncedAt) continue;
-    await enqueue(db, {
-      businessId: q.businessId, template: "quote.follow_up", to: q.client.email, replyTo: env.helpEmail, priority: 6, props: { quoteId: q.id },
-      dedupeKey: `quote:${q.id}:followup`, clientId: q.clientId, entityType: "Quote", entityId: q.id,
-    });
+    const s = parseSettings((await db.business.findUniqueOrThrow({ where: { id: q.businessId } })).settings);
+    const n = followUpDue({ status: q.status, validUntil: dateOnly(q.validUntil), sentAt: q.lastSentAt ?? q.sentAt }, [{ on: s.quoteFollowUp, days: s.quoteFollowUpDays }, { on: s.quoteFollowUp2, days: s.quoteFollowUp2Days }], now, today);
+    if (!n) continue;
+    const dedupeKey = `quote:${q.id}:followup${n > 1 ? n : ""}`; // the first keeps the key the single follow-up used
+    if (q.lastSentVia === "SMS") await enqueueSms(db, { businessId: q.businessId, template: "sms.quote", client: q.client, props: { quoteId: q.id, followUp: true }, dedupeKey, entityType: "Quote", entityId: q.id });
+    else if (!q.client.emailBouncedAt) {
+      await enqueue(db, {
+        businessId: q.businessId, template: "quote.follow_up", to: q.client.email, replyTo: env.helpEmail, priority: 6, props: { quoteId: q.id },
+        dedupeKey, clientId: q.clientId, entityType: "Quote", entityId: q.id,
+      });
+    }
   }
 }
 

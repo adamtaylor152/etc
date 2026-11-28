@@ -15,8 +15,11 @@ export const SettingsSchema = z.object({
   referralRewardCents: z.coerce.number().int().min(0).max(50_000).default(1000), // credit for the referrer
   referralDiscountCents: z.coerce.number().int().min(0).max(50_000).default(0), // credit for the new client // new invoices let clients pay part online       // ask for a Google review after the first job of the season
   serviceMinutes: z.coerce.number().int().min(1).max(240).default(12), // time at a stop, for route ETAs (12 = a snow stop)
-  dailyDigest: z.boolean().default(false),         // 6am summary email to owners
-  quoteFollowUp: z.boolean().default(true),         // nudge unanswered quotes after 3 days
+  dailyDigest: z.boolean().default(false),          // 6am summary email to owners
+  quoteFollowUp: z.boolean().default(true),         // first nudge for unanswered quotes
+  quoteFollowUpDays: z.coerce.number().int().min(1).max(60).default(3), // days after sending
+  quoteFollowUp2: z.boolean().default(false),       // second nudge
+  quoteFollowUp2Days: z.coerce.number().int().min(1).max(60).default(7),
   visitReminders: z.boolean().default(true),        // day-before reminder for scheduled (non-snow) visits
   assignmentAlerts: z.boolean().default(true),      // tell the assigned person when an owner assigns or moves their work
   reminderDaysBefore: z.coerce.number().int().min(1).max(7).default(1), // first visit reminder: this many days ahead...
@@ -40,6 +43,8 @@ export async function getSettings(db: Db, businessId: string): Promise<Settings>
 
 /** The on/off settings (shown as checkboxes in Settings → Automations). */
 export type ToggleKey = { [K in keyof Settings]: Settings[K] extends boolean ? K : never }[keyof Settings];
+/** Toggles that come with a "days after sending" number (shown beside the switch). */
+export const SETTING_DAYS = { quoteFollowUp: "quoteFollowUpDays", quoteFollowUp2: "quoteFollowUp2Days" } as const satisfies Partial<Record<ToggleKey, keyof Settings>>;
 export const SETTING_LABELS: Record<ToggleKey, [string, string]> = {
   visitDoneEmail: ["“All done” email", "Before & after photos to the client after each visit (5 min after Done)."],
   autoSendVisitInvoices: ["Invoice per-visit jobs on Done", "One-off jobs get their invoice right away; the pay link rides in the “all done” email."],
@@ -49,7 +54,8 @@ export const SETTING_LABELS: Record<ToggleKey, [string, string]> = {
   allowPartialPayments: ["Partial payments", "New invoices let clients pay part of the balance online (you can change it per invoice)."],
   reviewRequests: ["Google review requests", "Asks happy clients for a review after their first job of the season (needs your review link)."],
   dailyDigest: ["6am daily digest", "Today’s visits, late work, unbilled charges and failed emails."],
-  quoteFollowUp: ["Quote follow-up", "One reminder 3 days after sending if the client hasn’t answered."],
+  quoteFollowUp: ["Quote follow-up", "A reminder if the client hasn’t answered, by email or text (however the quote was last sent)."],
+  quoteFollowUp2: ["Second quote follow-up", "One more reminder later on. Both stop once the client answers or the quote expires."],
   visitReminders: ["Visit reminders", "Reminder before scheduled visits (not snow), by email and text. Clients can confirm with a tap or by replying YES."],
   clientReschedule: ["Clients can reschedule themselves", "The “confirm or change” link in reminders lets a client pick another open day and arrival window (when the people on the visit are free). You get a notice. Off: they can only ask."],
   reminderMorningOf: ["Morning-of reminder", "A second reminder at 7 am on the day of the visit."],

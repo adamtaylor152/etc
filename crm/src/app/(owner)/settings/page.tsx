@@ -1,12 +1,14 @@
 import { requireOwner } from "@/server/auth";
 import Link from "next/link";
-import { Button, Card, Field, Input, PageHeader, inputCls } from "@/components/ui";
+import { ConfirmButton } from "@/components/confirm-button";
+import { Flash } from "@/components/flash";
+import { Button, Card, Field, Input, PageHeader, btn, inputCls } from "@/components/ui";
 import { dateOnly } from "@/server/dates";
 import { business, businessId, db } from "@/server/db";
 import { env } from "@/server/env";
-import { parseSettings, SETTING_LABELS, type ToggleKey } from "@/server/settings";
+import { parseSettings, SETTING_DAYS, SETTING_LABELS, type ToggleKey } from "@/server/settings";
 import { stripeEnabled } from "@/server/stripe";
-import { saveAutomations, saveBusiness, saveSchedule, saveSeason, saveTax } from "./actions";
+import { quoteTemplateDelete, quoteTemplateRename, saveAutomations, saveBusiness, saveSchedule, saveSeason, saveTax } from "./actions";
 
 export const metadata = { title: "Settings" };
 
@@ -16,15 +18,16 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
   const bid = await businessId();
   const biz = await business();
   const settings = parseSettings(biz.settings);
-  const [seasons, users, area] = await Promise.all([
+  const [seasons, users, area, templates] = await Promise.all([
     db.season.findMany({ where: { businessId: bid }, orderBy: { startsOn: "desc" } }),
     db.user.findMany({ where: { businessId: bid }, orderBy: { email: "asc" } }),
     db.serviceCommunity.findMany({ where: { businessId: bid, active: true }, include: { community: true }, orderBy: { sortOrder: "asc" } }),
+    db.quoteTemplate.findMany({ where: { businessId: bid }, orderBy: { name: "asc" } }),
   ]);
   return (
     <>
       <PageHeader title="Settings" actions={<><Link href="/settings/price-book" className="inline-flex min-h-10 items-center rounded-lg border border-line bg-white px-4 text-sm font-semibold hover:bg-tint">Price book</Link><Link href="/settings/checklists" className="inline-flex min-h-10 items-center rounded-lg border border-line bg-white px-4 text-sm font-semibold hover:bg-tint">Checklists</Link><Link href="/settings/team" className="inline-flex min-h-10 items-center rounded-lg border border-line bg-white px-4 text-sm font-semibold hover:bg-tint">Team &amp; people</Link></>} />
-      {typeof sp.error === "string" && <p role="alert" className="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-medium text-red-800">{sp.error}</p>}
+      <Flash error={sp.error} />
       {sp.saved && <p className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-medium text-emerald-800">Saved.</p>}
       <div className="grid gap-5 lg:grid-cols-2">
         <Card title="Business">
@@ -48,14 +51,32 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
 
         <Card title="Automations">
           <form action={saveAutomations} className="space-y-3">
-            {(Object.keys(SETTING_LABELS) as ToggleKey[]).map((k) => (
-              <label key={k} className="flex items-start gap-3">
-                <input type="checkbox" name={k} defaultChecked={settings[k]} className="mt-1 size-5 shrink-0" />
-                <span><span className="block font-semibold">{SETTING_LABELS[k][0]}</span><span className="text-sm text-ink-soft">{SETTING_LABELS[k][1]}</span></span>
-              </label>
-            ))}
+            {(Object.keys(SETTING_LABELS) as ToggleKey[]).map((k) => {
+              const days = k in SETTING_DAYS ? SETTING_DAYS[k as keyof typeof SETTING_DAYS] : null;
+              return (
+                <div key={k}>
+                  <label className="flex items-start gap-3">
+                    <input type="checkbox" name={k} defaultChecked={settings[k]} className="mt-1 size-5 shrink-0" />
+                    <span><span className="block font-semibold">{SETTING_LABELS[k][0]}</span><span className="text-sm text-ink-soft">{SETTING_LABELS[k][1]}</span></span>
+                  </label>
+                  {days && <label className="ml-8 mt-1 flex items-center gap-2 text-sm">Send <input name={days} type="number" min={1} max={60} defaultValue={settings[days]} className="h-9 w-20 rounded-lg border border-line px-2" /> days after the quote is sent</label>}
+                </div>
+              );
+            })}
             <Button>Save automations</Button>
           </form>
+        </Card>
+
+        <Card title="Quote templates">
+          <ul className="space-y-2">
+            {templates.map((t) => (
+              <li key={t.id} className="flex items-center gap-2">
+                <form action={quoteTemplateRename} className="flex flex-1 gap-2"><input type="hidden" name="id" value={t.id} /><Input name="name" defaultValue={t.name} required maxLength={80} aria-label="Template name" /><Button variant="secondary">Rename</Button></form>
+                <form action={quoteTemplateDelete}><input type="hidden" name="id" value={t.id} /><ConfirmButton message={`Delete the template "${t.name}"? Quotes already made from it are not affected.`} className={btn("danger")}>Delete</ConfirmButton></form>
+              </li>
+            ))}
+          </ul>
+          <p className={`text-sm text-ink-soft ${templates.length ? "mt-3" : ""}`}>{templates.length ? "" : "None yet. "}Open any quote and choose “Save as template”; pick the template when you start a new quote.</p>
         </Card>
 
         <Card title="Reminders & arrival windows">

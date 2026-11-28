@@ -9,8 +9,8 @@ import { money } from "@/server/money";
 import { clientName } from "@/server/queries";
 
 export const metadata = { title: "Quotes" };
-const STATUSES: QuoteStatus[] = ["DRAFT", "AWAITING_RESPONSE", "CHANGES_REQUESTED", "APPROVED", "CONVERTED", "ARCHIVED"];
-const DOT: Record<QuoteStatus, string> = { DRAFT: "bg-ink-soft/50", AWAITING_RESPONSE: "bg-amber-500", CHANGES_REQUESTED: "bg-red-600", APPROVED: "bg-emerald-600", CONVERTED: "bg-blue", ARCHIVED: "bg-ink-soft/30" };
+const STATUSES: QuoteStatus[] = ["DRAFT", "AWAITING_RESPONSE", "CHANGES_REQUESTED", "APPROVED", "CONVERTED", "DECLINED", "ARCHIVED"]; // the overview shows the first five
+const DOT: Record<QuoteStatus, string> = { DRAFT: "bg-ink-soft/50", AWAITING_RESPONSE: "bg-amber-500", CHANGES_REQUESTED: "bg-red-600", APPROVED: "bg-emerald-600", CONVERTED: "bg-blue", DECLINED: "bg-red-600", ARCHIVED: "bg-ink-soft/30" };
 
 export default async function Quotes({ searchParams }: PageProps<"/quotes">) {
   await requireOwner();
