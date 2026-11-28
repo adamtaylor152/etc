@@ -1,5 +1,5 @@
 /* eslint-disable @next/next/no-img-element -- private photos/signatures via signed URLs, not optimizable */
-// Client quote page: see the quote and photos, tick optional extras, approve (then pay the deposit right here), ask for changes or decline.
+// Client quote page: see the quote and photos, choose an option (when offered), tick optional extras, approve (then pay the deposit right here), ask for changes or decline.
 import { InvoicePay } from "@/components/invoice-pay";
 import { QuoteApprove } from "@/components/quote-approve";
 import { money } from "@/server/money";
@@ -10,7 +10,7 @@ import { dateOnly, prettyDate, todayLocal } from "@/server/dates";
 import { db } from "@/server/db";
 import { env } from "@/server/env";
 import { clientName } from "@/server/queries";
-import { quoteExpired } from "@/server/status/quote";
+import { quoteExpired, quoteOptions } from "@/server/status/quote";
 import { peekToken } from "@/server/tokens";
 import { clientApprove, clientDecline, clientRequestChanges } from "./actions";
 
@@ -32,6 +32,8 @@ export default async function PublicQuote({ params, searchParams }: PageProps<"/
     where: { businessId: q.businessId, deletedAt: null, mediaType: "IMAGE", AND: [{ OR: [{ quoteId: q.id }, ...(q.requestId ? [{ requestId: q.requestId }] : [])] }, { OR: [{ uploadedByType: "CLIENT" }, { sharedWithClient: true }] }] },
     orderBy: { createdAt: "asc" }, take: 20,
   });
+  // One picture per line, where the owner added one. Private: reachable only through these signed links.
+  const linePhotos = new Set((await db.attachment.findMany({ where: { id: { in: q.lineItems.flatMap((l) => l.photoId ?? []) }, businessId: q.businessId, mediaType: "IMAGE", deletedAt: null }, select: { id: true } })).map((a) => a.id));
   const biz = await db.business.findUniqueOrThrow({ where: { id: q.businessId } });
   const depositDue = deposit?.status === "AWAITING_PAYMENT" ? Math.max(0, deposit.totalCents - deposit.amountPaidCents) : 0;
   const depositToken = deposit && depositDue > 0 ? await mintToken(db, q.businessId, "INVOICE", { invoiceId: deposit.id, clientId: q.clientId }) : null;
@@ -70,9 +72,10 @@ export default async function PublicQuote({ params, searchParams }: PageProps<"/
             {sig && <div className="mb-3 flex items-center gap-3"><img src={signedMediaPath(sig.attachmentId, "sm", 30)} alt="Your signature" className="h-14 w-36 rounded border border-line bg-white object-contain" /><span className="text-xs text-ink-soft">Signed {sig.signedAt.toLocaleDateString("en-CA", { timeZone: "America/Edmonton" })}</span></div>}</>
           : q.status === "DECLINED" ? <p className="mb-2 font-semibold text-ink-soft">This quote was declined. Changed your mind? Call {env.phone} or email {env.helpEmail}.</p>
           : expired ? <p className="mb-2 font-semibold text-red-700">This quote has expired. Reply to our email or call {env.phone} for an updated price.</p> : null}
-        <QuoteApprove token={token} action={clientApprove} canAct={canAct} discount={{ discountType: q.discountType, discountValue: q.discountValue, discountCents: q.discountCents }} taxName={biz.taxName}
+        <QuoteApprove token={token} action={clientApprove} canAct={canAct} options={quoteOptions(q.options)} chosen={q.chosenOption} discount={{ discountType: q.discountType, discountValue: q.discountValue, discountCents: q.discountCents }} taxName={biz.taxName}
           tax={{ taxRegistered: biz.taxRegistered, taxRateBps: biz.taxRateBps, pricesIncludeTax: biz.pricesIncludeTax }}
-          lines={q.lineItems.map((l) => ({ id: l.id, name: l.name, description: l.description, totalCents: l.totalCents, isOptional: l.isOptional, isSelected: l.isSelected, qty: Number(l.quantity) !== 1 ? String(Number(l.quantity)) : "" }))} />
+          lines={q.lineItems.map((l) => ({ id: l.id, name: l.name, description: l.description, totalCents: l.totalCents, isOptional: l.isOptional, isSelected: l.isSelected, qty: Number(l.quantity) !== 1 ? String(Number(l.quantity)) : "", optionKey: l.optionKey,
+            photo: l.photoId && linePhotos.has(l.photoId) ? { sm: signedMediaPath(l.photoId, "sm", 30), lg: signedMediaPath(l.photoId, "md", 30) } : null }))} />
       </Card>
       {canAct && (
         <details className="rounded-2xl border border-line bg-white p-4">

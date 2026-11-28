@@ -4,12 +4,14 @@ import { requireOwner } from "@/server/auth";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ClientPick } from "@/components/client-pick";
+import { Flash } from "@/components/flash";
 import { Gallery } from "@/components/gallery";
 import { QuoteLinesEditor } from "@/components/quote-lines";
 import { Button, Card, Field, Input, PageHeader, Textarea, inputCls } from "@/components/ui";
 import { businessId, db } from "@/server/db";
 import { templateLines } from "@/server/ops/quotes";
 import { clientName } from "@/server/queries";
+import { quoteOptions } from "@/server/status/quote";
 import { quoteCreate } from "../../quote-actions";
 
 export const metadata = { title: "New quote" };
@@ -33,12 +35,13 @@ export default async function NewQuote({ searchParams }: PageProps<"/quotes/new"
   const tpl = templates.find((t) => t.id === one("template"));
   const like = !tpl && one("similar") ? await db.quote.findFirst({ where: { id: one("similar"), businessId: bid }, include: { lineItems: { orderBy: { sortOrder: "asc" } } } }) : null;
   // A template or a similar quote fills the form; its discount and deposit settings are copied when the quote is created.
-  const src = tpl ? { title: tpl.title, message: tpl.message, lines: templateLines(tpl.lines) }
-    : like ? { title: like.title, message: like.message, lines: like.lineItems.map((l) => ({ ...l, quantity: Number(l.quantity) })) } : null;
+  const src = tpl ? { title: tpl.title, message: tpl.message, lines: templateLines(tpl.lines), options: quoteOptions(tpl.options) }
+    : like ? { title: like.title, message: like.message, lines: like.lineItems.map((l) => ({ ...l, quantity: Number(l.quantity) })), options: quoteOptions(like.options) } : null;
   const lines = src?.lines ?? asked;
   const here = (template: string) => `/quotes/new?${new URLSearchParams({ ...(request ? { request: request.id } : { client: client.id }), template })}`;
   return (
     <div className="mx-auto max-w-3xl">
+      <Flash error={sp.error} />
       <PageHeader title="New quote" sub={<>For <Link className="font-semibold text-blue" href={`/clients/${client.id}`}>{clientName(client)}</Link>{request && <> · from <Link className="font-semibold text-blue" href={`/requests/${request.id}`}>request #{request.number}</Link></>}{like && <> · like <Link className="font-semibold text-blue" href={`/quotes/${like.id}`}>quote #{like.number}</Link></>}</>} />
       {templates.length > 0 && !like && (
         <p className="mb-4 flex flex-wrap items-center gap-2 text-sm"><span className="text-ink-soft">Start from a template:</span>
@@ -57,9 +60,9 @@ export default async function NewQuote({ searchParams }: PageProps<"/quotes/new"
             <select name="propertyId" className={inputCls} defaultValue={request?.propertyId ?? (like?.clientId === client.id ? like.propertyId : null) ?? undefined}>{client.properties.map((p) => <option key={p.id} value={p.id}>{p.formatted}</option>)}</select>
           </Field>
           <Field label="Title"><Input name="title" required defaultValue={src?.title ?? (lines.map((l) => l.name).join(" + ") || "")} placeholder="e.g. Deck & fence cleaning" /></Field>
-          <QuoteLinesEditor lines={lines} services={services.map((s) => ({ name: s.name, description: s.description, unitPriceCents: s.unitPriceCents }))} />
+          <QuoteLinesEditor lines={lines} options={src?.options} services={services.map((s) => ({ name: s.name, description: s.description, unitPriceCents: s.unitPriceCents }))} />
           <Field label="Message to the client (optional)"><Textarea name="message" rows={3} defaultValue={src?.message ?? ""} placeholder="Thanks for the photos! Here's what we'd do…" /></Field>
-          {src && <p className="text-sm text-ink-soft">The discount and deposit settings come along too; check them on the next screen. The quote gets a new number and 30 days to respond.</p>}
+          {src && <p className="text-sm text-ink-soft">The options, discount and deposit settings come along too (line photos don&apos;t); check them on the next screen. The quote gets a new number and 30 days to respond.</p>}
           <Button>Create quote</Button>
         </form>
       </Card>
