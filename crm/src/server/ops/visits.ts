@@ -142,7 +142,7 @@ export async function addVisitExtra(client: { id: string; businessId: string }, 
 /** The client takes one back, while the visit still hasn't started. */
 export async function removeVisitExtra(client: { id: string; businessId: string }, extraId: string) {
   return db.$transaction(async (tx) => {
-    const e = await tx.visitExtra.findFirst({ where: { id: extraId, visit: { businessId: client.businessId, state: "SCHEDULED", job: { clientId: client.id } } }, include: { visit: true } });
+    const e = await tx.visitExtra.findFirst({ where: { id: extraId, addedByClientId: client.id, visit: { businessId: client.businessId, state: "SCHEDULED", job: { clientId: client.id } } }, include: { visit: true } }); // only what they added themselves, never an extra the owner put on
     if (!e || (await tx.visit.updateMany({ where: { id: e.visitId, state: "SCHEDULED" }, data: { state: "SCHEDULED" } })).count !== 1) throw new TransitionError("That visit has already started");
     await tx.visitExtra.delete({ where: { id: e.id } });
     await logActivity(tx, { businessId: client.businessId, type: "visit.extra_removed", entityType: "Visit", entityId: e.visitId, actorType: "CLIENT", actorClientId: client.id, clientId: client.id, jobId: e.visit.jobId, data: { name: e.name } });
