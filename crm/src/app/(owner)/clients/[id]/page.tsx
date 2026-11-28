@@ -1,5 +1,6 @@
 // Client profile, Jobber layout: header (+ Create / More), contact info, properties, contacts, tabbed work/activity/
 // communication/files, billing history; right column: lifetime value + balance, last communication, notes.
+import { requireOwner } from "@/server/auth";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Archive, Banknote, FileText, Hammer, Inbox, ListTodo, Mail, MapPin, MessageSquare, Pencil, Phone, Plus, Receipt, Repeat, Snowflake } from "lucide-react";
@@ -31,6 +32,7 @@ const TABS = ["overview", "activity", "communication", "files"] as const;
 const WORK = ["requests", "quotes", "jobs", "invoices"] as const;
 
 export default async function ClientPage({ params, searchParams }: PageProps<"/clients/[id]">) {
+  await requireOwner();
   const { id } = await params;
   const sp = await searchParams;
   const tab = TABS.find((t) => t === sp.tab) ?? "overview";

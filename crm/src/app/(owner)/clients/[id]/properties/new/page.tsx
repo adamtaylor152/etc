@@ -1,3 +1,4 @@
+import { requireOwner } from "@/server/auth";
 import { notFound } from "next/navigation";
 import { DetailHeader } from "@/components/detail-header";
 import { PropertyForm } from "@/components/property-form";
@@ -8,6 +9,7 @@ import { clientName } from "@/server/queries";
 export const metadata = { title: "New property" };
 
 export default async function NewProperty({ params, searchParams }: PageProps<"/clients/[id]/properties/new">) {
+  await requireOwner();
   const { id } = await params;
   const sp = await searchParams;
   const bid = await businessId();

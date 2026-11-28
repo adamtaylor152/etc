@@ -1,4 +1,5 @@
 // Collect payment (Jobber's modal as a page): method, date, reference, and an amount per open invoice.
+import { requireOwner } from "@/server/auth";
 import { notFound } from "next/navigation";
 import { DetailHeader } from "@/components/detail-header";
 import { Field, Input } from "@/components/ui";
@@ -11,6 +12,7 @@ import { collectPayments } from "../../../work2-actions";
 export const metadata = { title: "Collect payment" };
 
 export default async function Collect({ params, searchParams }: PageProps<"/clients/[id]/collect">) {
+  await requireOwner();
   const { id } = await params;
   const sp = await searchParams;
   const bid = await businessId();

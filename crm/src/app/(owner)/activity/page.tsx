@@ -1,4 +1,5 @@
 // Account-wide activity: everything that happened, newest first, with who it was about.
+import { requireOwner } from "@/server/auth";
 import Link from "next/link";
 import { Phone } from "lucide-react";
 import { ActivityFeed, parseTypes } from "@/components/activity-feed";
@@ -8,6 +9,7 @@ import { businessId } from "@/server/db";
 export const metadata = { title: "Activity" };
 
 export default async function Activity({ searchParams }: PageProps<"/activity">) {
+  await requireOwner();
   const sp = await searchParams;
   const types = parseTypes(sp.types);
   const items = await activityFeed({ businessId: await businessId() }, { types, before: typeof sp.before === "string" ? new Date(sp.before) : undefined, limit: 80 });

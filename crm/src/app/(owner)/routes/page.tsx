@@ -1,5 +1,6 @@
 // Route: map + sheet of today's (or a storm's) stops, grouped by community in service-area order.
 // The order is the standing route (auto-ordered by distance, nudged with ↑/↓), reused every storm. Prints on letter paper.
+import { requireOwner } from "@/server/auth";
 import type { GeoJsonObject } from "geojson";
 import Link from "next/link";
 import { RouteMap } from "@/components/route-map";
@@ -14,6 +15,7 @@ import { routeAutoOrder, routeMove, routeSplit } from "../route-actions";
 export const metadata = { title: "Route" };
 
 export default async function Routes({ searchParams }: PageProps<"/routes">) {
+  await requireOwner();
   const sp = await searchParams;
   const bid = await businessId();
   const biz = await business();

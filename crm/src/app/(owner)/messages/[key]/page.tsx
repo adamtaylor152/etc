@@ -1,4 +1,5 @@
 // One conversation: bubbles with MMS photos, file photos onto the client's job/quote, link unknown numbers to a client.
+import { requireOwner } from "@/server/auth";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Attachment } from "@/generated/prisma/client";
@@ -19,6 +20,7 @@ const STATUS: Record<string, string> = { queued: "Sending…", sent: "Sent", del
 const QUICK = ["On our way!", "All done, thanks! Photos are on your invoice email.", "Thanks! Can you text us a photo of the area?", "Got it, we'll send you a quote shortly."];
 
 export default async function Thread({ params, searchParams }: PageProps<"/messages/[key]">) {
+  await requireOwner();
   const { key } = await params;
   const sp = await searchParams;
   const bid = await businessId();

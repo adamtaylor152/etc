@@ -1,3 +1,4 @@
+import { requireOwner } from "@/server/auth";
 import Link from "next/link";
 import { hm, jobProfit } from "@/server/ops/costing";
 import { team } from "@/server/schedule";
@@ -33,6 +34,7 @@ const monthKey = (d: Date) => d.toLocaleDateString("en-CA", { timeZone: TZ, year
 const monthLabel = (k: string) => new Date(`${k}-15T12:00:00Z`).toLocaleDateString("en-CA", { month: "short", year: "2-digit", timeZone: "UTC" });
 
 export default async function Reports() {
+  await requireOwner();
   const bid = await businessId();
   const today = todayLocal();
   const yearAgo = daysAgo(365);

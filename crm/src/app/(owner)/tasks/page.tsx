@@ -1,4 +1,5 @@
 // To-do list: overdue, today, upcoming, no date, done.
+import { requireOwner } from "@/server/auth";
 import Link from "next/link";
 import { Check, Plus } from "lucide-react";
 import { Badge } from "@/components/ui";
@@ -11,6 +12,7 @@ import { taskDone } from "../schedule-actions";
 export const metadata = { title: "Tasks" };
 
 export default async function Tasks({ searchParams }: PageProps<"/tasks">) {
+  await requireOwner();
   const sp = await searchParams;
   const bid = await businessId();
   const today = todayLocal();

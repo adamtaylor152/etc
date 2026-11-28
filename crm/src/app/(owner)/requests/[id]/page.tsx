@@ -1,3 +1,4 @@
+import { requireOwner } from "@/server/auth";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { RequestBadge } from "@/components/status";
@@ -11,6 +12,7 @@ import { requestPhotos } from "../../photo-actions";
 import { Gallery } from "@/components/gallery";
 
 export default async function RequestPage({ params, searchParams }: PageProps<"/requests/[id]">) {
+  await requireOwner();
   const { id } = await params;
   const sp = await searchParams;
   const bid = await businessId();

@@ -1,3 +1,4 @@
+import { requireOwner } from "@/server/auth";
 import type { JobKind } from "@/generated/prisma/client";
 import { ListPage, listHref, sortRows } from "@/components/list-page";
 import { JobBadge } from "@/components/status";
@@ -15,6 +16,7 @@ const DOT: Record<JobStatus, string> = {
 };
 
 export default async function Jobs({ searchParams }: PageProps<"/jobs">) {
+  await requireOwner();
   const sp = await searchParams;
   const one = (k: string) => (typeof sp[k] === "string" ? (sp[k] as string) : undefined);
   const params = { status: one("status"), kind: one("kind"), q: one("q"), sort: one("sort"), dir: one("dir") };

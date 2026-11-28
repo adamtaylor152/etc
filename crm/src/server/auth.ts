@@ -1,5 +1,6 @@
-// Owner sessions. Cookie holds a random value; the DB holds its sha256.
-// Checked in every owner layout, page, action and route (never only in proxy.ts).
+// Sessions. Cookie holds a random value; the DB holds its sha256.
+// Checked in every layout, page, action and route (a layout alone does not stop its pages rendering).
+// requireOwner is the default; tests/unit/crew-access.test.ts fails if a page, action or route skips it.
 import "server-only";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
@@ -39,10 +40,24 @@ export const currentUser = cache(async () => {
   return s.user;
 });
 
-export async function requireOwner(next?: string) {
+/** Anyone signed in, crew included. Only the crew surface uses this: the route runner, its API and photo uploads. */
+export async function requireUser(next?: string) {
   const u = await currentUser();
   if (!u) redirect(next ? `/login?next=${encodeURIComponent(next)}` : "/login");
   return u;
+}
+
+/** Owners only. Crew are sent to their route: they never see prices, billing, clients or settings. */
+export async function requireOwner(next?: string) {
+  const u = await requireUser(next);
+  if (u.role !== "OWNER") redirect("/run");
+  return u;
+}
+
+/** For API routes: the signed-in owner, or null (crew and signed-out callers alike). */
+export async function currentOwner() {
+  const u = await currentUser();
+  return u?.role === "OWNER" ? u : null;
 }
 
 export async function signOut() {

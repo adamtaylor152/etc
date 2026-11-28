@@ -1,4 +1,5 @@
 // Campaign editor: content (email blocks or text), audience with live count, test send, send now or schedule; results once sent.
+import { requireOwner } from "@/server/auth";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CampaignBlocks } from "@/components/campaign-blocks";
@@ -12,6 +13,7 @@ import { campaignSave } from "../../campaign-actions";
 export const metadata = { title: "Campaign" };
 
 export default async function CampaignPage({ params, searchParams }: PageProps<"/marketing/campaigns/[id]">) {
+  await requireOwner();
   const { id } = await params;
   const sp = await searchParams;
   const bid = await businessId();

@@ -1,3 +1,4 @@
+import { requireOwner } from "@/server/auth";
 import Link from "next/link";
 import { STORM } from "@/components/status";
 import { Badge, Button, Card, Empty, Input, PageHeader } from "@/components/ui";
@@ -11,6 +12,7 @@ import { sendRenewals, stormCreate } from "../work-actions";
 export const metadata = { title: "Snow" };
 
 export default async function Snow({ searchParams }: PageProps<"/snow">) {
+  await requireOwner();
   const sp = await searchParams;
   const bid = await businessId();
   const renewTarget = await renewalSeason(bid);

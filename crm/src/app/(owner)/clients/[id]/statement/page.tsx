@@ -1,4 +1,5 @@
 // Printable client statement: lifetime, since the last zero balance, or from a date.
+import { requireOwner } from "@/server/auth";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ledger } from "@/server/billing/ledger";
@@ -11,6 +12,7 @@ import { PrintButton } from "@/components/print-button";
 export const metadata = { title: "Statement" };
 
 export default async function Statement({ params, searchParams }: PageProps<"/clients/[id]/statement">) {
+  await requireOwner();
   const { id } = await params;
   const sp = await searchParams;
   const bid = await businessId();

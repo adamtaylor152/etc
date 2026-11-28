@@ -1,4 +1,5 @@
 // Payments to match: money that arrived without an obvious invoice. Suggested invoices first; split across up to 3.
+import { requireOwner } from "@/server/auth";
 import Link from "next/link";
 import { Flash } from "@/components/flash";
 import { Badge, Button, Card, Empty, PageHeader, inputCls } from "@/components/ui";
@@ -12,6 +13,7 @@ import { unmatchedApply, unmatchedDismiss } from "./actions";
 export const metadata = { title: "Payments to match" };
 
 export default async function Unmatched({ searchParams }: PageProps<"/payments/unmatched">) {
+  await requireOwner();
   const sp = await searchParams;
   const bid = await businessId();
   const [items, invoices, recent] = await Promise.all([

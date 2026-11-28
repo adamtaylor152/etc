@@ -1,4 +1,5 @@
 // Billing run: everything done but not yet invoiced -> drafts -> review -> send all.
+import { requireOwner } from "@/server/auth";
 import Link from "next/link";
 import { Flash } from "@/components/flash";
 import { Button, Card, Empty, PageHeader } from "@/components/ui";
@@ -11,6 +12,7 @@ import { invoiceCreate, runBilling, sendAllDrafts } from "../billing-actions";
 export const metadata = { title: "Billing" };
 
 export default async function Billing({ searchParams }: PageProps<"/billing">) {
+  await requireOwner();
   const sp = await searchParams;
   const bid = await businessId();
   const [charges, drafts, fixedDone] = await Promise.all([

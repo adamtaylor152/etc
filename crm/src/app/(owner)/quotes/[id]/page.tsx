@@ -1,3 +1,4 @@
+import { requireOwner } from "@/server/auth";
 import { depositCents } from "@/server/billing/invoice";
 import { SignatureCard } from "@/components/signatures";
 import Link from "next/link";
@@ -16,6 +17,7 @@ import { quoteEditable, quoteExpired } from "@/server/status/quote";
 import { quoteArchive, quoteConvert, quoteMarkApproved, quoteSend, quoteUpdate, quoteViewAsClient } from "../../quote-actions";
 
 export default async function QuotePage({ params, searchParams }: PageProps<"/quotes/[id]">) {
+  await requireOwner();
   const { id } = await params;
   const sp = await searchParams;
   const bid = await businessId();

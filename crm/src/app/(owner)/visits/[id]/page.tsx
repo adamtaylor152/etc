@@ -29,6 +29,7 @@ const SKIP: [string, string][] = [
 ];
 
 export default async function VisitPage({ params, searchParams }: PageProps<"/visits/[id]">) {
+  const user = await requireOwner();
   const { id } = await params;
   const sp = await searchParams;
   const bid = await businessId();
@@ -60,7 +61,6 @@ export default async function VisitPage({ params, searchParams }: PageProps<"/vi
   const hidden = (to: string) => <><input type="hidden" name="id" value={v.id} /><input type="hidden" name="to" value={to} /><input type="hidden" name="back" value={here} /></>;
 
   const people = await team(v.businessId);
-  const user = await requireOwner();
   const [running, visitTime] = await Promise.all([
     db.timeEntry.findFirst({ where: { businessId: v.businessId, userId: user.id, endedAt: null } }),
     db.timeEntry.findMany({ where: { businessId: v.businessId, visitId: v.id, endedAt: { not: null } }, include: { user: true } }),

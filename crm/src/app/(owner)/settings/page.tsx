@@ -1,3 +1,4 @@
+import { requireOwner } from "@/server/auth";
 import Link from "next/link";
 import { Button, Card, Field, Input, PageHeader, inputCls } from "@/components/ui";
 import { dateOnly } from "@/server/dates";
@@ -10,6 +11,7 @@ import { saveAutomations, saveBusiness, savePrice, saveSeason, saveTax } from ".
 export const metadata = { title: "Settings" };
 
 export default async function SettingsPage({ searchParams }: PageProps<"/settings">) {
+  await requireOwner();
   const sp = await searchParams;
   const bid = await businessId();
   const biz = await business();

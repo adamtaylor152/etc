@@ -1,4 +1,5 @@
 // New job or every-snowfall plan for an existing client (/jobs/new?client=...&kind=plan).
+import { requireOwner } from "@/server/auth";
 import { WindowChips } from "@/components/window-chips";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -16,6 +17,7 @@ import { team } from "@/server/schedule";
 export const metadata = { title: "New job" };
 
 export default async function NewJob({ searchParams }: PageProps<"/jobs/new">) {
+  await requireOwner();
   const sp = await searchParams;
   const s = (k: string) => (typeof sp[k] === "string" ? (sp[k] as string) : "");
   const bid = await businessId();
