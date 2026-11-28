@@ -15,6 +15,8 @@ import { dateOnly, prettyDate, todayLocal, toDbDate } from "../dates";
 import { signedMediaPath } from "../media";
 import { clientName } from "../queries";
 import { db } from "../db";
+import { CampaignEmail } from "@/emails/campaign";
+import { clickUrl, openPixelUrl, unsubscribeUrl, type Block } from "../ops/campaigns";
 import { env } from "../env";
 import { mintToken } from "../tokens";
 
@@ -227,6 +229,19 @@ const reviewRequest: Template<{ clientId: string; reviewId?: string }> = {
   },
 };
 
+const campaignEmail: Template<{ campaignId: string; recipientId: string; clientId: string }> = {
+  subject: () => "", // set from the campaign when queued (see enqueue below)
+  async render(p, ctx) {
+    const [c, biz, client] = await Promise.all([
+      db.campaign.findUniqueOrThrow({ where: { id: p.campaignId } }), db.business.findUniqueOrThrow({ where: { id: ctx.businessId } }),
+      p.clientId ? db.client.findUnique({ where: { id: p.clientId } }) : null,
+    ]);
+    const real = p.recipientId !== "test";
+    return <CampaignEmail title={c.subject ?? ""} name={client?.firstName ?? "there"} blocks={(c.blocks as Block[]).map((b) => (b.type === "button" && real ? { ...b, url: clickUrl(p.recipientId, b.url) } : b))}
+      unsubscribe={client ? unsubscribeUrl(client.id) : `${env.appUrl}/unsubscribe/test`} address={biz.mailingAddress ?? ""} business={biz.name} pixel={real ? openPixelUrl(p.recipientId) : null} />;
+  },
+};
+
 const ownerDailyDigest: Template<{ day: string }> = {
   subject: (p) => `Today at etc. (${prettyDate(p.day)})`,
   async render(p, ctx) {
@@ -278,6 +293,7 @@ export const templates = {
   "quote.follow_up": quoteFollowUp,
   "quote.approved": quoteApproved,
   "owner.notice": ownerNotice,
+  "campaign.email": campaignEmail,
   "hub.link": hubLink,
   "visit.scheduled": visitScheduled,
   "visit.reminder": visitReminder,

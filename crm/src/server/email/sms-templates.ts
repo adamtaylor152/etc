@@ -26,6 +26,10 @@ export const smsTemplates = {
     const raw = await mintToken(db, ctx.businessId, "REVIEW", { clientId: c.id, redirectPath: p.reviewId });
     return `Hi ${first(c.firstName)}, thanks for choosing etc.! How did we do? ${env.appUrl}/r/${raw} - etc.`;
   },
+  "sms.campaign": async (p: { campaignId: string; clientId: string }) => {
+    const c = await db.campaign.findUniqueOrThrow({ where: { id: p.campaignId } });
+    return `${(c.smsBody ?? "").trim()} Reply STOP to opt out.`;
+  },
   "sms.referral_thanks": async (p: { clientId: string; cents: number }) => {
     const c = await db.client.findUniqueOrThrow({ where: { id: p.clientId } });
     return `Thanks for sending a neighbour our way, ${first(c.firstName)}! $${(p.cents / 100).toFixed(0)} off your next etc. invoice. - etc.`;

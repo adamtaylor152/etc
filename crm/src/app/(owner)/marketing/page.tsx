@@ -30,7 +30,7 @@ export default async function Marketing({ searchParams }: PageProps<"/marketing"
   const card = "rounded-lg border border-line bg-white p-4 shadow-card";
   return (
     <>
-      <DetailHeader title="Marketing" sub="Last 90 days. Campaigns are coming next." />
+      <DetailHeader title="Marketing" sub="Last 90 days." actions={<Link href="/marketing/campaigns" className="inline-flex min-h-10 items-center rounded-lg bg-blue px-4 text-sm font-semibold text-white">Campaigns</Link>} />
       {sp.saved && <p className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm font-medium text-emerald-800">Saved.</p>}
       <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <section className={card}><h2 className="text-sm font-bold">Review requests sent</h2><p className="mt-2 font-display text-2xl font-bold">{reviews.length}</p><p className="text-xs text-ink-soft">{rated.length} rated · avg {avg}★</p></section>

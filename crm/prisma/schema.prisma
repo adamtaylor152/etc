@@ -223,6 +223,7 @@ model Business {
   phone               String?
   helpEmail           String?
   etransferEmail      String?
+  mailingAddress      String? // required in marketing emails (CASL)
   website             String?
   timezone            String       @default("America/Edmonton")
   currency            String       @default("CAD")
@@ -317,6 +318,8 @@ model Client {
   leadSource       String? // how they found us (Google, referral, door hanger...)
   phones           Json           @default("[]") // [{number,label,sms}]; phone above mirrors the first
   emails           Json           @default("[]") // [{address,label}]; email above mirrors the first
+  emailMarketingConsentAt     DateTime? // express consent to marketing email (CASL)
+  emailMarketingConsentSource String? // booking form, verbal, hub...
   referralCode     String? // their share code (etccrew.ca/book.html?ref=CODE)
   referredById     String? // the client who referred them
   followUpQuotes   Boolean        @default(true)
@@ -1204,4 +1207,50 @@ model ClientCredit {
   createdAt          DateTime @default(now())
 
   @@index([clientId])
+}
+
+enum CampaignChannel {
+  EMAIL
+  SMS
+}
+
+enum CampaignStatus {
+  DRAFT
+  SCHEDULED
+  SENDING
+  SENT
+  CANCELLED
+}
+
+/** A marketing email or text to an audience (filters as JSON). Recipients are fixed when it's sent. */
+model Campaign {
+  id           String          @id @default(cuid())
+  businessId   String
+  name         String
+  channel      CampaignChannel @default(EMAIL)
+  subject      String?
+  blocks       Json            @default("[]") // email: [{type: heading|text|button|divider, text, url}]
+  smsBody      String?
+  audience     Json            @default("{}")
+  status       CampaignStatus  @default(DRAFT)
+  scheduledFor DateTime?
+  sentAt       DateTime?
+  createdById  String?
+  createdAt    DateTime        @default(now())
+  recipients   CampaignRecipient[]
+
+  @@index([businessId, createdAt])
+}
+
+model CampaignRecipient {
+  id         String    @id @default(cuid())
+  campaignId String
+  campaign   Campaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  clientId   String
+  status     String    @default("QUEUED") // QUEUED | SENT | FAILED
+  sendAfter  DateTime?
+  openedAt   DateTime?
+  clickedAt  DateTime?
+
+  @@unique([campaignId, clientId])
 }
