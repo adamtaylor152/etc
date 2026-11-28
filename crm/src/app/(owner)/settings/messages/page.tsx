@@ -5,7 +5,7 @@ import { DetailHeader } from "@/components/detail-header";
 import { Flash } from "@/components/flash";
 import { ChevronDown } from "lucide-react";
 import { BrandFields } from "@/components/settings/brand-fields";
-import { Saved } from "@/components/settings/fields";
+import { Saved, rowToggle } from "@/components/settings/fields";
 import { Badge, Button, Card, Input, Notice } from "@/components/ui";
 import { business, db } from "@/server/db";
 import { samples } from "@/server/email/samples";
@@ -35,7 +35,7 @@ export default async function MessageSettings({ searchParams }: PageProps<"/sett
           <span className="flex flex-wrap items-center gap-x-2 gap-y-1"><span className="font-semibold">{m.label}</span>{saved.has(key) && <Badge tone="blue">Your wording</Badge>}</span>
           <span className="block text-sm text-ink-soft">{m.trigger}</span>
         </span>
-        <span className="inline-flex shrink-0 items-center gap-1 text-sm font-medium text-blue"><span className="group-open:hidden">Edit</span><span className="hidden group-open:inline">Close</span><ChevronDown className="size-4 transition-transform group-open:rotate-180" aria-hidden /></span>
+        <span className={rowToggle}><span className="group-open:hidden">Edit</span><span className="hidden group-open:inline">Close</span><ChevronDown className="size-4 transition-transform group-open:rotate-180" aria-hidden /></span>
       </summary>
       <div className="pb-5 pt-1">
         <Saved when={savedKey === key} />
@@ -51,10 +51,10 @@ export default async function MessageSettings({ searchParams }: PageProps<"/sett
     </section>
   );
   return (
-    <>
+    <div className="max-w-5xl">
       <DetailHeader back={{ href: "/settings", label: "Settings" }} title="Messages & branding" sub="Change what clients receive, in your own words. Line items, totals, buttons, links and the footer are always filled in for you." />
       <Flash error={sp.error} />
-      <div className="max-w-5xl space-y-5">
+      <div className="space-y-5">
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
           <Card title="Logo & colour">
             <Saved when={savedKey === "brand"} />
@@ -104,6 +104,6 @@ export default async function MessageSettings({ searchParams }: PageProps<"/sett
           <p className="mt-4 max-w-[70ch] text-xs text-ink-soft">Texts only go to clients who said yes to them. The link a text is for, who it&apos;s from and “Reply STOP” (where the standard text has it) are always kept.</p>
         </Card>
       </div>
-    </>
+    </div>
   );
 }

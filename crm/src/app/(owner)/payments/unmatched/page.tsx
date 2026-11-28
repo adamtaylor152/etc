@@ -41,14 +41,14 @@ export default async function Unmatched({ searchParams }: PageProps<"/payments/u
     id: i.id, number: i.number, etransferRef: i.etransferRef, balanceCents: i.totalCents - i.amountPaidCents, clientName: clientName(i.client), email: i.client.email, issuedOn: dateOnly(i.issuedOn),
   })).filter((i) => i.balanceCents > 0);
   return (
-    <>
+    <div className="max-w-4xl">
       <Flash error={sp.error} />
       {sp.applied && <Notice tone="good">Applied. Receipts are on their way.</Notice>}
       <PageHeader title="Payments to match" sub="e-Transfers we couldn't tie to an invoice automatically. Match each one to its invoice, split it across invoices, or dismiss it."
         actions={<ButtonLink href="/payments">All payments</ButtonLink>} />
       {items.length ? (
-        <div className="max-w-4xl space-y-5">
-          {items.map((u, at) => {
+        <div className="space-y-5">
+          {items.map((u) => {
             const used = u.payments.reduce((a, p) => a + p.amountCents, 0);
             const remaining = u.amountCents - used;
             const sugg = suggestInvoices(u, open);
@@ -91,7 +91,7 @@ export default async function Unmatched({ searchParams }: PageProps<"/payments/u
                               <input type="hidden" name="id" value={u.id} />
                               <input type="hidden" name="alloc_0_invoice" value={s.invoice.id} />
                               <input type="hidden" name="alloc_0_amount" value={(apply / 100).toFixed(2)} />
-                              <Button variant={at === 0 && n === 0 ? "primary" : "secondary"} title={`Applies ${cad(apply)} to invoice #${s.invoice.number} and emails the receipt`}>Match<span className="sr-only"> to invoice #{s.invoice.number}</span></Button>
+                              <Button variant={n === 0 ? "primary" : "secondary"} title={`Applies ${cad(apply)} to invoice #${s.invoice.number} and emails the receipt`}>Match<span className="sr-only"> to invoice #{s.invoice.number}</span></Button>
                             </form>
                             </div>
                           </li>
@@ -122,7 +122,7 @@ export default async function Unmatched({ searchParams }: PageProps<"/payments/u
                       </div>
                       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                         <span className="text-xs tabular-nums text-ink-soft">Up to three invoices. {cad(remaining)} to share out.</span>
-                        <Button variant={sugg.length === 0 && at === 0 ? "primary" : "secondary"}>Apply and send receipts</Button>
+                        <Button variant={sugg.length === 0 ? "primary" : "secondary"}>Apply and send receipts</Button>
                       </div>
                     </form>
                   </details>
@@ -139,9 +139,9 @@ export default async function Unmatched({ searchParams }: PageProps<"/payments/u
             );
           })}
         </div>
-      ) : <div className="max-w-4xl"><Empty>Nothing to match. Every payment found its invoice. New e-Transfers that can&apos;t be tied to an invoice will wait here.</Empty></div>}
+      ) : <div><Empty>Nothing to match. Every payment found its invoice. New e-Transfers that can&apos;t be tied to an invoice will wait here.</Empty></div>}
       {recent.length > 0 && (
-        <Card title="Recently handled" className="mt-5 max-w-4xl">
+        <Card title="Recently handled" className="mt-5">
           <ul className="divide-y divide-line-soft text-sm">
             {recent.map((u) => (
               <li key={u.id} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 py-2.5 first:pt-0 last:pb-0">
@@ -153,6 +153,6 @@ export default async function Unmatched({ searchParams }: PageProps<"/payments/u
           </ul>
         </Card>
       )}
-    </>
+    </div>
   );
 }

@@ -35,7 +35,7 @@ export default async function RouteSettings({ searchParams }: PageProps<"/settin
             <Field label="Minutes at a stop" hint="Added to the driving time for ETAs, route totals and splitting a route between people. About 12 for a snow stop."><Input name="serviceMinutes" type="number" min={1} max={240} defaultValue={settings.serviceMinutes} className="max-w-28 tabular-nums" /></Field>
             <Button>Save stop time</Button>
           </form>
-          <p className="mt-3 text-xs text-ink-soft">Drive times: {env.routingUrl ? "from your road-routing server (ROUTING_URL)." : "straight-line estimates at 30 km/h. Set ROUTING_URL to a road-routing (OSRM) server for real drive times."} Each person&apos;s start and end points are on Settings › Team.</p>
+          <p className="mt-3 text-xs text-ink-soft">Drive times: {env.routingUrl ? "worked out along real roads." : "straight-line estimates at 30 km/h. Real road times aren't set up yet; ask whoever runs your hosting to turn them on."} Each person&apos;s start and end points are on Settings › Team.</p>
         </Card>
       </div>
     </>

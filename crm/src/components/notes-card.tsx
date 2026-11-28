@@ -4,6 +4,7 @@ import { Paperclip, Pin } from "lucide-react";
 import { noteAdd, noteDelete, noteEdit, notePin } from "@/app/(owner)/client-actions";
 import { prettyDateTime } from "@/server/dates";
 import { ConfirmButton } from "./confirm-button";
+import { FilePicker } from "./file-picker";
 import { Button, Card, Textarea } from "./ui";
 
 type N = Note & { attachments: Attachment[] };
@@ -21,10 +22,7 @@ export function NotesCard({ notes, target, path, title = "Internal notes", isCli
         <input type="hidden" name="path" value={path} />
         <Textarea name="body" rows={2} aria-label="New note" placeholder="Add a note (gate code, dog, where to leave cash…)" />
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-          <label className="flex min-h-8 min-w-0 items-center gap-1.5 text-ink-soft">
-            <Paperclip className="size-4 shrink-0" aria-hidden /><span className="sr-only">Attach photos or files</span>
-            <input type="file" name="file" multiple className="w-56 max-w-full text-xs text-ink-soft file:mr-2 file:cursor-pointer file:rounded-md file:border file:border-solid file:border-line file:bg-white file:px-2.5 file:py-1 file:text-xs file:font-semibold file:text-navy hover:file:bg-tint" />
-          </label>
+          <FilePicker name="file" multiple label="Attach files" aria-label="Attach photos or files" />
           {isClient && <label className={check}><input type="checkbox" name="pinned" className="size-4" />Pin to top</label>}
           {isClient && <label className={check} title="Also show this note on the client's requests, quotes and jobs"><input type="checkbox" name="linkDownstream" value="on" defaultChecked className="size-4" />Show on their work</label>}
           <Button variant="secondary" className="ml-auto">Save note</Button>

@@ -40,7 +40,7 @@ export default async function Marketing({ searchParams }: PageProps<"/marketing"
   const sentOn = (d: Date) => prettyDate(d.toLocaleDateString("en-CA", { timeZone: "America/Edmonton" }));
   return (
     <>
-      <PageHeader title="Marketing" sub="Reviews, referrals and where new clients come from. Last 90 days." actions={<ButtonLink href="/marketing/campaigns" variant="primary">Campaigns</ButtonLink>} />
+      <PageHeader title="Marketing" sub="Reviews, referrals and where new clients come from. Last 90 days." actions={<ButtonLink href="/marketing/campaigns">Campaigns</ButtonLink>} />
       <Flash error={sp.error} />
       <Saved when={!!sp.saved} />
       <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">

@@ -11,7 +11,6 @@ import { SectionNav } from "@/components/settings/section-nav";
 import { Badge, Button, Card, Empty, Field, Input, PageHeader, btn, inputCls } from "@/components/ui";
 import { dateOnly } from "@/server/dates";
 import { business, businessId, db } from "@/server/db";
-import { env } from "@/server/env";
 import { parseSettings, SETTING_DAYS, SETTING_LABELS, type ToggleKey } from "@/server/settings";
 import { stripeEnabled } from "@/server/stripe";
 import { quoteTemplateDelete, quoteTemplateRename, saveAutomations, saveBusiness, saveSchedule, saveSeason, saveTax } from "./actions";
@@ -89,7 +88,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
         {k === "autoPay" && (
           <>
             <InlineField>Wait <input name="autoPayGraceDays" type="number" min={0} max={14} defaultValue={settings.autoPayGraceDays} aria-label="Auto-pay: days between the invoice email and the charge" className={numCls} /> days between the invoice email and the charge</InlineField>
-            <p className="text-xs text-ink-soft">{cards ? "Time for the client to object. 0 = charged the same day. Never before the invoice is due." : "Needs card payments (Stripe) turned on."}</p>
+            <p className="text-xs text-ink-soft">{cards ? "Time for the client to object. 0 = charged the same day. Never before the invoice is due." : "Card payments aren't set up yet, so nothing is charged."}</p>
           </>
         )}
       </SwitchRow>
@@ -120,7 +119,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
               <Saved when={saved === "business"} />
               <form action={saveBusiness} className="grid gap-3 sm:grid-cols-2">
                 <Field label="Name"><Input name="name" defaultValue={biz.name} required /></Field>
-                <Field label="Legal name" hint="On invoices and the Stripe account (an adult)"><Input name="legalName" defaultValue={biz.legalName ?? ""} /></Field>
+                <Field label="Legal name" hint="On invoices and the card payments account (an adult)"><Input name="legalName" defaultValue={biz.legalName ?? ""} /></Field>
                 <Field label="Phone"><Input name="phone" defaultValue={biz.phone ?? ""} /></Field>
                 <Field label="Help email"><Input name="helpEmail" type="email" defaultValue={biz.helpEmail ?? ""} /></Field>
                 <Field label="Website"><Input name="website" defaultValue={biz.website ?? ""} /></Field>
@@ -239,7 +238,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
                   </Field>
                   <div>
                     <span className="mb-1 block text-sm font-semibold">Card payments</span>
-                    <div className="flex min-h-10 flex-wrap items-center gap-2 text-sm"><Badge tone={cards ? "green" : "gray"}>{cards ? "On (Stripe)" : "Off"}</Badge>{!cards && <span className="text-xs text-ink-soft">Set STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET to turn on.</span>}</div>
+                    <div className="flex min-h-10 flex-wrap items-center gap-2 text-sm"><Badge tone={cards ? "green" : "gray"}>{cards ? "On" : "Off"}</Badge>{!cards && <span className="text-xs text-ink-soft">Card payments aren&apos;t set up yet. Ask whoever runs your hosting to turn them on.</span>}</div>
                   </div>
                 </div>
                 <div className="pt-1"><Button>Save GST &amp; payments</Button></div>
@@ -280,7 +279,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
                   </li>
                 ))}
               </ul>
-              <p className="mt-2 text-xs text-ink-soft">Set by OWNER_EMAILS on the server ({env.ownerEmails.length} configured). Change it in Coolify and redeploy.</p>
+              <p className="mt-2 text-xs text-ink-soft">Owner emails were set when the app was installed. Ask whoever runs your hosting to change them.</p>
             </Card>
           </Group>
         </div>

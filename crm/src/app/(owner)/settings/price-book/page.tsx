@@ -3,7 +3,7 @@ import { ArrowDown, ArrowUp, ChevronDown, Plus } from "lucide-react";
 import { requireOwner } from "@/server/auth";
 import { DetailHeader } from "@/components/detail-header";
 import { Flash } from "@/components/flash";
-import { Saved } from "@/components/settings/fields";
+import { Saved, SwitchRow, primaryWhenOpen, rowToggle } from "@/components/settings/fields";
 import { Badge, Button, Card, Empty, Field, Input, Textarea, btn, inputCls } from "@/components/ui";
 import type { Service } from "@/generated/prisma/client";
 import { businessId, db } from "@/server/db";
@@ -13,7 +13,6 @@ import { serviceArchive, serviceMove, serviceSave } from "./actions";
 
 export const metadata = { title: "Price book" };
 
-const check = "flex min-h-10 items-center gap-2 text-sm font-medium";
 // One set of columns for the header and every row, so the figures line up down the page.
 const COLS = "sm:grid sm:grid-cols-[minmax(0,1fr)_3.5rem] lg:grid-cols-[minmax(0,1fr)_5.5rem_5rem_5rem_5.5rem_5.5rem_3.5rem] sm:items-center sm:gap-3";
 const moveBtn = "grid size-8 place-items-center rounded-md border border-line bg-white text-ink-soft hover:border-ink-faint/60 hover:bg-tint hover:text-navy disabled:border-line-soft disabled:bg-transparent disabled:text-ink-faint/50";
@@ -32,16 +31,16 @@ function ServiceForm({ sv, checklists }: { sv?: Service; checklists: { id: strin
       <Field label="Unit"><select name="unit" defaultValue={sv?.unit ?? "EACH"} className={inputCls}>{Object.entries(UNITS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></Field>
       <Field label="Our cost ($ per unit)"><Input name="cost" type="number" step="0.01" min={0} defaultValue={dollars(sv?.unitCostCents)} className="tabular-nums" /></Field>
       <Field label="Usual time (minutes)"><Input name="duration" type="number" step={1} min={1} max={1440} defaultValue={sv?.defaultDurationMin ?? ""} className="tabular-nums" /></Field>
-      <div className="sm:col-span-2 lg:col-span-3"><Field label="Booking label" hint="What the booking form sends. Blank = the name. etccrew.ca's form sends fixed labels, so change one only if the site changes too"><Input name="bookingLabel" maxLength={80} defaultValue={sv?.bookingLabel ?? ""} /></Field></div>
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-1 sm:col-span-2 lg:col-span-4">
-        <label className={check}><input type="checkbox" name="bookable" defaultChecked={sv?.bookable ?? false} className="size-5" />Bookable online</label>
-        <label className={check}><input type="checkbox" name="isAddon" defaultChecked={sv?.isAddon} className="size-5" />Add-on</label>
-        <label className={check}><input type="checkbox" name="taxExempt" defaultChecked={sv?.taxExempt} className="size-5" />Tax exempt</label>
-        <label className={check}><input type="checkbox" name="active" defaultChecked={sv?.active ?? true} className="size-5" />Active</label>
+      <div className="sm:col-span-2 lg:col-span-3"><Field label="Booking label" hint="What the booking form sends. Blank = the name. The form on your website sends fixed labels, so change one only if the site changes too"><Input name="bookingLabel" maxLength={80} defaultValue={sv?.bookingLabel ?? ""} /></Field></div>
+      <div className="grid gap-x-6 sm:col-span-2 sm:grid-cols-2 lg:col-span-4 lg:grid-cols-4">
+        <SwitchRow name="bookable" defaultChecked={sv?.bookable ?? false} label="Bookable online" />
+        <SwitchRow name="isAddon" defaultChecked={sv?.isAddon} label="Add-on" />
+        <SwitchRow name="taxExempt" defaultChecked={sv?.taxExempt} label="Tax exempt" />
+        <SwitchRow name="active" defaultChecked={sv?.active ?? true} label="Active" />
       </div>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 sm:col-span-2 lg:col-span-4">
-        <Button>{sv ? "Save service" : "Add service"}</Button>
-        {sv && <p className="text-xs text-ink-soft">Key <code className="rounded bg-white px-1 py-0.5 text-navy">{sv.key}</code> (fixed).{SNOW_KEYS.includes(sv.key) && " Online snow bookings are priced from this service's unit price."}</p>}
+        {sv ? <Button variant="secondary" className={primaryWhenOpen}>Save service</Button> : <Button>Add service</Button>}
+        {sv && SNOW_KEYS.includes(sv.key) && <p className="text-xs text-ink-soft">Online snow bookings are priced from this service&apos;s unit price.</p>}
       </div>
     </form>
   );
@@ -59,12 +58,12 @@ export default async function PriceBook({ searchParams }: PageProps<"/settings/p
   // not a group; archived services sit together at the end under their own heading.
   const category = (sv: Service) => CATEGORIES[sv.category as keyof typeof CATEGORIES] ?? sv.category;
   return (
-    <>
+    <div className="max-w-5xl">
       <DetailHeader back={{ href: "/settings", label: "Settings" }} title="Price book" sub="Products and services for quotes, jobs and invoices. Bookable ones are the list on the online booking page. Prices include tax; existing jobs keep the price they were booked at."
         actions={<a href="#new" className={btn("primary")}><Plus className="size-4" aria-hidden />New service</a>} />
       <Flash error={sp.error} />
       <Saved when={!!sp.saved} />
-      <div className="max-w-5xl space-y-5">
+      <div className="space-y-5">
         {services.length === 0 ? <Empty action={<a href="#new" className={btn("secondary")}>Add your first service</a>}>No services yet. Add what you sell and it shows up in quote, job and invoice line pickers.</Empty> : (
           <section className="overflow-hidden rounded-xl border border-line bg-white shadow-card" aria-label="Services">
             <div className={`hidden border-b border-line py-2 pl-[5.75rem] pr-[6.25rem] text-xs font-medium text-ink-soft ${COLS}`}>
@@ -102,7 +101,7 @@ export default async function PriceBook({ searchParams }: PageProps<"/settings/p
                           <span className="hidden text-right tabular-nums text-ink-soft lg:block">{sv.unitCostCents != null ? money(sv.unitCostCents) : "—"}</span>
                           <span className={`hidden text-right tabular-nums lg:block ${price ? "font-semibold" : "text-ink-soft"}`}>{price ?? "Quote"}</span>
                           <span className="hidden text-ink-soft lg:block">{price ? UNITS[sv.unit] : ""}</span>
-                          <span className="mt-1 inline-flex items-center gap-1 font-medium text-blue sm:mt-0 sm:justify-end"><span className="group-open:hidden">Edit</span><span className="hidden group-open:inline">Close</span><ChevronDown className="size-4 transition-transform group-open:rotate-180" aria-hidden /></span>
+                          <span className={`mt-1 sm:mt-0 sm:justify-end ${rowToggle}`}><span className="group-open:hidden">Edit</span><span className="hidden group-open:inline">Close</span><ChevronDown className="size-4 transition-transform group-open:rotate-180" aria-hidden /></span>
                         </summary>
                         <div className="border-t border-line-soft bg-tint p-4 sm:p-5"><ServiceForm sv={sv} checklists={checklists} /></div>
                       </details>
@@ -123,6 +122,6 @@ export default async function PriceBook({ searchParams }: PageProps<"/settings/p
         </div>
         <p className="max-w-[70ch] text-xs text-ink-soft">Archived services drop out of pickers and the booking page but stay on past quotes, jobs and invoices; nothing is ever deleted. The tax-exempt flag, cost and usual time are recorded here but don&apos;t change invoices or scheduling yet.</p>
       </div>
-    </>
+    </div>
   );
 }

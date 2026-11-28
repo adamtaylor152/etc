@@ -3,7 +3,7 @@
 import { Download } from "lucide-react";
 import { stripeEnabled } from "@/server/stripe";
 import { InvoicePay } from "@/components/invoice-pay";
-import { Done, Help, LinkProblem, PageTitle, Tap, TotalRow, textLink } from "@/components/public/kit";
+import { Done, Help, LinkProblem, PageTitle, Tap, TotalRow, cta, textLink } from "@/components/public/kit";
 import { Card, inputCls, Notice } from "@/components/ui";
 import { InvoiceBadge } from "@/components/status";
 import { invoiceView } from "@/server/billing/invoice";
@@ -59,7 +59,7 @@ export default async function PublicInvoice({ params, searchParams }: PageProps<
               <p className={`font-medium tabular-nums ${view === "PAST_DUE" ? "text-red-700" : "text-ink-soft"}`}>{view === "PAST_DUE" ? "Was due" : "Due"} {prettyDate(dateOnly(inv.dueOn))}</p>
             </div>
             {inv.amountPaidCents > 0 && <p className="mt-3 text-sm text-ink-soft tabular-nums">{money(inv.amountPaidCents)} of {money(inv.totalCents)} already paid. Thank you.</p>}
-            <a href="#pay" className={`no-print mt-2 ${textLink}`}>How to pay</a>
+            <a href="#pay" className={cta("primary", "no-print mt-4")}>How to pay</a>
           </Card>
         ) : inv.status === "PAID" ? (
           <Done title="Paid in full. Thank you.">
@@ -89,10 +89,11 @@ export default async function PublicInvoice({ params, searchParams }: PageProps<
             {inv.amountPaidCents > 0 && <><TotalRow muted label="Paid" value={`−${money(inv.amountPaidCents)}`} /><TotalRow label={<span className="font-semibold">Balance</span>} value={<span className="font-semibold">{money(balance)}</span>} /></>}
           </dl>
           {inv.message && <p className="mt-4 whitespace-pre-line rounded-lg bg-tint p-3.5">{inv.message}</p>}
-          <p className="mt-4 text-sm text-ink-soft">
-            {biz.taxRegistered ? `${biz.taxName} ${money(inv.taxCents)}${biz.pricesIncludeTax ? " included" : ""}${biz.taxNumber ? ` · ${biz.taxName} #${biz.taxNumber}` : ""}` : "Prices include tax."}
-            {" "}{biz.legalName ?? biz.name} · {(biz.website ?? env.siteUrl).replace(/^https?:\/\//, "")} · {env.helpEmail}
-          </p>
+          <div className="mt-4 text-sm text-ink-soft">
+            <p>{biz.taxRegistered ? `${biz.taxName} ${money(inv.taxCents)}${biz.pricesIncludeTax ? " included" : ""}${biz.taxNumber ? ` · ${biz.taxName} #${biz.taxNumber}` : ""}` : "Prices include tax."}</p>
+            <p className="mt-2 font-semibold text-navy">{biz.legalName ?? biz.name}</p>
+            <p className="break-words">{(biz.website ?? env.siteUrl).replace(/^https?:\/\//, "")} · {env.helpEmail}</p>
+          </div>
         </Card>
         {owing && (
           <div id="pay" className="no-print scroll-mt-4">

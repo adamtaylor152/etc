@@ -2,6 +2,8 @@
 // Logo and brand colour pickers (Settings › Messages) with a live sample of what a client sees: the top of an email
 // with the logo, a button and a link in the chosen colour. The form fields are the same two as before: `logo`, `brandColor`.
 import { useEffect, useState } from "react";
+import { ImageUp } from "lucide-react";
+import { FilePicker } from "@/components/file-picker";
 
 export function BrandFields({ logoUrl, color, businessName }: { logoUrl: string | null; color: string; businessName: string }) {
   const [c, setC] = useState(color);
@@ -11,12 +13,12 @@ export function BrandFields({ logoUrl, color, businessName }: { logoUrl: string 
   return (
     <div className="grid gap-5 sm:grid-cols-2">
       <div className="space-y-4">
-        <label className="block">
-          <span className="mb-1 block text-sm font-semibold">{logoUrl ? "Replace logo" : "Logo"}</span>
-          <input type="file" name="logo" accept="image/*" onChange={(e) => { const f = e.target.files?.[0]; setPicked(f ? URL.createObjectURL(f) : null); }}
-            className="block w-full text-sm text-ink-soft file:mr-3 file:min-h-10 file:cursor-pointer file:rounded-lg file:border file:border-solid file:border-line file:bg-white file:px-4 file:text-sm file:font-semibold file:text-navy hover:file:bg-tint" />
+        <div>
+          <span className="mb-1 block text-sm font-semibold">Logo</span>
+          <FilePicker name="logo" accept="image/*" label={logoUrl ? "Replace logo" : "Choose a logo"} icon={<ImageUp className="size-4 shrink-0" strokeWidth={1.75} aria-hidden />} className="flex"
+            onChange={(e) => { const f = e.target.files?.[0]; setPicked(f ? URL.createObjectURL(f) : null); }} />
           <span className="mt-1 block text-xs text-ink-soft">PNG or JPG, wide rather than tall. It shows on a white background.</span>
-        </label>
+        </div>
         <label className="block">
           <span className="mb-1 block text-sm font-semibold">Brand colour</span>
           <span className="flex items-center gap-3">

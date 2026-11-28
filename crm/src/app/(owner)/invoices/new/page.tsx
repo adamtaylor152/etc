@@ -38,9 +38,9 @@ export default async function NewInvoice({ searchParams }: PageProps<"/invoices/
   return (
     <>
       <DetailHeader back={{ href: `/clients/${client.id}`, label: clientName(client) }} title="New invoice" sub={<>For {clientName(client)} · <Link href="/invoices/new" className="font-semibold text-blue hover:text-blue-deep">Change client</Link></>} />
-      <div className="max-w-3xl">
+      <div>
         <Flash error={s("error")} />
-        <div className="space-y-5">
+        <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] [&>*]:min-w-0">
           <Card title="Work that's ready to bill">
             {ready ? (
               <>
