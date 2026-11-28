@@ -31,7 +31,7 @@ export default async function PublicQuote({ params, searchParams }: PageProps<"/
   const deposit = await db.invoice.findFirst({ where: { kind: "DEPOSIT", quoteId: q.id } });
   // Photos the client sent with their request, plus any we chose to share with them.
   const photos = await db.attachment.findMany({
-    where: { businessId: q.businessId, deletedAt: null, mediaType: "IMAGE", AND: [{ OR: [{ quoteId: q.id }, ...(q.requestId ? [{ requestId: q.requestId }] : [])] }, { OR: [{ uploadedByType: "CLIENT" }, { sharedWithClient: true }] }] },
+    where: { businessId: q.businessId, deletedAt: null, mediaType: "IMAGE", kind: { not: "DOCUMENT" }, AND: [{ OR: [{ quoteId: q.id }, ...(q.requestId ? [{ requestId: q.requestId }] : [])] }, { OR: [{ uploadedByType: "CLIENT" }, { sharedWithClient: true }] }] },
     orderBy: { createdAt: "asc" }, take: 20,
   });
   // One picture per line, where the owner added one. Private: reachable only through these signed links.
