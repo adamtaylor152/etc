@@ -27,6 +27,14 @@ enum TokenPurpose {
   VISIT_REPORT
   REVIEW
   VISIT_CONFIRM
+  PRICE_CHANGE
+}
+
+// Driveway size: sets the snow price (standard = 1-2 car). Oversized gets a quote.
+enum DriveSize {
+  STANDARD
+  LARGE
+  OVERSIZED
 }
 
 enum ClientSource {
@@ -378,6 +386,9 @@ model Property {
   petNotes      String?
   hazards       String?
   routeSort     Int?
+  driveSize     DriveSize? // what the client picked, until someone checks it
+  extraWalk     Boolean       @default(false) // corner lot / long public sidewalk
+  sizeCheckedAt DateTime? // null = nobody has looked at the satellite view yet
   isDefault     Boolean       @default(false)
   archivedAt    DateTime?
   createdAt     DateTime      @default(now())
@@ -603,6 +614,8 @@ model Job {
   seasonalPriceCents Int?
   iceMelt            Boolean          @default(false)
   planPausedAt       DateTime?
+  sizeHoldAt         DateTime? // waiting on the client to OK a new price for a bigger driveway; no visits until then
+  pendingPrice       Json? // { size, extraWalk, baseCents, walkCents } offered to the client
   closedAt           DateTime?
   closeReason        String?
   createdAt          DateTime         @default(now())

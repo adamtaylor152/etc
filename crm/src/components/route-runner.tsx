@@ -135,6 +135,7 @@ export function RouteRunner({ date, initial }: { date: string; initial: RunStop[
           <p className="text-xs font-bold uppercase tracking-wide text-ink-soft">Stop {done + 1} of {stops.length}{cur.time && ` · ${cur.time}`}{cur.communityName && ` · ${cur.communityName}`}</p>
           <h2 className="font-display text-2xl font-bold">{cur.address}</h2>
           <p className="text-base">{cur.client} · {cur.job}</p>
+          {cur.sizeNote && <p className="mt-2 rounded-xl border border-amber-300 bg-amber-100 p-2 text-sm font-semibold text-amber-950">{cur.sizeNote}</p>}
           {(cur.gate || cur.access || cur.pets || cur.hazards) && (
             <ul className="mt-2 space-y-0.5 rounded-xl bg-amber-50 p-2 text-sm text-amber-950">
               {cur.gate && <li><b>Gate:</b> {cur.gate}</li>}{cur.access && <li>{cur.access}</li>}{cur.pets && <li><b>Pets:</b> {cur.pets}</li>}{cur.hazards && <li><b>Careful:</b> {cur.hazards}</li>}
@@ -161,7 +162,7 @@ export function RouteRunner({ date, initial }: { date: string; initial: RunStop[
           <details className="mt-2">
             <summary className="cursor-pointer list-none text-center text-sm font-semibold text-ink-soft"><SkipForward className="mr-1 inline size-4" />Skip this stop</summary>
             <div className="mt-2 grid grid-cols-2 gap-2">
-              {[["ALREADY_CLEARED", "Already clear"], ["BLOCKED_BY_CAR", "Car in the way"], ["NO_ACCESS", "Can't get in"], ["CLIENT_CANCELLED", "Client cancelled"]].map(([k, l]) => (
+              {[["ALREADY_CLEARED", "Already clear"], ["BLOCKED_BY_CAR", "Car in the way"], ["NO_ACCESS", "Can't get in"], ["CLIENT_CANCELLED", "Client cancelled"], ["OTHER", "Too big for the price"]].map(([k, l]) => (
                 <button key={k} onClick={() => act(cur, "SKIPPED", { skipReason: k })} className="min-h-12 rounded-xl border-2 border-line text-sm font-semibold">{l}</button>
               ))}
             </div>

@@ -8,6 +8,7 @@ export type RunStop = {
   visitId: string; client: string; phone: string | null; address: string; lat: number | null; lng: number | null;
   access: string | null; gate: string | null; pets: string | null; hazards: string | null; job: string; snow: boolean; iceMelt: boolean;
   state: string; time: string | null; people: string[]; communityName: string | null;
+  sizeNote: string | null; // snow stop whose driveway size nobody has checked yet
 };
 
 export async function runStops(businessId: string, date: string, userId: string | "all") {
@@ -23,7 +24,15 @@ export async function runStops(businessId: string, date: string, userId: string 
     job: v.job.kind === "SNOW_PLAN" ? "Snow" : v.job.title, snow: v.job.kind === "SNOW_PLAN" || !!v.snowEventId, iceMelt: !!v.job.iceMelt,
     state: v.state, time: v.startAt && !v.anytime ? v.startAt.toLocaleTimeString("en-CA", { timeZone: "America/Edmonton", hour: "numeric", minute: "2-digit" }) : null,
     people: who.filter((a) => a.visitId === v.id).map((a) => a.user.name || a.user.email.split("@")[0]), communityName: v.property.community?.name ?? null,
+    sizeNote: sizeNote(v.job.kind === "SNOW_PLAN" || !!v.snowEventId, v.property),
   }));
+}
+
+/** Crew warning for a snow stop whose size hasn't been checked on the satellite view. */
+export function sizeNote(snow: boolean, p: { sizeCheckedAt: Date | null; driveSize: string | null }) {
+  if (!snow || p.sizeCheckedAt) return null;
+  const booked = p.driveSize === "LARGE" ? "large" : "standard (1–2 car)";
+  return `Size not checked yet: booked as ${booked}. Much bigger? Don't start; skip it and tell the office.`;
 }
 
 /**

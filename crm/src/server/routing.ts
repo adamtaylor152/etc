@@ -12,7 +12,7 @@ export type RouteVisit = Prisma.VisitGetPayload<{ include: typeof include }>;
 
 export async function routeVisits(businessId: string, where: Prisma.VisitWhereInput) {
   const [visits, order] = await Promise.all([
-    db.visit.findMany({ where: { businessId, ...where }, include }),
+    db.visit.findMany({ where: { businessId, job: { sizeHoldAt: null }, ...where }, include }), // held for a new-price OK: off the route
     db.serviceCommunity.findMany({ where: { businessId }, select: { communityCode: true, sortOrder: true } }),
   ]);
   const rank = new Map(order.map((o) => [o.communityCode, o.sortOrder]));

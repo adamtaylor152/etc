@@ -8,6 +8,7 @@ import { addDays, prettyDate, todayLocal, toDbDate } from "@/server/dates";
 import { business, businessId, db } from "@/server/db";
 import { clientName } from "@/server/queries";
 import { mapsLink, routeVisits } from "@/server/routing";
+import { sizeNote } from "@/server/runner";
 import { routeAutoOrder, routeMove, routeSplit } from "../route-actions";
 
 export const metadata = { title: "Route" };
@@ -79,7 +80,7 @@ export default async function Routes({ searchParams }: PageProps<"/routes">) {
                     <li key={v.id} className={`flex items-start gap-3 py-3 ${done ? "opacity-50" : ""}`}>
                       <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-navy font-display text-sm font-bold text-white">{stopNo.get(v.id)}</span>
                       <Link href={`/visits/${v.id}`} className="min-w-0 flex-1">
-                        <span className="block font-semibold">{v.property.formatted}</span>
+                        <span className="block font-semibold">{v.property.formatted}{sizeNote(v.job.kind === "SNOW_PLAN" || !!v.snowEventId, v.property) && <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-900">size not checked</span>}</span>
                         <span className="block text-sm text-ink-soft">
                           {clientName(v.job.client)} · {v.job.kind === "SNOW_PLAN" ? "Every snowfall" : v.job.title}
                           {v.iceMeltApplied || v.job.iceMelt ? " · ice melt" : ""}{v.pushNumber && v.pushNumber > 1 ? ` · push ${v.pushNumber}` : ""}

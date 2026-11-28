@@ -21,7 +21,7 @@ export const NAV: NavItem[][] = [
     { href: "/payments", label: "Payments", icon: Banknote, badge: "toMatch", children: [{ href: "/payments/unmatched", label: "To match", badge: "toMatch" }] },
   ],
   [
-    { href: "/snow", label: "Snow", icon: Snowflake },
+    { href: "/snow", label: "Snow", icon: Snowflake, children: [{ href: "/snow/sizes", label: "Size check" }] },
     { href: "/run", label: "My route", icon: Navigation },
     { href: "/routes", label: "Route planner", icon: MapPinned },
     { href: "/messages", label: "Messages", icon: MessageSquare, badge: "unread" },

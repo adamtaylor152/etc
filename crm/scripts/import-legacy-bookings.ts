@@ -44,7 +44,7 @@ async function main() {
     const b: Booking = {
       name: r.name, email: r.email, phone: r.phone ?? "", address: r.address, access: r.access ?? "", notes: r.notes ?? "",
       plan: r.plan ?? "", payment: r.payment, date: r.date ?? "", services: JSON.parse(r.services), icemelt: !!r.icemelt,
-      estimate: r.estimate, lat: geo?.lat ?? null, lng: geo?.lng ?? null, placeId: geo?.placeId ?? "", postalCode: geo?.postalCode ?? "",
+      estimate: r.estimate, size: "", extraWalk: false, lat: geo?.lat ?? null, lng: geo?.lng ?? null, placeId: geo?.placeId ?? "", postalCode: geo?.postalCode ?? "",
     };
     const taken = await db.request.findUnique({ where: { businessId_number: { businessId: bid, number: r.id } } });
     if (taken) renumbered++;

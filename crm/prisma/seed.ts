@@ -14,6 +14,9 @@ const slug = process.env.BUSINESS_SLUG ?? "etc";
 const SERVICES: [key: string, label: string, category: ServiceCategory, cents: number | null, extra?: Partial<Prisma.ServiceCreateInput>][] = [
   ["snow_once", "Snow shovelling", "SNOW", 3500, { name: "Snow shovelling (one-time)", unit: "VISIT" }],
   ["snow_plan_push", "Snow shovelling", "SNOW", 3000, { name: "Snow shovelling, every snowfall (per push)", unit: "PUSH", bookable: false }],
+  ["snow_once_large", "Snow shovelling", "SNOW", 5000, { name: "Snow shovelling, large driveway (one-time)", unit: "VISIT", bookable: false, bookingLabel: null }],
+  ["snow_plan_push_large", "Snow shovelling", "SNOW", 4500, { name: "Snow shovelling, large driveway, every snowfall (per push)", unit: "PUSH", bookable: false, bookingLabel: null }],
+  ["extra_walk", "Extra sidewalk", "ADDON", 1000, { name: "Extra sidewalk (corner lot / long walk)", isAddon: true, unit: "VISIT", bookable: false, bookingLabel: null }],
   ["ice_melt", "Ice melt", "ADDON", 500, { isAddon: true, bookable: false }],
   ["commercial_snow", "Commercial snow removal", "SNOW", null],
   ["roof_snow", "Roof snow removal", "SNOW", null],

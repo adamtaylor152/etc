@@ -8,6 +8,7 @@ import { env } from "../env";
 import { enqueue, kickOutbox } from "../email/outbox";
 import { logActivity, nextNumber } from "../records";
 import { mintToken } from "../tokens";
+import { BASE_NAME, snowCharge, snowPrices, sizeFromLabel, WALK_NAME } from "../ops/drive-size";
 import { serviceLines, whenText, type Booking } from "./validate";
 
 export type BookingMeta = {
@@ -69,21 +70,28 @@ export async function createBooking(b: Booking, meta: BookingMeta) {
           businessId, clientId: client.id, formatted: b.address, normalized, placeId: b.placeId || null,
           postalCode: b.postalCode || null, lat: b.lat, lng: b.lng, geocodeSource: b.lat != null ? "PLACES_AUTOCOMPLETE" : "NONE",
           communityCode: community, accessNotes: b.access || null, isDefault: isFirst,
+          ...(b.size ? { driveSize: sizeFromLabel(b.size), extraWalk: b.extraWalk } : {}),
         },
       });
-    } else if (b.access && b.access !== property.accessNotes) {
-      property = await tx.property.update({ where: { id: property.id }, data: { accessNotes: b.access } });
+    } else if ((b.access && b.access !== property.accessNotes) || (b.size && !property.sizeCheckedAt)) {
+      // A size someone already checked on the satellite view beats what the form says.
+      property = await tx.property.update({ where: { id: property.id }, data: {
+        ...(b.access ? { accessNotes: b.access } : {}), ...(b.size && !property.sizeCheckedAt ? { driveSize: sizeFromLabel(b.size), extraWalk: b.extraWalk } : {}),
+      } });
     }
 
     // 3. Request: always, with the raw payload and the exact estimate string the customer saw.
     const number = meta.number ?? (await nextNumber(tx, businessId, "REQUEST"));
-    const shovel = b.services.includes("Snow shovelling");
-    const quoted = b.services.filter((s) => s !== "Snow shovelling");
+    // Oversized driveways (acreage, lanes, commercial) are quoted like any other job.
+    const size = property.driveSize ?? sizeFromLabel(b.size);
+    const shovelPicked = b.services.includes("Snow shovelling");
+    const shovel = shovelPicked && size !== "OVERSIZED";
+    const quoted = b.services.filter((s) => s !== "Snow shovelling" || !shovel);
     const request = await tx.request.create({
       data: {
         businessId, number, clientId: client.id, propertyId: property.id, source: meta.source,
         title: b.services.join(", "), services: b.services,
-        snowPlan: !shovel ? null : b.plan === "Every snowfall" ? "EVERY_SNOWFALL" : "ONE_TIME",
+        snowPlan: !shovelPicked ? null : b.plan === "Every snowfall" ? "EVERY_SNOWFALL" : "ONE_TIME",
         iceMelt: b.icemelt, preferredDate: b.date ? toDbDate(b.date) : null, preferredPayment: PAYMENT[b.payment],
         notes: b.notes || null, accessNotes: b.access || null, estimateText: b.estimate,
         rawPayload: (meta.raw ?? null) as Prisma.InputJsonValue, ip: meta.ip, userAgent: meta.userAgent?.slice(0, 300),
@@ -95,9 +103,12 @@ export async function createBooking(b: Booking, meta: BookingMeta) {
     let jobId: string | null = null;
     if (shovel) {
       const iceMelt = await price(tx, businessId, "ice_melt", 500);
+      const prices = await snowPrices(tx, businessId);
+      const sz = size as "STANDARD" | "LARGE";
+      const walkLine = (perVisit: boolean) => (property.extraWalk ? [{ name: WALK_NAME, unitPriceCents: prices.walk, totalCents: prices.walk, perVisit, sortOrder: 2 }] : []);
       if (b.plan === "Every snowfall") {
         const season = await seasonFor(tx, businessId, b.date || today);
-        const push = await price(tx, businessId, "snow_plan_push", 3000);
+        const push = snowCharge(prices, true, sz, false)!.base;
         const open = await tx.job.findFirst({ where: { businessId, propertyId: property.id, seasonId: season.id, kind: "SNOW_PLAN", closedAt: null } });
         const job = open ?? await tx.job.create({
           data: {
@@ -107,22 +118,24 @@ export async function createBooking(b: Booking, meta: BookingMeta) {
             snowBillingMode: "PER_PUSH", triggerCm: season.defaultTriggerCm,
             pricePerPushCents: push, iceMelt: b.icemelt,
             lineItems: { create: [
-              { name: "Snow shovelling, every snowfall (per push)", unitPriceCents: push, totalCents: push, perVisit: true },
+              { name: BASE_NAME.plan[sz], unitPriceCents: push, totalCents: push, perVisit: true },
               ...(b.icemelt ? [{ name: "Ice melt", unitPriceCents: iceMelt, totalCents: iceMelt, perVisit: true, sortOrder: 1 }] : []),
+              ...walkLine(true),
             ] },
           },
         });
         jobId = job.id;
       } else {
-        const base = await price(tx, businessId, "snow_once", 3500);
+        const base = snowCharge(prices, false, sz, false)!.base;
         const job = await tx.job.create({
           data: {
             businessId, number: await nextNumber(tx, businessId, "JOB"), clientId: client.id, propertyId: property.id,
             requestId: request.id, kind: "ONE_OFF", title: "Snow shovelling", instructions: b.access || null,
             billingType: "PER_VISIT", invoiceSchedule: "AFTER_EACH_VISIT",
             lineItems: { create: [
-              { name: "Snow shovelling (one-time)", unitPriceCents: base, totalCents: base },
+              { name: BASE_NAME.once[sz], unitPriceCents: base, totalCents: base },
               ...(b.icemelt ? [{ name: "Ice melt", unitPriceCents: iceMelt, totalCents: iceMelt, sortOrder: 1 }] : []),
+              ...walkLine(true),
             ] },
             visits: { create: [{
               businessId, propertyId: property.id, scheduledDate: b.date ? toDbDate(b.date) : null, anytime: true,
@@ -147,7 +160,7 @@ export async function createBooking(b: Booking, meta: BookingMeta) {
         plan: b.plan, payment: b.payment, services: b.services, serviceLines: serviceLines(b), when: meta.when ?? whenText(b),
         estimate: b.estimate, site: env.siteUrl, phone_: env.phone, helpEmail: env.helpEmail, etransferEmail: env.etransferEmail,
       };
-      const badge = shovel ? (b.plan === "Every snowfall" ? "Every snowfall" : "One-time") : "Quote job";
+      const badge = shovel ? (b.plan === "Every snowfall" ? "Every snowfall" : "One-time") + (size === "LARGE" ? " · large" : "") : "Quote job";
       const owners = env.ownerEmails;
       const cc = env.ownerCc.filter((e) => !owners.includes(e.toLowerCase()));
       for (const to of [...owners, ...cc]) {
