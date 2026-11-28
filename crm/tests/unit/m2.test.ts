@@ -43,6 +43,13 @@ describe("chargesForVisit", () => {
     expect(chargesForVisit(seasonal, { iceMeltApplied: true }, 500)).toEqual([{ name: "Ice melt", quantity: 1, unitPriceCents: 500, totalCents: 500 }]);
     expect(chargesForVisit(seasonal, { iceMeltApplied: false }, 500)).toEqual([]);
   });
+  it("extra sidewalk is charged with every clearing the client pays for", () => {
+    const walk = { ...plan, iceMelt: false, lineItems: [{ name: "Extra sidewalk (corner lot / long walk)", quantity: 1, unitPriceCents: 1000, perVisit: true }] };
+    expect(chargesForVisit({ ...walk, snowBillingMode: "PER_PUSH" }, { iceMeltApplied: null }, 500).map((c) => c.totalCents)).toEqual([3000, 1000]);
+    expect(chargesForVisit({ ...walk, snowBillingMode: "PER_EVENT" }, { iceMeltApplied: null }, 500).map((c) => c.totalCents)).toEqual([3000, 1000]);
+    expect(chargesForVisit({ ...walk, snowBillingMode: "PER_EVENT" }, { iceMeltApplied: null, stormCharged: true }, 500)).toEqual([]);
+    expect(chargesForVisit({ ...walk, snowBillingMode: "SEASONAL" }, { iceMeltApplied: null }, 500)).toEqual([]);
+  });
   it("fixed price charges nothing per visit", () => {
     expect(chargesForVisit({ ...plan, kind: "ONE_OFF", billingType: "FIXED_PRICE", snowBillingMode: null }, { iceMeltApplied: null }, 500)).toEqual([]);
   });
