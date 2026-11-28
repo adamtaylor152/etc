@@ -5,7 +5,7 @@ import { Badge, Button, Card, Empty, Field, Input, Notice, PageHeader } from "@/
 import { ChevronRight } from "lucide-react";
 import { todayLocal, toDbDate } from "@/server/dates";
 import { businessId, db } from "@/server/db";
-import { money } from "@/server/money";
+import { cad } from "@/server/money";
 import { clientName } from "@/server/queries";
 import { renewalCandidates, renewalSeason } from "@/server/ops/jobs";
 import { DepthTierFields } from "@/components/depth-tier-fields";
@@ -72,8 +72,8 @@ export default async function Snow({ searchParams }: PageProps<"/snow">) {
                       <span className="min-w-0"><span className="font-semibold group-hover:text-blue-deep">{clientName(p.client)}</span><span className="block text-ink-soft">{p.property.formatted}</span></span>
                       <span className="flex shrink-0 flex-col items-end gap-1">
                         <span className="text-right tabular-nums">{p.triggerCm ?? season?.defaultTriggerCm} cm · {p.snowBillingMode === "SEASONAL"
-                          ? `${money(p.seasonalPriceCents ?? 0)} season · ${p.invoices.length}/${p.seasonalInstalments ?? 1} paid${p.iceMelt && !p.addonsIncluded ? " + melt" : ""}`
-                          : `${parseTiers(p.depthTiers).length ? "from " : ""}${money(p.pricePerPushCents ?? 3000)}${p.snowBillingMode === "PER_EVENT" ? " per storm" : ""}${p.iceMelt ? " + melt" : ""}`}</span>
+                          ? `${cad(p.seasonalPriceCents ?? 0)} season · ${p.invoices.length}/${p.seasonalInstalments ?? 1} paid${p.iceMelt && !p.addonsIncluded ? " + melt" : ""}`
+                          : `${parseTiers(p.depthTiers).length ? "from " : ""}${cad(p.pricePerPushCents ?? 3000)}${p.snowBillingMode === "PER_EVENT" ? " per storm" : ""}${p.iceMelt ? " + melt" : ""}`}</span>
                         {p.planPausedAt ? <Badge tone="amber">Paused</Badge> : p.property.community && <span className="text-xs text-ink-soft">{p.property.community.name}</span>}
                       </span>
                     </Link>

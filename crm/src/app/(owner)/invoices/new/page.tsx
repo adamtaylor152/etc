@@ -9,7 +9,7 @@ import { Flash } from "@/components/flash";
 import { LineItems } from "@/components/line-items";
 import { Button, Card, Field, Input, inputCls } from "@/components/ui";
 import { businessId, db } from "@/server/db";
-import { money } from "@/server/money";
+import { cad } from "@/server/money";
 import { clientName } from "@/server/queries";
 import { invoiceCreate } from "../../billing-actions";
 import { invoiceCustom } from "../../work2-actions";
@@ -55,7 +55,7 @@ export default async function NewInvoice({ searchParams }: PageProps<"/invoices/
                 <form action={invoiceCreate} className="mt-1 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-3">
                   <input type="hidden" name="clientId" value={client.id} />
                   <span className="text-xs text-ink-soft">Creates a draft with every unbilled charge. Nothing is sent yet.</span>
-                  <Button>Create invoice for {money(charges.reduce((n, c) => n + c.totalCents, 0))}</Button>
+                  <Button>Create invoice for {cad(charges.reduce((n, c) => n + c.totalCents, 0))}</Button>
                 </form>
               </>
             ) : <p className="text-sm text-ink-soft">Nothing unbilled. Completed visits add charges here automatically.</p>}

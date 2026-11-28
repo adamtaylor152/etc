@@ -1,7 +1,7 @@
 // One activity feed for a client (or a single job/quote/invoice/request, or the whole account):
 // work events (ActivityEvent), texts, calls, notes, emails and requests merged newest-first.
 import { db } from "./db";
-import { money } from "./money";
+import { cad } from "./money";
 import { clientName } from "./queries";
 
 export const FEED_TYPES = ["work", "money", "text", "call", "note", "email"] as const;
@@ -12,7 +12,8 @@ export type FeedItem = {
   direction?: "IN" | "OUT"; photos?: string[];
 };
 
-const EVENT_TITLE: Record<string, string> = {
+// Every type passed to logActivity() has a title here (a unit test reads the source to check).
+export const EVENT_TITLE: Record<string, string> = {
   "booking.received": "Booked online", "request.created": "Request created", "booking.imported": "Imported booking", "client.created": "Client added",
   "request.archived": "Request archived", "request.assessment_booked": "Assessment booked", "request.unarchived": "Request reopened",
   "quote.created": "Quote created", "quote.sent": "Quote sent", "quote.approved": "Quote approved", "quote.changes_requested": "Client asked for changes to a quote", "quote.declined": "Quote declined", "quote.reopened": "Quote reopened",
@@ -26,7 +27,16 @@ const EVENT_TITLE: Record<string, string> = {
   "payment.received": "Payment received", "payment.matched": "Payment matched", "payment.deleted": "Payment removed",
   "invoice.late_fee": "Late fee added", "payment.refunded": "Payment refunded", "payment.credit_added": "Account credit added", "payment.credit_removed": "Account credit removed",
   "card.saved": "Card saved", "card.removed": "Card removed", "autopay.on": "Auto-pay turned on", "autopay.off": "Auto-pay turned off", "autopay.failed": "Automatic payment failed",
+  "visit.return_added": "Return visit added", "visit.rescheduled_by_client": "Client moved the visit",
+  "storm.created": "Storm created", "storm.started": "Storm started", "storm.depth": "Snow depth updated", "storm.push": "Another round added to the storm", "storm.finished": "Storm finished", "storm.cancelled": "Storm cancelled",
+  "job.price_change_sent": "New price sent to the client", "job.price_accepted": "Client accepted the new price", "job.price_declined": "Client declined the new price",
+  "client.unsubscribed": "Unsubscribed from marketing emails", "client.merged": "Duplicate client merged in", "client.imported": "Clients imported",
 };
+/** What an event is called on screen. One the list above does not know yet is put into words ("visit.return_added" -> "Visit return added"): the key itself is never shown. Pure, unit-tested. */
+export function eventTitle(type: string): string {
+  const words = type.replace(/[._]+/g, " ").trim();
+  return EVENT_TITLE[type] ?? (words ? words[0].toUpperCase() + words.slice(1) : "Activity");
+}
 const OBJECT_OF: Record<string, FeedItem["object"]> = { Request: "request", Quote: "quote", Job: "job", Visit: "visit", Invoice: "invoice", Payment: "payment", Client: "client", SnowEvent: "storm" };
 const HREF: Partial<Record<FeedItem["object"], (id: string) => string>> = {
   request: (id) => `/requests/${id}`, quote: (id) => `/quotes/${id}`, job: (id) => `/jobs/${id}`, visit: (id) => `/visits/${id}`,
@@ -93,9 +103,9 @@ export async function activityFeed(scope: FeedScope, opts: { types?: readonly Fe
       const isMoney = object === "payment" || e.type.startsWith("payment.") || e.type === "invoice.sent";
       const n = typeof d.number === "number" ? d.number : numbers.get(e.entityId);
       const num = n != null && !EVENT_TITLE[e.type]?.includes("#") ? ` · ${e.entityType === "Invoice" ? "Invoice" : e.entityType === "Quote" ? "Quote" : e.entityType === "Job" ? "Job" : "Request"} #${n}` : "";
-      const amount = typeof d.amountCents === "number" ? money(d.amountCents) : typeof d.totalCents === "number" ? money(d.totalCents) : "";
+      const amount = typeof d.amountCents === "number" ? cad(d.amountCents) : typeof d.totalCents === "number" ? cad(d.totalCents) : "";
       return {
-        id: e.id, type: isMoney ? "money" : "work", object, at: e.at, title: `${EVENT_TITLE[e.type] ?? e.type}${num}`,
+        id: e.id, type: isMoney ? "money" : "work", object, at: e.at, title: `${eventTitle(e.type)}${num}`,
         detail: [amount, typeof d.method === "string" ? d.method.toLowerCase().replace("etransfer", "e-Transfer") : "", typeof d.reason === "string" ? d.reason : ""].filter(Boolean).join(" · ") || undefined,
         href: object === "payment" && typeof d.invoiceId === "string" ? `/invoices/${d.invoiceId}` : HREF[object]?.(e.entityId),
         client: who(e.clientId), tone: e.type === "payment.received" ? "green" : e.type === "visit.skipped" || e.type === "invoice.voided" ? "red" : undefined,

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { ButtonLink, Empty, PageHeader } from "@/components/ui";
 import { requireOwner } from "@/server/auth";
 import { db } from "@/server/db";
-import { money } from "@/server/money";
+import { cad } from "@/server/money";
 import { clientName } from "@/server/queries";
 import { age, quoteStage, requestStage, STAGES, type Stage } from "@/server/status/pipeline";
 
@@ -50,7 +50,7 @@ export default async function Pipeline() {
         <Empty action={<ButtonLink href="/quotes/new" variant="primary">New quote</ButtonLink>}>Nothing in the pipeline yet. New requests and quotes show up here as soon as they exist.</Empty>
       ) : (
         <>
-          <p className="mb-3 text-sm text-ink-soft"><span className="font-semibold text-navy tabular-nums">{open.length}</span> open{sum(open) > 0 && <> worth <span className="font-semibold text-navy tabular-nums">{money(sum(open))}</span> in quotes</>}<span className="lg:hidden"> · swipe sideways for more stages</span></p>
+          <p className="mb-3 text-sm text-ink-soft"><span className="font-semibold text-navy tabular-nums">{open.length}</span> open{sum(open) > 0 && <> worth <span className="font-semibold text-navy tabular-nums">{cad(sum(open))}</span> in quotes</>}<span className="lg:hidden"> · swipe sideways for more stages</span></p>
           <div className="-mx-4 flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto px-4 pb-4 sm:-mx-6 sm:scroll-px-6 sm:px-6 lg:mx-0 lg:snap-none lg:px-0">
             {STAGES.map(([k, label]) => {
               const cards = cols.get(k)!;
@@ -63,7 +63,7 @@ export default async function Pipeline() {
                       <span className={`truncate ${closed ? "text-ink-soft" : ""}`}>{label}</span>
                       <span className="rounded-full bg-white px-2 py-0.5 font-sans text-xs font-medium text-ink-soft tabular-nums">{cards.length}</span>
                     </h2>
-                    <p className="mt-0.5 pl-4 text-xs text-ink-soft tabular-nums">{sum(cards) > 0 ? <><span className={`font-semibold ${closed ? "" : "text-navy"}`}>{money(sum(cards))}</span> in quotes</> : cards.length ? "No quote totals yet" : " "}</p>
+                    <p className="mt-0.5 pl-4 text-xs text-ink-soft tabular-nums">{sum(cards) > 0 ? <><span className={`font-semibold ${closed ? "" : "text-navy"}`}>{cad(sum(cards))}</span> in quotes</> : cards.length ? "No quote totals yet" : " "}</p>
                   </header>
                   <ul className="space-y-2 p-2">
                     {cards.map((c) => (
@@ -71,7 +71,7 @@ export default async function Pipeline() {
                         <Link href={c.href} className={`block rounded-lg border px-3 py-2.5 text-sm ${closed ? "border-line-soft bg-white/70 hover:border-line hover:bg-white" : "border-line bg-white shadow-card hover:border-ink-faint/60 hover:shadow-sm"}`}>
                           <span className="flex items-baseline justify-between gap-3">
                             <span className={`min-w-0 truncate font-semibold ${closed ? "text-ink-soft" : ""}`}>{c.client}</span>
-                            {c.cents != null && c.cents > 0 && <span className={`shrink-0 font-semibold tabular-nums ${closed ? "text-ink-soft" : ""}`}>{money(c.cents)}</span>}
+                            {c.cents != null && c.cents > 0 && <span className={`shrink-0 font-semibold tabular-nums ${closed ? "text-ink-soft" : ""}`}>{cad(c.cents)}</span>}
                           </span>
                           <span className="block truncate text-ink-soft">{c.title}</span>
                           {c.note && <span className="mt-0.5 block truncate text-xs text-ink-soft">{c.note}</span>}

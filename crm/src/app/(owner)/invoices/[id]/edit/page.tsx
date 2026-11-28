@@ -9,7 +9,7 @@ import { Badge, Button, ButtonLink, Card, Field, Input, Textarea, inputCls } fro
 import { TERMS_LABEL, isCreditLine } from "@/server/billing/invoice";
 import { dateOnly } from "@/server/dates";
 import { businessId, db } from "@/server/db";
-import { money } from "@/server/money";
+import { cad } from "@/server/money";
 import { clientName } from "@/server/queries";
 import { invoiceUpdate } from "../../../billing-actions";
 
@@ -36,7 +36,7 @@ export default async function EditInvoice({ params, searchParams }: PageProps<"/
           <div>
             <LineItems dated services={services.map((sv) => ({ id: sv.id, name: sv.name, unitPriceCents: sv.unitPriceCents }))} initial={inv.lineItems.filter((l) => !isCreditLine(l)).map((l) => ({
               id: l.id, name: l.name, desc: l.description ?? "", qty: String(Number(l.quantity)), price: (l.unitPriceCents / 100).toFixed(2), date: dateOnly(l.serviceDate) ?? "",
-              note: l.charge ? `From a visit (charged ${money(l.charge.totalCents)}). Remove it and the visit goes back to unbilled.` : undefined,
+              note: l.charge ? `From a visit (charged ${cad(l.charge.totalCents)}). Remove it and the visit goes back to unbilled.` : undefined,
             }))} />
             <p className="mt-2 max-w-[70ch] text-xs text-ink-soft">To remove a line, use the bin or clear its name. Changing a visit line&apos;s price changes this invoice only; the visit still counts as billed.</p>
           </div>

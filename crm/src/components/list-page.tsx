@@ -4,7 +4,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, ChevronsUpDown, Inbox, Plus, Search, SearchX } from "lucide-react";
 import { AutoSubmit } from "./auto-submit";
-import { btn } from "./ui";
+import { btn, figure } from "./ui";
 
 export type Metric = { label: string; value: ReactNode; sub?: ReactNode; href?: string };
 export type OverviewRow = { label: string; count: number; href: string; active?: boolean; dot: string };
@@ -50,7 +50,7 @@ export function Pager({ base, params, at }: { base: string; params: Record<strin
 const TILE = "rounded-xl border border-line bg-white shadow-card";
 const TILE_LABEL = "text-xs font-medium text-ink-soft";
 // Phones: metrics are compact label/number rows inside one card. From `sm` up each is a tile of its own.
-const METRIC = "group/tile grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 px-4 py-3 sm:block sm:rounded-xl sm:border sm:border-line sm:bg-white sm:p-4 sm:shadow-card";
+const METRIC = "group/tile @container grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 px-4 py-3 max-sm:min-h-11 sm:block sm:rounded-xl sm:border sm:border-line sm:bg-white sm:p-4 sm:shadow-card";
 
 export function ListPage({ title, base, params, newHref, newLabel, actions, overview, metrics = [], filters = [], searchPlaceholder, columns, rows, empty, footer, bulk, at }: {
   title: string; base: string; params: Record<string, string | undefined>; newHref?: string; newLabel?: string; actions?: ReactNode;
@@ -94,9 +94,10 @@ export function ListPage({ title, base, params, newHref, newLabel, actions, over
                 {overview.map((o) => (
                   <li key={o.label} className="min-w-0">
                     <Link href={o.href} aria-current={o.active ? "true" : undefined}
-                      className={`flex min-h-7 items-center gap-2 rounded-md px-1.5 text-sm hover:bg-tint max-sm:min-h-8 ${o.active ? "bg-tint font-semibold" : ""}`}>
+                      className={`flex min-h-7 items-center gap-2 rounded-md px-1.5 py-0.5 text-sm leading-tight hover:bg-tint max-sm:min-h-11 ${o.active ? "bg-tint font-semibold" : ""}`}>
                       <span className={`size-2 shrink-0 rounded-full ${o.dot}`} aria-hidden />
-                      <span className="truncate">{o.label}</span>
+                      {/* A long status name takes a second line before it is cut. */}
+                      <span className="line-clamp-2 min-w-0">{o.label}</span>
                       <span className={`ml-auto pl-1 tabular-nums ${o.active ? "" : "font-medium"} ${o.count ? "" : "text-ink-faint"}`}>{num(o.count)}</span>
                     </Link>
                   </li>
@@ -110,7 +111,7 @@ export function ListPage({ title, base, params, newHref, newLabel, actions, over
                 const body = (
                   <>
                     <h2 className={`${TILE_LABEL} flex items-center justify-between gap-2`}>{m.label}{m.href && <ChevronRight className="hidden size-4 text-ink-faint group-hover/tile:text-blue sm:block" aria-hidden />}</h2>
-                    <p className="row-span-2 font-display text-[1.35rem] font-semibold leading-none tabular-nums sm:mt-1 sm:text-[1.7rem]">{m.value}</p>
+                    <p className="row-span-2 font-display text-[1.35rem] font-semibold leading-none tabular-nums sm:mt-1 sm:text-[clamp(1.15rem,14cqw,1.7rem)]">{figure(m.value)}</p>
                     {m.sub && <p className="text-xs text-ink-soft sm:mt-1.5">{m.sub}</p>}
                   </>
                 );
@@ -128,7 +129,7 @@ export function ListPage({ title, base, params, newHref, newLabel, actions, over
           <h2 className="font-display text-[0.95rem] font-semibold sm:mr-auto">
             {filtered ? "Filtered" : "All"} {noun}
             <span className="ml-2 rounded-full bg-tint px-2 py-0.5 font-sans text-xs font-medium text-ink-soft tabular-nums">{num(total)}</span>
-            {filtered && <Link href={base} className="ml-3 font-sans text-sm font-medium text-blue hover:text-blue-deep">Clear</Link>}
+            {filtered && <Link href={base} className="ml-3 inline-flex items-center font-sans text-sm font-medium text-blue hover:text-blue-deep max-sm:min-h-11 max-sm:align-middle">Clear</Link>}
           </h2>
           {sort && <input type="hidden" name="sort" value={sort} />}
           {sort && <input type="hidden" name="dir" value={dir} />}
@@ -154,7 +155,7 @@ export function ListPage({ title, base, params, newHref, newLabel, actions, over
                 const on = sort === c.key;
                 return (
                   <Link key={c.key} href={sortHref(c)} aria-current={on ? "true" : undefined}
-                    className={`inline-flex min-h-9 shrink-0 items-center gap-1 rounded-full border px-3 text-[13px] font-medium ${on ? "border-blue/30 bg-blue/8 text-blue-deep" : "border-line bg-white text-ink-soft"}`}>
+                    className={`inline-flex min-h-11 shrink-0 items-center gap-1 rounded-full border px-3.5 text-[13px] font-medium ${on ? "border-blue/30 bg-blue/8 text-blue-deep" : "border-line bg-white text-ink-soft"}`}>
                     {c.label}{on && (dir === "asc" ? <ArrowUp className="size-3.5" aria-label="ascending" /> : <ArrowDown className="size-3.5" aria-label="descending" />)}
                   </Link>
                 );

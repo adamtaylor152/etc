@@ -5,7 +5,7 @@ import { ListPage, listHref, pageOf, sortRows } from "@/components/list-page";
 import { Badge, Button, ButtonLink, btn } from "@/components/ui";
 import { addDays, dateOnly, fromLocalInput, localDayStart, prettyDate, todayLocal } from "@/server/dates";
 import { businessId, db } from "@/server/db";
-import { money } from "@/server/money";
+import { cad } from "@/server/money";
 import { clientName, inOrder, like, nameHas, textHas, words } from "@/server/queries";
 
 export const metadata = { title: "Clients" };
@@ -110,7 +110,7 @@ export default async function Clients({ searchParams }: PageProps<"/clients">) {
             tags: <span className="flex flex-wrap gap-1">{c.tags.map((t) => <Badge key={t}>{t}</Badge>)}</span>,
             status: <Badge tone={s === "active" ? "green" : s === "lead" ? "blue" : "gray"}>{s === "lead" ? "Lead" : s === "active" ? "Active" : "Archived"}</Badge>,
             last: l ? <span className="text-ink-soft">{prettyDate(dateOnly(l))}</span> : <span className="text-ink-faint">—</span>,
-            balance: b > 0 ? <span className="font-semibold text-amber-800" title="Owing on sent invoices">{money(b)}</span> : <span className="text-ink-faint">{money(0)}</span>,
+            balance: b > 0 ? <span className="font-semibold text-amber-800" title="Owing on sent invoices">{cad(b)}</span> : <span className="text-ink-faint">{cad(0)}</span>,
           },
         };
       })}

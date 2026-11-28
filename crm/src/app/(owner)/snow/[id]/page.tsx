@@ -11,7 +11,7 @@ import { Check, Clock, FileText, Route, TriangleAlert } from "lucide-react";
 import { prettyDateTime, toLocalInput } from "@/server/dates";
 import { bylawStatus } from "@/server/snow/bylaw";
 import { businessId, db } from "@/server/db";
-import { money } from "@/server/money";
+import { cad } from "@/server/money";
 import { routeVisits } from "@/server/routing";
 import { stormCancel, stormDepth, stormSnowEnded, stormFinish, stormPush, stormStart } from "../../work-actions";
 
@@ -61,7 +61,7 @@ export default async function StormPage({ params, searchParams }: PageProps<"/sn
         <Stat label="To do" value={open} tone={open > 0 && bylaw?.level === "over" ? "bad" : open > 0 && bylaw?.level === "soon" ? "warn" : undefined} />
         <Stat label="Done" value={done} tone={done > 0 ? "good" : undefined} />
         <Stat label="Skipped" value={skipped} />
-        <Stat label="Billed so far" value={money(charges._sum.totalCents ?? 0)} />
+        <Stat label="Billed so far" value={cad(charges._sum.totalCents ?? 0)} />
       </div>
       {visits.length > 0 && (
         <div className="mb-6 flex items-center gap-3">

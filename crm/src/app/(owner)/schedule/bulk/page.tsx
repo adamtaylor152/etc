@@ -3,8 +3,7 @@ import { requireOwner } from "@/server/auth";
 import { Flash } from "@/components/flash";
 import { ScheduleTabs } from "@/components/schedule-tabs";
 import { Button, Card, Empty, Field, Input, inputCls, Notice } from "@/components/ui";
-import { fmtMin } from "@/server/availability";
-import { todayLocal } from "@/server/dates";
+import { prettyMinutes, todayLocal } from "@/server/dates";
 import { businessId } from "@/server/db";
 import { loadAvailability } from "@/server/schedule-data";
 import { bulkSchedule } from "../../schedule-actions";
@@ -53,7 +52,7 @@ export default async function Bulk({ searchParams }: PageProps<"/schedule/bulk">
                 <label className="flex min-h-11 cursor-pointer flex-wrap items-center gap-x-3 gap-y-0.5 px-4 py-2 hover:bg-tint/60 sm:px-5">
                   <input type="checkbox" name="item" value={`${visitState.has(b.id) ? "visit" : "task"}:${b.id}`} defaultChecked className="size-4 shrink-0" />
                   <span className="w-24 shrink-0 tabular-nums text-ink-soft">{new Date(`${b.date}T12:00:00Z`).toLocaleDateString("en-CA", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" })}</span>
-                  <span className="w-[4.5rem] shrink-0 text-right tabular-nums text-ink-soft">{b.start != null ? fmtMin(b.start) : "Any time"}</span>
+                  <span className="w-[4.5rem] shrink-0 text-right tabular-nums text-ink-soft">{b.start != null ? prettyMinutes(b.start) : "Any time"}</span>
                   <span className="min-w-0 flex-1 font-semibold max-sm:basis-full max-sm:pl-7">{b.label}</span>
                   <span className="flex items-center gap-1.5 text-ink-soft max-sm:w-full max-sm:pl-7">
                     {b.userIds.length ? b.userIds.map((u) => <span key={u} className="inline-flex items-center gap-1.5"><span className="size-2 rounded-full" style={{ background: color.get(u) }} aria-hidden />{name.get(u)}</span>) : "Unassigned"}

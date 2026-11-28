@@ -17,6 +17,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { CalendarClock, Check, CheckCheck, ClipboardList, Clock, GripVertical, Hammer, Inbox, PanelRightClose, PanelRightOpen, RefreshCw, TriangleAlert, X } from "lucide-react";
 import { assignPeople, calendarMove, taskDone } from "@/app/(owner)/schedule-actions";
+import { clockTime } from "@/server/dates";
 import type { CalItem, Person } from "@/server/schedule";
 import { btn, Card } from "./ui";
 
@@ -104,6 +105,14 @@ export function ScheduleCalendar({ items, unscheduled, team, initialDate }: { it
             initialDate={initialDate}
             headerToolbar={{ left: "today prev,next", center: "title", right: "dayGridMonth,timeGridWeek,timeGridDay,listWeek" }}
             firstDay={1} height="auto" slotMinTime="06:00:00" slotMaxTime="21:00:00" nowIndicator allDayText="Any time"
+            // Times read as they do everywhere else in the app: "6:30 a.m.", and "6:30 – 7:30 a.m." for a block.
+            eventTimeFormat={({ start, end }) => {
+              const from = clockTime(start.hour, start.minute);
+              if (!end) return from;
+              const to = clockTime(end.hour, end.minute);
+              return `${from.slice(-4) === to.slice(-4) ? from.slice(0, -5) : from} – ${to}`;
+            }}
+            slotHeaderFormat={({ date }) => clockTime(date.hour, date.minute).replace(":00", "")}
             editable droppable eventResizableFromStart={false}
             // A busy day stays readable: a few blocks, then "+N more" (which opens the full list for that day or slot).
             dayMaxEvents={4} eventMaxStack={3}

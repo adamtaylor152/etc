@@ -5,6 +5,7 @@ import {
   Banknote, CalendarCheck, FileText, Hammer, Inbox, Mail, MessageSquare, Phone, PhoneIncoming, PhoneMissed, PhoneOutgoing, Receipt, Snowflake, StickyNote, User, type LucideIcon,
 } from "lucide-react";
 import { FEED_TYPES, type FeedItem, type FeedType } from "@/server/activity";
+import { prettyTime, TZ } from "@/server/dates";
 import { Empty } from "./ui";
 
 const LABEL: Record<FeedType, string> = { work: "Work", money: "Money", text: "Texts", call: "Calls", note: "Notes", email: "Emails" };
@@ -12,9 +13,7 @@ const ICON: Record<FeedItem["object"], [LucideIcon, string]> = {
   request: [Inbox, "Request"], quote: [FileText, "Quote"], job: [Hammer, "Job"], visit: [CalendarCheck, "Visit"], invoice: [Receipt, "Invoice"], payment: [Banknote, "Payment"],
   client: [User, "Client"], storm: [Snowflake, "Storm"], text: [MessageSquare, "Text"], call: [Phone, "Call"], note: [StickyNote, "Note"], email: [Mail, "Email"],
 };
-const TZ = "America/Edmonton";
-const day = (d: Date) => d.toLocaleDateString("en-CA", { timeZone: TZ, weekday: "long", month: "long", day: "numeric", year: d.getFullYear() === new Date().getFullYear() ? undefined : "numeric" });
-const time = (d: Date) => d.toLocaleTimeString("en-CA", { timeZone: TZ, hour: "numeric", minute: "2-digit" });
+const day =(d: Date) => d.toLocaleDateString("en-CA", { timeZone: TZ, weekday: "long", month: "long", day: "numeric", year: d.getFullYear() === new Date().getFullYear() ? undefined : "numeric" });
 
 /** Which feed types a ?types= value selects. Pure. */
 export function parseTypes(raw: string | string[] | undefined): FeedType[] {
@@ -30,7 +29,7 @@ export function ActivityFeed({ items, base, types, showClient = false, moreHref,
     const next = t === "all" ? base : `${base}${sep}types=${t}`;
     return (
       <Link key={t} href={next} aria-current={on ? "true" : undefined}
-        className={`inline-flex min-h-9 items-center rounded-full border px-3 text-[13px] font-semibold ${on ? "border-blue/30 bg-blue/8 text-blue-deep" : "border-line bg-white text-ink-soft hover:border-ink-faint/60 hover:text-navy"}`}>
+        className={`inline-flex min-h-9 items-center rounded-full border px-3 text-[13px] font-semibold max-sm:min-h-11 max-sm:px-3.5 ${on ? "border-blue/30 bg-blue/8 text-blue-deep" : "border-line bg-white text-ink-soft hover:border-ink-faint/60 hover:text-navy"}`}>
         {t === "all" ? "All" : LABEL[t]}
       </Link>
     );
@@ -56,7 +55,7 @@ export function ActivityFeed({ items, base, types, showClient = false, moreHref,
                 const quote = it.direction === "IN" && it.object === "text";
                 const body = (
                   <div className={`-mx-2 flex gap-2.5 rounded-lg px-2 py-2 text-sm sm:gap-3 ${it.href ? "group-hover:bg-tint" : ""}`}>
-                    <time dateTime={it.at.toISOString()} className="w-[4.25rem] shrink-0 pt-px text-right text-xs leading-5 tabular-nums text-ink-soft">{time(it.at)}</time>
+                    <time dateTime={it.at.toISOString()} className="w-[4.25rem] shrink-0 pt-px text-right text-xs leading-5 tabular-nums text-ink-soft">{prettyTime(it.at)}</time>
                     <Icon className={`mt-0.5 size-4 shrink-0 ${it.tone === "red" ? "text-red-700" : it.tone === "green" ? "text-emerald-700" : "text-ink-faint"}`} strokeWidth={1.75} aria-label={ICON[it.object][1]} />
                     <div className="min-w-0 flex-1">
                       <p className="flex flex-wrap items-baseline gap-x-2">
@@ -81,7 +80,7 @@ export function ActivityFeed({ items, base, types, showClient = false, moreHref,
           </section>
         ))}
       </div>
-      {moreHref && <div className="mt-4 border-t border-line-soft pt-3 text-center"><Link href={moreHref} className="inline-flex min-h-9 items-center rounded-lg px-3 text-sm font-semibold text-blue hover:bg-tint hover:text-blue-deep">Load older activity</Link></div>}
+      {moreHref && <div className="mt-4 border-t border-line-soft pt-3 text-center"><Link href={moreHref} className="inline-flex min-h-9 items-center rounded-lg px-3 text-sm font-semibold text-blue hover:bg-tint hover:text-blue-deep max-sm:min-h-11">Load older activity</Link></div>}
     </div>
   );
 }

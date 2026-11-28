@@ -8,7 +8,7 @@ import { AppShell } from "./app-shell";
 
 // Phone bottom bar: the five things you need in a cold driveway. Everything else is in the menu drawer.
 const PHONE_NAV = [
-  { href: "/", label: "Today", icon: Home },
+  { href: "/", label: "Home", icon: Home },
   { href: "/schedule", label: "Schedule", icon: CalendarDays },
   { href: "/snow", label: "Snow", icon: Snowflake },
   { href: "/messages", label: "Messages", icon: MessageSquare },

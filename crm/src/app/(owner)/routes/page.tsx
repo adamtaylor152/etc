@@ -9,11 +9,11 @@ import { ChevronLeft, ChevronRight, Eye, EyeOff, Navigation, Printer, TriangleAl
 import { RouteReorder } from "@/components/field/route-reorder";
 import { RouteMap } from "@/components/route-map";
 import { Badge, Button, ButtonLink, Card, Empty, Input, PageHeader, btn, inputCls } from "@/components/ui";
-import { addDays, fromLocalInput, prettyDate, todayLocal, toDbDate } from "@/server/dates";
+import { addDays, fromLocalInput, prettyDate, prettyTime, todayLocal, toDbDate } from "@/server/dates";
 import { business, businessId, db } from "@/server/db";
 import { clientName } from "@/server/queries";
 import { depotOf, mapsLink, routeEtas, routeVisits } from "@/server/routing";
-import { clock, duration } from "@/server/routing/eta";
+import { duration } from "@/server/routing/eta";
 import { sizeNote } from "@/server/runner";
 import { routeAutoOrder, routeReorder, routeSplit } from "../route-actions";
 
@@ -120,13 +120,13 @@ export default async function Routes({ searchParams }: PageProps<"/routes">) {
                         <td className="py-2.5 pl-3 text-right">{p.stops}</td>
                         <td className="whitespace-nowrap py-2.5 pl-3 text-right">{duration(p.driveMin)}</td>
                         <td className="whitespace-nowrap py-2.5 pl-3 text-right font-semibold">{duration(p.totalMin)}</td>
-                        <td className="whitespace-nowrap py-2.5 pl-3 text-right">{clock(p.finish)}</td>
+                        <td className="whitespace-nowrap py-2.5 pl-3 text-right">{prettyTime(p.finish)}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-              <p className="mt-3 max-w-[70ch] text-xs text-ink-soft">Setting off {clock(from)}, {times.serviceMin} min a stop (or what a property usually takes, once it has 3 timed visits), including the drive back. {times.road ? "Road drive times." : "Straight-line estimates at 30 km/h (no road routing)."} Times are estimates.</p>
+              <p className="mt-3 max-w-[70ch] text-xs text-ink-soft">Setting off {prettyTime(from)}, {times.serviceMin} min a stop (or what a property usually takes, once it has 3 timed visits), including the drive back. {times.road ? "Road drive times." : "Straight-line estimates at 30 km/h (no road routing)."} Times are estimates.</p>
             </Card>
           )}
         {groups.length ? (
@@ -159,7 +159,7 @@ export default async function Routes({ searchParams }: PageProps<"/routes">) {
                             {v.property.accessNotes && <span className="mt-1 flex gap-1.5 text-sm font-medium text-amber-900"><TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />{v.property.accessNotes}</span>}
                           </Link>
                           <span className="flex shrink-0 flex-col items-end gap-1.5">
-                            {eta && <span className="whitespace-nowrap pt-0.5 text-sm font-semibold tabular-nums" title={`${duration(eta.driveMin)} drive`}><span className="sr-only">Arriving about </span><span aria-hidden>~</span>{clock(eta.eta)}</span>}
+                            {eta && <span className="whitespace-nowrap pt-0.5 text-sm font-semibold tabular-nums" title={`${duration(eta.driveMin)} drive`}><span className="sr-only">Arriving about </span><span aria-hidden>~</span>{prettyTime(eta.eta)}</span>}
                             {v.state !== "SCHEDULED" && <Badge tone={done ? "green" : v.state === "SKIPPED" ? "gray" : "navy"}>{done ? "Done" : v.state === "SKIPPED" ? "Skipped" : "On it"}</Badge>}
                             <a href={mapsLink(v.property.formatted)} aria-label={`Navigate to ${v.property.formatted}`} className={btn("secondary", "no-print min-h-9! px-3!")}><Navigation className="size-3.5" aria-hidden />Go</a>
                           </span>

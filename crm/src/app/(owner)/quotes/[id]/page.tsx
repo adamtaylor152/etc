@@ -15,7 +15,7 @@ import { Menu, type MenuItem } from "@/components/menu";
 import { Archive, Copy, Download, Eye } from "lucide-react";
 import { dateOnly, prettyDate, prettyDateTime, todayLocal } from "@/server/dates";
 import { business, businessId, db } from "@/server/db";
-import { money } from "@/server/money";
+import { cad } from "@/server/money";
 import { clientName } from "@/server/queries";
 import { smsEnabled, toE164 } from "@/server/sms";
 import { optionTotals, quoteEditable, quoteExpired, quoteOptions, valuedOption } from "@/server/status/quote";
@@ -63,10 +63,10 @@ export default async function QuotePage({ params, searchParams }: PageProps<"/qu
   // The totals as last saved, right-aligned under the lines (read view and editor alike).
   const totals = (
     <dl className="ml-auto w-full max-w-xs space-y-1.5 text-sm tabular-nums">
-      {q.discountCents > 0 && <div className="flex justify-between gap-4"><dt className="text-ink-soft">Discount{q.discountType === "PERCENT" && ` (${q.discountValue / 100}%)`}</dt><dd>−{money(q.discountCents)}</dd></div>}
-      {q.taxCents > 0 && <div className="flex justify-between gap-4"><dt className="text-ink-soft">{biz.taxName}{biz.pricesIncludeTax ? " (included)" : ""}</dt><dd>{money(q.taxCents)}</dd></div>}
-      <div className="flex items-baseline justify-between gap-4 border-t border-navy pt-2"><dt className="font-semibold">Total{editable && <span className="font-normal text-ink-soft"> as last saved</span>}</dt><dd className="font-display text-xl font-semibold">{money(q.totalCents)}</dd></div>
-      {dep > 0 && <div className="flex justify-between gap-4 text-ink-soft"><dt>Deposit{q.depositRequired && " (required)"}</dt><dd>{money(dep)}</dd></div>}
+      {q.discountCents > 0 && <div className="flex justify-between gap-4"><dt className="text-ink-soft">Discount{q.discountType === "PERCENT" && ` (${q.discountValue / 100}%)`}</dt><dd>−{cad(q.discountCents)}</dd></div>}
+      {q.taxCents > 0 && <div className="flex justify-between gap-4"><dt className="text-ink-soft">{biz.taxName}{biz.pricesIncludeTax ? " (included)" : ""}</dt><dd>{cad(q.taxCents)}</dd></div>}
+      <div className="flex items-baseline justify-between gap-4 border-t border-navy pt-2"><dt className="font-semibold">Total{editable && <span className="font-normal text-ink-soft"> as last saved</span>}</dt><dd className="font-display text-xl font-semibold">{cad(q.totalCents)}</dd></div>
+      {dep > 0 && <div className="flex justify-between gap-4 text-ink-soft"><dt>Deposit{q.depositRequired && " (required)"}</dt><dd>{cad(dep)}</dd></div>}
       {valued && !chosen && <p className="text-right text-xs text-ink-soft">Valued at &quot;{valued.name}&quot; until the client chooses an option.</p>}
     </dl>
   );
@@ -77,7 +77,7 @@ export default async function QuotePage({ params, searchParams }: PageProps<"/qu
         kind={<span className="tabular-nums">Quote #{q.number}</span>}
         status={expired ? <Badge tone="red">Expired</Badge> : <Badge tone={QUOTE[q.status][1]}>{QUOTE[q.status][0]}</Badge>}
         title={q.title ?? "Quote"}
-        sub={<><Link className={link} href={`/clients/${q.clientId}`}>{clientName(q.client)}</Link>{q.property && ` · ${q.property.formatted}`}{q.request && <> · <Link className={link} href={`/requests/${q.request.id}`}>request #{q.request.number}</Link></>} · <span className="font-semibold text-navy tabular-nums">{money(q.totalCents)}</span></>}
+        sub={<><Link className={link} href={`/clients/${q.clientId}`}>{clientName(q.client)}</Link>{q.property && ` · ${q.property.formatted}`}{q.request && <> · <Link className={link} href={`/requests/${q.request.id}`}>request #{q.request.number}</Link></>} · <span className="font-semibold text-navy tabular-nums">{cad(q.totalCents)}</span></>}
         actions={<>
           {!editable && (q.status === "AWAITING_RESPONSE") && <form action={quoteSend}>{hidden}<Button variant="secondary">Resend</Button></form>}
           {q.status === "AWAITING_RESPONSE" && textable && <form action={quoteSend}>{hidden}<input type="hidden" name="via" value="SMS" /><Button variant="secondary">Send by text</Button></form>}
@@ -109,7 +109,7 @@ export default async function QuotePage({ params, searchParams }: PageProps<"/qu
         <div className="min-w-0 space-y-5 lg:col-span-2">
           {q.status === "APPROVED" && (
             <Card title="Approved: book it" className="border-emerald-200">
-              <p className="mb-3 max-w-[70ch] text-sm">Approved by <span className="font-semibold">{q.approvedByName}</span> {prettyDateTime(q.approvedAt)}.{chosen && <> Chose <span className="font-semibold">{chosen.name}</span>.</>} Total <span className="tabular-nums">{money(q.totalCents)}</span>.</p>
+              <p className="mb-3 max-w-[70ch] text-sm">Approved by <span className="font-semibold">{q.approvedByName}</span> {prettyDateTime(q.approvedAt)}{chosen && <> Chose <span className="font-semibold">{chosen.name}</span>.</>} Total <span className="tabular-nums">{cad(q.totalCents)}</span>.</p>
               <form action={quoteConvert} className="grid items-end gap-3 sm:grid-cols-3">
                 {hidden}
                 <Field label="First visit" hint="Blank = schedule later"><Input type="date" name="date" /></Field>
@@ -169,7 +169,7 @@ export default async function QuotePage({ params, searchParams }: PageProps<"/qu
                       <tr key={o.key} className={`bg-tint/60 ${chosen && chosen !== o ? "text-ink-soft" : ""}`}>
                         <td colSpan={2} className="px-2 py-2 font-semibold max-sm:hidden"><span className="flex flex-wrap items-center gap-2">{o.name}{o.recommended && <Badge tone="blue">Recommended</Badge>}{chosen === o && <Badge tone="green">Client chose this</Badge>}</span></td>
                         <td className="px-2 py-2 font-semibold sm:hidden"><span className="flex flex-wrap items-center gap-2">{o.name}{o.recommended && <Badge tone="blue">Recommended</Badge>}{chosen === o && <Badge tone="green">Client chose this</Badge>}</span></td>
-                        <td className="whitespace-nowrap px-2 py-2 text-right font-semibold">{money(optionTotals(q.lineItems, q, biz, o.key).totalCents)}</td>
+                        <td className="whitespace-nowrap px-2 py-2 text-right font-semibold">{cad(optionTotals(q.lineItems, q, biz, o.key).totalCents)}</td>
                       </tr>
                     ),
                     ...lines.map((l) => {
@@ -181,10 +181,10 @@ export default async function QuotePage({ params, searchParams }: PageProps<"/qu
                             <span className={out ? "line-through" : "font-medium"}>{l.name}</span>
                             {l.isOptional && <span className="ml-1.5 text-xs text-ink-soft">Optional{l.isSelected ? ", chosen" : ", not chosen"}</span>}
                             {l.description && <span className="block text-xs text-ink-soft">{l.description}</span>}
-                            {Number(l.quantity) !== 1 && <span className="block text-xs text-ink-soft tabular-nums sm:hidden">{Number(l.quantity)} × {money(l.unitPriceCents)}</span>}
+                            {Number(l.quantity) !== 1 && <span className="block text-xs text-ink-soft tabular-nums sm:hidden">{Number(l.quantity)} × {cad(l.unitPriceCents)}</span>}
                           </td>
-                          <td className="hidden whitespace-nowrap px-3 py-2.5 text-right align-top text-ink-soft sm:table-cell">{Number(l.quantity) !== 1 && `${Number(l.quantity)} × ${money(l.unitPriceCents)}`}</td>
-                          <td className={`whitespace-nowrap py-2.5 pl-3 text-right align-top ${out ? "line-through" : "font-semibold"}`}>{money(l.totalCents)}</td>
+                          <td className="hidden whitespace-nowrap px-3 py-2.5 text-right align-top text-ink-soft sm:table-cell">{Number(l.quantity) !== 1 && `${Number(l.quantity)} × ${cad(l.unitPriceCents)}`}</td>
+                          <td className={`whitespace-nowrap py-2.5 pl-3 text-right align-top ${out ? "line-through" : "font-semibold"}`}>{cad(l.totalCents)}</td>
                         </tr>
                       );
                     }),
@@ -199,8 +199,8 @@ export default async function QuotePage({ params, searchParams }: PageProps<"/qu
         </div>
         <div className="min-w-0 space-y-5">
           <Card title="Details">
-            {deposit && <p className="mb-2 rounded-lg bg-tint px-3 py-2.5 text-sm">Deposit <span className="tabular-nums">{money(depositCents(q.totalCents, q.depositType, q.depositValue))}</span>{q.depositRequired && " (required)"}: {deposit.status === "PAID" ? <span className="font-semibold text-emerald-700">paid</span> : <><Link href={`/invoices/${deposit.id}`} className={link}>invoice #{deposit.number}</Link> · <Link href={`/clients/${q.clientId}/collect?invoice=${deposit.id}`} className={link}>record deposit</Link></>}{deposit.appliedToInvoiceId && " · applied to the job invoice"}</p>}
-            {!deposit && q.depositType !== "NONE" && <p className="mb-2 text-sm text-ink-soft">Deposit <span className="tabular-nums">{money(depositCents(q.totalCents, q.depositType, q.depositValue))}</span>{q.depositRequired && " (required)"}: invoiced when the client approves.</p>}
+            {deposit && <p className="mb-2 rounded-lg bg-tint px-3 py-2.5 text-sm">Deposit <span className="tabular-nums">{cad(depositCents(q.totalCents, q.depositType, q.depositValue))}</span>{q.depositRequired && " (required)"}: {deposit.status === "PAID" ? <span className="font-semibold text-emerald-700">paid</span> : <><Link href={`/invoices/${deposit.id}`} className={link}>invoice #{deposit.number}</Link> · <Link href={`/clients/${q.clientId}/collect?invoice=${deposit.id}`} className={link}>record deposit</Link></>}{deposit.appliedToInvoiceId && " · applied to the job invoice"}</p>}
+            {!deposit && q.depositType !== "NONE" && <p className="mb-2 text-sm text-ink-soft">Deposit <span className="tabular-nums">{cad(depositCents(q.totalCents, q.depositType, q.depositValue))}</span>{q.depositRequired && " (required)"}: invoiced when the client approves.</p>}
             <Dl rows={[["Sent", q.sentAt ? `${prettyDateTime(q.lastSentAt ?? q.sentAt)} by ${q.lastSentVia === "SMS" ? "text" : "email"}` : "Not yet"], ["Good until", prettyDate(dateOnly(q.validUntil))], ["Approved", q.approvedAt ? `${prettyDateTime(q.approvedAt)} by ${q.approvedByName}` : null], ["Option chosen", chosen?.name ?? null]]} />
             {awaiting && !textable && <p className="mt-2 text-xs text-ink-soft">Send by text is offered when texting is set up and the client has a mobile number, said yes to text updates and hasn&apos;t texted STOP.</p>}
             <div className="mt-3 space-y-3 border-t border-line-soft pt-3">

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { mergeFeed, type FeedItem } from "@/server/activity";
+import { readdirSync, readFileSync } from "node:fs";
+import { EVENT_TITLE, eventTitle, mergeFeed, type FeedItem } from "@/server/activity";
 import { ledger } from "@/server/billing/ledger";
 import { cleanContactPoints, numbersOf } from "@/server/clients";
 import { cdrToCall } from "@/server/ops/calls";
@@ -33,6 +34,22 @@ describe("activity merge", () => {
     const out = mergeFeed([[it_("a", "2026-12-01", "note"), it_("b", "2026-12-03", "text")], [it_("c", "2026-12-02", "call")]], ["note", "text"], 10);
     expect(out.map((x) => x.id)).toEqual(["b", "a"]);
     expect(mergeFeed([[it_("a", "2026-12-01", "note"), it_("b", "2026-12-03", "note")]], ["note"], 1).map((x) => x.id)).toEqual(["b"]);
+  });
+  it("never shows an event key: unknown types are put into words", () => {
+    expect(eventTitle("storm.cancelled")).toBe("Storm cancelled");
+    expect(eventTitle("visit.return_added")).toBe("Return visit added");
+    expect(eventTitle("visit.something_new")).toBe("Visit something new");
+  });
+  it("has a label for every event the code logs", () => {
+    const logged = new Set<string>();
+    for (const f of readdirSync("src", { recursive: true, encoding: "utf8" })) {
+      if (!/\.tsx?$/.test(f) || f.startsWith("generated")) continue;
+      const src = readFileSync(`src/${f}`, "utf8");
+      if (!src.includes("logActivity(")) continue;
+      for (const m of src.matchAll(/\btype: (?:\w+ \? )?"([a-z_]+\.[a-z_]+)"(?: : "([a-z_]+\.[a-z_]+)")?/g)) for (const t of m.slice(1)) if (t) logged.add(t);
+    }
+    expect(logged.size).toBeGreaterThan(40);
+    expect([...logged].filter((t) => !EVENT_TITLE[t])).toEqual([]);
   });
   it("parses type filters from the URL", () => {
     expect(parseTypes("text,call")).toEqual(["text", "call"]);

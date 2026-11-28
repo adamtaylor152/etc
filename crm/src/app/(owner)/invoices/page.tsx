@@ -7,7 +7,7 @@ import { INVOICE_LABEL, InvoiceBadge } from "@/components/status";
 import { invoiceView, type InvoiceView } from "@/server/billing/invoice";
 import { addDays, dateOnly, localDayStart, prettyDate, todayLocal } from "@/server/dates";
 import { businessId, db } from "@/server/db";
-import { money } from "@/server/money";
+import { cad } from "@/server/money";
 import { byClient, clientName, inOrder, invoiceViewWhere, nameHas, numberIs, textHas, words } from "@/server/queries";
 
 export const metadata = { title: "Invoices" };
@@ -59,8 +59,8 @@ export default async function Invoices({ searchParams }: PageProps<"/invoices">)
       actions={<ButtonLink href="/billing">Billing run</ButtonLink>}
       overview={tiles.map((v, n) => ({ label: INVOICE_LABEL[v], count: counts[n], dot: DOT[v], active: view === v, href: listHref("/invoices", params, { status: v }) }))}
       metrics={[
-        { label: "Issued", value: money(issuedCents), sub: `${issued._count._all} invoices · past 30 days` },
-        { label: "Average invoice", value: issued._count._all ? money(Math.round(issuedCents / issued._count._all)) : "—", sub: "past 30 days" },
+        { label: "Issued", value: cad(issuedCents), sub: `${issued._count._all} invoices · past 30 days` },
+        { label: "Average invoice", value: issued._count._all ? cad(Math.round(issuedCents / issued._count._all)) : "—", sub: "past 30 days" },
         { label: "Average time to get paid", value: avgDays != null ? `${avgDays} day${avgDays === 1 ? "" : "s"}` : "—", sub: "from issue to paid" },
       ]}
       filters={[{ name: "status", label: "Status", value: view ?? (params.status === "ALL" ? "ALL" : ""), options: [{ value: "", label: "Unpaid" }, ...VIEWS.map((v) => ({ value: v, label: INVOICE_LABEL[v] })), { value: "ALL", label: "Everything" }] }]}

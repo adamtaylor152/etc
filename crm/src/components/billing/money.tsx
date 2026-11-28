@@ -1,11 +1,9 @@
 // How money reads on the billing pages: one format, right-aligned, tabular, and totals as a ledger.
 import type { ReactNode } from "react";
+import { cad } from "@/server/money";
 
-/** "$1,234.50": always two decimals so a column of amounts lines up. Negatives use a true minus sign. */
-export function cad(cents: number): string {
-  const abs = Math.abs(cents);
-  return `${cents < 0 ? "−" : ""}$${Math.floor(abs / 100).toLocaleString("en-CA")}.${String(abs % 100).padStart(2, "0")}`;
-}
+// "$1,234.50": the one formatter for amounts on a page lives in server/money.ts; billing pages import it from here.
+export { cad };
 
 /** An amount in a row or column: tabular, never wraps. */
 export function Amount({ cents, className = "" }: { cents: number; className?: string }) {

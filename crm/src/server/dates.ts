@@ -35,11 +35,25 @@ export function prettyDate(s: string | null | undefined): string {
   return toDbDate(s).toLocaleDateString("en-CA", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
 }
 
-/** An instant shown in Calgary time. */
+/** An instant shown in Calgary time: "Nov. 28, 2:37 p.m.". It ends in a period, so a sentence that ends with it adds none. */
 export function prettyDateTime(d: Date | null | undefined): string {
   if (!d) return "";
   return d.toLocaleString("en-CA", { timeZone: TZ, month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
+
+// Times of day are written one way on every screen: "2:37 a.m.", "8:00 p.m." (Canadian style, minutes always shown).
+/** The time of day of an instant, in Calgary: "2:37 a.m.". */
+export function prettyTime(d: Date | null | undefined): string {
+  return d ? d.toLocaleTimeString("en-CA", { timeZone: TZ, hour: "numeric", minute: "2-digit" }) : "";
+}
+
+/** The same style from a wall-clock hour and minute (calendar slots, minutes after midnight): (14, 37) -> "2:37 p.m.". Pure. */
+export function clockTime(hour: number, minute = 0): string {
+  return `${hour % 12 || 12}:${String(minute).padStart(2, "0")} ${hour % 24 < 12 ? "a.m." : "p.m."}`;
+}
+
+/** Minutes after midnight -> "8:00 a.m.". Pure. */
+export const prettyMinutes = (min: number) => clockTime(Math.floor(min / 60), min % 60);
 
 /** The instant a Calgary calendar day starts (DST- and tzdata-aware). */
 export function localDayStart(s: string): Date {

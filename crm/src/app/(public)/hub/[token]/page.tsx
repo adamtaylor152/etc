@@ -14,7 +14,7 @@ import { dateOnly, prettyDate, todayLocal } from "@/server/dates";
 import { db } from "@/server/db";
 import { env } from "@/server/env";
 import { signedMediaPath } from "@/server/media";
-import { money } from "@/server/money";
+import { cad, money } from "@/server/money";
 import { mintToken, peekToken } from "@/server/tokens";
 import { currentCharge, snowPrices } from "@/server/ops/drive-size";
 import { renewalSeason } from "@/server/ops/jobs";
@@ -102,19 +102,19 @@ export default async function Hub({ params, searchParams }: PageProps<"/hub/[tok
       <div className="grid gap-5">
         {owing > 0 && (
           <Card title="What you owe">
-            <p className="font-display text-[2.25rem] font-semibold leading-none tabular-nums">{money(owing)}</p>
+            <p className="font-display text-[2.25rem] font-semibold leading-none tabular-nums">{cad(owing)}</p>
             <ul className="mt-3 divide-y divide-line-soft border-t border-line-soft">{unpaid.map(({ inv, href }) => {
               const view = invoiceView({ ...inv, dueOn: dateOnly(inv.dueOn) }, today);
               return (
                 <li key={inv.id}><a href={href} className={rowLink}>
                   <span className="min-w-0"><span className="block font-semibold">{inv.subject}</span>
                     <span className={`block text-sm tabular-nums ${view === "PAST_DUE" ? "font-medium text-red-700" : "text-ink-soft"}`}>Invoice #{inv.number} · {autoPayPending(inv.autoPayState) && inv.autoPayOn ? `card ${inv.autoPayState === "RETRYING" ? "tried again" : "charged"} ${prettyDate(dateOnly(inv.autoPayOn))}` : view === "PAST_DUE" ? `past due, was due ${prettyDate(dateOnly(inv.dueOn))}` : `due ${prettyDate(dateOnly(inv.dueOn))}`}</span></span>
-                  <span className="flex shrink-0 items-center gap-1.5"><span className="font-semibold tabular-nums">{money(inv.totalCents - inv.amountPaidCents)}</span><span className="font-semibold text-blue">Pay</span><ChevronRight className="size-4 text-ink-faint" strokeWidth={1.75} aria-hidden /></span>
+                  <span className="flex shrink-0 items-center gap-1.5"><span className="font-semibold tabular-nums">{cad(inv.totalCents - inv.amountPaidCents)}</span><span className="font-semibold text-blue">Pay</span><ChevronRight className="size-4 text-ink-faint" strokeWidth={1.75} aria-hidden /></span>
                 </a></li>
               );
             })}</ul>
             {stripeEnabled()
-              ? <form action={hubPayAll} className="mt-3"><input type="hidden" name="t" value={token} /><button className={cta()}>Pay {money(owing)} by card</button></form>
+              ? <form action={hubPayAll} className="mt-3"><input type="hidden" name="t" value={token} /><button className={cta()}>Pay {cad(owing)} by card</button></form>
               : <p className="mt-3 text-sm text-ink-soft">Open an invoice to see how to pay it.</p>}
           </Card>
         )}
@@ -241,7 +241,7 @@ export default async function Hub({ params, searchParams }: PageProps<"/hub/[tok
               const view = invoiceView({ ...inv, dueOn: dateOnly(inv.dueOn) }, today);
               return (
                 <li key={inv.id}><a href={`/i/${invoiceLinks[i]}`} className={rowLink}>
-                  <span className="min-w-0"><span className="block font-semibold">{inv.subject}</span><span className="block text-sm text-ink-soft tabular-nums">Invoice #{inv.number} · {money(inv.totalCents)}</span></span>
+                  <span className="min-w-0"><span className="block font-semibold">{inv.subject}</span><span className="block text-sm text-ink-soft tabular-nums">Invoice #{inv.number} · {cad(inv.totalCents)}</span></span>
                   <span className="flex shrink-0 items-center gap-1.5">{view === "PAID" ? <Badge tone="green">Paid</Badge> : autoPayPending(inv.autoPayState) && inv.autoPayOn ? <Badge tone="blue">Card {inv.autoPayState === "RETRYING" ? "tried again" : "charged"} {prettyDate(dateOnly(inv.autoPayOn))}</Badge> : view === "PAST_DUE" ? <Badge tone="red">Past due</Badge> : <Badge tone="amber">Pay now</Badge>}<ChevronRight className="size-4 text-ink-faint" strokeWidth={1.75} aria-hidden /></span>
                 </a></li>
               );
@@ -250,7 +250,7 @@ export default async function Hub({ params, searchParams }: PageProps<"/hub/[tok
         )}
         <Card title="Payment history" actions={<a href={`/hub/${token}/statement`} className={textLink}>Statement</a>}>
           {payments.length ? (
-            <ul className="-my-2.5 divide-y divide-line-soft">{payments.map((p) => <li key={p.id} className="flex items-baseline justify-between gap-3 py-2.5"><span className="min-w-0 tabular-nums">{p.receivedAt.toLocaleDateString("en-CA", { timeZone: "America/Edmonton", month: "short", day: "numeric", year: "numeric" })}<span className="block text-sm text-ink-soft">{p.method === "ETRANSFER" ? "e-Transfer" : p.method.charAt(0) + p.method.slice(1).toLowerCase()} · invoice #{p.invoice.number}</span></span><span className="shrink-0 font-semibold tabular-nums">{money(p.amountCents - p.refundedCents)}</span></li>)}</ul>
+            <ul className="-my-2.5 divide-y divide-line-soft">{payments.map((p) => <li key={p.id} className="flex items-baseline justify-between gap-3 py-2.5"><span className="min-w-0 tabular-nums">{p.receivedAt.toLocaleDateString("en-CA", { timeZone: "America/Edmonton", month: "short", day: "numeric", year: "numeric" })}<span className="block text-sm text-ink-soft">{p.method === "ETRANSFER" ? "e-Transfer" : p.method.charAt(0) + p.method.slice(1).toLowerCase()} · invoice #{p.invoice.number}</span></span><span className="shrink-0 font-semibold tabular-nums">{cad(p.amountCents - p.refundedCents)}</span></li>)}</ul>
           ) : <p className="text-ink-soft">No payments yet. They&apos;ll be listed here as we receive them.</p>}
         </Card>
         {(cards || card) && (

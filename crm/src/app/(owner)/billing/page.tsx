@@ -8,7 +8,7 @@ import { Flash } from "@/components/flash";
 import { Button, ButtonLink, Card, Empty, Notice, PageHeader } from "@/components/ui";
 import { dateOnly, prettyDate } from "@/server/dates";
 import { businessId, db } from "@/server/db";
-import { money } from "@/server/money";
+import { cad } from "@/server/money";
 import { clientName } from "@/server/queries";
 import { autoPayTrouble } from "@/server/ops/autopay";
 import { invoiceCreate, runBilling, sendDrafts } from "../billing-actions";
@@ -65,8 +65,8 @@ export default async function Billing({ searchParams }: PageProps<"/billing">) {
       <PageHeader title="Billing run" sub="Turn finished work into invoices: see what is unbilled, review the drafts, then send them."
         actions={<ButtonLink href="/invoices">All invoices</ButtonLink>} />
       <Steps steps={[
-        { title: "Unbilled work", state: step1, href: "#unbilled", detail: waiting ? <>{byClient.size > 0 && <>{plural(byClient.size, "client")} · {money(unbilled)}</>}{byClient.size > 0 && fixedDone.length > 0 && " · "}{fixedDone.length > 0 && plural(fixedDone.length, "fixed-price job")}</> : "Nothing waiting" },
-        { title: "Review drafts", state: step2, href: "#drafts", detail: drafts.length ? <>{plural(drafts.length, "draft")} · {money(draftCents)}</> : "No drafts yet" },
+        { title: "Unbilled work", state: step1, href: "#unbilled", detail: waiting ? <>{byClient.size > 0 && <>{plural(byClient.size, "client")} · {cad(unbilled)}</>}{byClient.size > 0 && fixedDone.length > 0 && " · "}{fixedDone.length > 0 && plural(fixedDone.length, "fixed-price job")}</> : "Nothing waiting" },
+        { title: "Review drafts", state: step2, href: "#drafts", detail: drafts.length ? <>{plural(drafts.length, "draft")} · {cad(draftCents)}</> : "No drafts yet" },
         { title: "Send", state: step2, href: "#send", detail: drafts.length ? "Emails every ticked draft" : "Nothing to send yet" },
       ]} />
 

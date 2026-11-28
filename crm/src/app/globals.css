@@ -14,7 +14,7 @@
   --color-blue-deep: color-mix(in srgb, var(--brand, #1d6fd8) 80%, #000);
   --color-sky: #7cb8ff;
   --color-ink-soft: #4a5672;
-  --color-ink-faint: #7a859c;
+  --color-ink-faint: #66718a; /* 4.9:1 on white, 4.5:1 on tint */
   --color-line: #dfe5ef;
   --color-line-soft: #ebeff6;
   --color-tint: #f4f7fc;

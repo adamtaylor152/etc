@@ -7,7 +7,6 @@ import { Badge, Button, ButtonLink, Card, Empty, Notice, PageHeader, inputCls, t
 import { suggestInvoices, type OpenInvoice } from "@/server/billing/unmatched";
 import { dateOnly, prettyDateTime } from "@/server/dates";
 import { businessId, db } from "@/server/db";
-import { money } from "@/server/money";
 import { clientName } from "@/server/queries";
 import { unmatchedApply, unmatchedDismiss } from "./actions";
 
@@ -113,7 +112,7 @@ export default async function Unmatched({ searchParams }: PageProps<"/payments/u
                           <div key={i} className="grid grid-cols-[1fr_7rem] gap-2">
                             <select name={`alloc_${i}_invoice`} defaultValue={i === 0 ? first?.id ?? "" : ""} className={inputCls} aria-label={`Invoice ${i + 1}`}>
                               <option value="">{i === 0 ? "Choose an invoice…" : "Split: another invoice (optional)"}</option>
-                              {ordered.map((o) => <option key={o.id} value={o.id}>#{o.number} {o.clientName}: {money(o.balanceCents)} owing</option>)}
+                              {ordered.map((o) => <option key={o.id} value={o.id}>#{o.number} {o.clientName}: {cad(o.balanceCents)} owing</option>)}
                             </select>
                             <input name={`alloc_${i}_amount`} type="number" step="0.01" min="0" inputMode="decimal" aria-label={`Amount for invoice ${i + 1}`} placeholder="0.00"
                               defaultValue={i === 0 && first ? (Math.min(remaining, first.balanceCents) / 100).toFixed(2) : ""} className={`${inputCls} text-right tabular-nums`} />

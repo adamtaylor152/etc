@@ -2,9 +2,21 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { pageOf } from "@/components/list-page";
 import { findCommunity, toShape } from "@/server/communities";
-import { addDays, dateOnly, todayLocal, toDbDate } from "@/server/dates";
-import { lineTotal, money } from "@/server/money";
+import { addDays, clockTime, dateOnly, prettyMinutes, prettyTime, todayLocal, toDbDate } from "@/server/dates";
+import { cad, lineTotal, money } from "@/server/money";
 import { checkToken } from "@/server/tokens";
+
+describe("times of day", () => {
+  it("are written one way: 2:37 a.m.", () => {
+    expect(clockTime(2, 37)).toBe("2:37 a.m.");
+    expect(clockTime(0)).toBe("12:00 a.m.");
+    expect(clockTime(12)).toBe("12:00 p.m.");
+    expect(prettyMinutes(8 * 60)).toBe("8:00 a.m.");
+    expect(prettyMinutes(20 * 60 + 5)).toBe("8:05 p.m.");
+    // The locale-formatted instant matches the hand-built one (whatever space the runtime puts before a.m.).
+    expect(prettyTime(new Date("2027-07-15T20:37:00Z")).replace(/\s/g, " ")).toBe(clockTime(14, 37));
+  });
+});
 
 describe("money", () => {
   it("formats CAD", () => {
@@ -13,6 +25,12 @@ describe("money", () => {
     expect(money(5)).toBe("$0.05");
     expect(money(123456)).toBe("$1,234.56");
     expect(money(-500)).toBe("-$5");
+  });
+  it("shows amounts on a page with two decimals, always", () => {
+    expect(cad(5000)).toBe("$50.00");
+    expect(cad(1163550)).toBe("$11,635.50");
+    expect(cad(5)).toBe("$0.05");
+    expect(cad(-500)).toBe("−$5.00");
   });
   it("rounds line totals half-up", () => {
     expect(lineTotal(1.5, 3333)).toBe(5000); // 4999.5 -> 5000

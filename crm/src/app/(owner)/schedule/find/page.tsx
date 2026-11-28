@@ -4,8 +4,8 @@ import Link from "next/link";
 import { Flash } from "@/components/flash";
 import { ScheduleTabs } from "@/components/schedule-tabs";
 import { Button, Card, Empty, Field, inputCls } from "@/components/ui";
-import { fmtMin, localParts, suggestSlots } from "@/server/availability";
-import { addDays, dateOnly, todayLocal } from "@/server/dates";
+import { localParts, suggestSlots } from "@/server/availability";
+import { addDays, dateOnly, prettyMinutes, todayLocal } from "@/server/dates";
 import { businessId, db } from "@/server/db";
 import { clientName } from "@/server/queries";
 import { loadAvailability } from "@/server/schedule-data";
@@ -62,13 +62,13 @@ export default async function FindTime({ searchParams }: PageProps<"/schedule/fi
                 const p = name.get(s.userId);
                 return (
                   <li key={`${s.userId}${s.date}`} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2.5 text-sm hover:bg-tint/60 sm:px-5">
-                    <span className="w-44 font-semibold tabular-nums"><time dateTime={s.date}>{new Date(`${s.date}T12:00:00Z`).toLocaleDateString("en-CA", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" })}</time> · {fmtMin(s.start)}</span>
+                    <span className="w-44 font-semibold tabular-nums"><time dateTime={s.date}>{new Date(`${s.date}T12:00:00Z`).toLocaleDateString("en-CA", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" })}</time> · {prettyMinutes(s.start)}</span>
                     <span className="flex w-32 items-center gap-1.5"><span className="size-2.5 shrink-0 rounded-full" style={{ background: p?.color }} aria-hidden /><span className="truncate">{p?.name}</span></span>
                     <span className="min-w-0 flex-1 basis-40 tabular-nums text-ink-soft">{s.near ? `${s.nearKm! < 1 ? "<1" : s.nearKm!.toFixed(1)} km from ${s.near}` : "Free day"}</span>
                     <form action={bookSlot} className="ml-auto">
                       <input type="hidden" name="visitId" value={visit.id} /><input type="hidden" name="userId" value={s.userId} /><input type="hidden" name="date" value={s.date} />
                       <input type="hidden" name="start" value={s.start} /><input type="hidden" name="duration" value={duration} />
-                      <Button variant="secondary" className="min-h-9 px-3" aria-label={`Book ${p?.name ?? "this slot"}, ${s.date} at ${fmtMin(s.start)}`}>Book</Button>
+                      <Button variant="secondary" className="min-h-9 px-3" aria-label={`Book ${p?.name ?? "this slot"}, ${s.date} at ${prettyMinutes(s.start)}`}>Book</Button>
                     </form>
                   </li>
                 );
