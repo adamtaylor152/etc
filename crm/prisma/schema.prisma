@@ -1252,6 +1252,7 @@ model ReviewRequest {
   feedback        String?
   ratedAt         DateTime?
   googleClickedAt DateTime?
+  followUpAt      DateTime? // the one reminder, if it was sent
 
   @@index([businessId, sentAt])
   @@index([clientId])
@@ -1318,8 +1319,11 @@ model Campaign {
   sentAt       DateTime?
   createdById  String?
   createdAt    DateTime        @default(now())
+  automation   String? // "WINBACK" | "RENEWAL": sent by the hourly scheduler, not by hand; its numbers live in `audience`
+  automationOn Boolean         @default(false)
   recipients   CampaignRecipient[]
 
+  @@unique([businessId, automation])
   @@index([businessId, createdAt])
 }
 

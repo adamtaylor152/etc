@@ -6,7 +6,8 @@ import { OwnerLogin } from "@/emails/login";
 import { InvoiceSent, OwnerPaymentReceived, PaymentReceipt, type InvoiceEmailData } from "@/emails/invoice";
 import { HubLink, OwnerNotice, PlanRenewal, PriceChange, QuoteApproved, QuoteSent, type QuoteEmailData } from "@/emails/quote";
 import { DailyDigest, ReviewRequest, VisitScheduled } from "@/emails/schedule";
-import { OnMyWay, OwnerSnowAlert, StormHeadsUp } from "@/emails/snow";
+import { OnMyWay, OwnerSnowAlert, StormHeadsUp, VisitSkipped } from "@/emails/snow";
+import { skipNotice } from "../status/visit";
 import { OwnerPhotosUploaded, PhotoUploadRequest, VisitDone } from "@/emails/visit";
 import { invoiceTotals } from "../billing/invoice";
 import { money } from "../money";
@@ -17,7 +18,7 @@ import { clientName } from "../queries";
 import { dayCount, dayLines } from "../runner";
 import { db } from "../db";
 import { CampaignEmail } from "@/emails/campaign";
-import { clickUrl, openPixelUrl, unsubscribeUrl, type Block } from "../ops/campaigns";
+import { clickUrl, openPixelUrl, RENEW_LINK, unsubscribeUrl, type Block } from "../ops/campaigns";
 import { env } from "../env";
 import { mintToken } from "../tokens";
 import { currentCharge, dollars, SIZES, type Pending } from "../ops/drive-size";
@@ -148,6 +149,16 @@ const ownerPaymentReceived: Template<{ paymentId: string }> = {
   },
 };
 
+// A visit was skipped for a reason the client can do something about (Marketing settings: which reasons). The wording is skipNotice().
+const visitSkipped: Template<{ visitId: string }> = {
+  subject: () => "We couldn't do your etc. visit today",
+  async render(p) {
+    const v = await db.visit.findUniqueOrThrow({ where: { id: p.visitId }, include: { job: { include: { client: true } }, property: true } });
+    const n = skipNotice(v.skipReason)!;
+    return <VisitSkipped name={clientName(v.job.client)} address={v.property.formatted} what={n.what} next={n.next} site={env.siteUrl} phone={env.phone} />;
+  },
+};
+
 const visitOnMyWay: Template<{ visitId: string }> = {
   subject: () => "The etc. crew is on the way",
   async render(p) {
@@ -245,13 +256,13 @@ async function scheduledEmail(visitId: string, reminder: boolean) {
 const visitScheduled: Template<{ visitId: string }> = { subject: () => "You're booked with etc.", render: (p) => scheduledEmail(p.visitId, false) };
 const visitReminder: Template<{ visitId: string }> = { subject: () => "Reminder: etc. is coming soon", render: (p) => scheduledEmail(p.visitId, true) };
 
-const reviewRequest: Template<{ clientId: string; reviewId?: string }> = {
-  subject: () => "How did we do?",
+const reviewRequest: Template<{ clientId: string; reviewId?: string; followUp?: boolean }> = {
+  subject: (p) => (p.followUp ? "Still happy to hear how we did" : "How did we do?"),
   async render(p, ctx) {
     const [c, biz] = await Promise.all([db.client.findUniqueOrThrow({ where: { id: p.clientId } }), db.business.findUniqueOrThrow({ where: { id: ctx.businessId } })]);
     // New flow: a rating page first (/r/...), which sends happy clients to Google and others to private feedback.
     const url = p.reviewId ? `${env.appUrl}/r/${await mintToken(db, ctx.businessId, "REVIEW", { clientId: c.id, redirectPath: p.reviewId })}` : biz.googleReviewUrl ?? env.siteUrl;
-    return <ReviewRequest name={clientName(c)} url={url} site={env.siteUrl} phone={env.phone} />;
+    return <ReviewRequest name={clientName(c)} url={url} site={env.siteUrl} phone={env.phone} followUp={p.followUp} />;
   },
 };
 
@@ -263,7 +274,11 @@ const campaignEmail: Template<{ campaignId: string; recipientId: string; clientI
       p.clientId ? db.client.findUnique({ where: { id: p.clientId } }) : null,
     ]);
     const real = p.recipientId !== "test";
-    return <CampaignEmail title={c.subject ?? ""} name={client?.firstName ?? "there"} blocks={(c.blocks as Block[]).map((b) => (b.type === "button" && real ? { ...b, url: clickUrl(p.recipientId, b.url) } : b))}
+    // {renew_link} on a button is the client's own hub page (one-tap plan renewal), minted now so no raw token is stored.
+    const raw = c.blocks as Block[];
+    const hub = client && raw.some((b) => b.url.includes(RENEW_LINK)) ? `${env.appUrl}/hub/${await mintToken(db, ctx.businessId, "CLIENT_HUB", { clientId: client.id })}` : env.siteUrl;
+    const blocks = raw.map((b) => ({ ...b, url: b.url.replace(RENEW_LINK, hub) }));
+    return <CampaignEmail title={c.subject ?? ""} name={client?.firstName ?? "there"} blocks={blocks.map((b) => (b.type === "button" && real ? { ...b, url: clickUrl(p.recipientId, b.url) } : b))}
       unsubscribe={client ? unsubscribeUrl(client.id) : `${env.appUrl}/unsubscribe/test`} address={biz.mailingAddress ?? ""} business={biz.name} pixel={real ? openPixelUrl(p.recipientId) : null} />;
   },
 };
@@ -313,6 +328,7 @@ export const templates = {
   "payment.receipt": paymentReceipt,
   "owner.payment_received": ownerPaymentReceived,
   "visit.on_my_way": visitOnMyWay,
+  "visit.skipped": visitSkipped,
   "storm.heads_up": stormHeadsUp,
   "owner.snow_alert": ownerSnowAlert,
   "quote.sent": quoteSent,

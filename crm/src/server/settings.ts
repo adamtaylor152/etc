@@ -31,6 +31,16 @@ export const SettingsSchema = z.object({
     from: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/), to: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
   }).refine((w) => w.from < w.to, "A window has to end after it starts")).min(1).max(6).default(WINDOWS),
   smsUpdates: z.boolean().default(true),            // texts (on my way, all done, storm day) to clients who opted in; needs Telnyx keys
+  reviewTrigger: z.enum(["first", "every"]).default("first"),           // ask after the first job of the season, or after every job (capped)
+  reviewCapMonths: z.coerce.number().int().min(1).max(36).default(6),   // "every": at most one ask per client in this many months
+  reviewRatedMonths: z.coerce.number().int().min(1).max(60).default(12), // never ask someone who rated us this recently
+  reviewFollowUp: z.boolean().default(false),       // one reminder if they haven't rated
+  reviewFollowUpDays: z.coerce.number().int().min(1).max(30).default(5),
+  missedCallText: z.boolean().default(false),       // text back a caller nobody answered, and make a call-back task
+  missedCallFromHour: z.coerce.number().int().min(0).max(23).default(8),  // text-backs only go out from this hour...
+  missedCallToHour: z.coerce.number().int().min(1).max(24).default(20),   // ...until this one (Calgary time)
+  skipNotice: z.boolean().default(false),           // tell the client when their visit was skipped for a reason they can fix
+  skipNoticeReasons: z.array(z.enum(["BLOCKED_BY_CAR", "NO_ACCESS", "WEATHER"])).default(["BLOCKED_BY_CAR", "NO_ACCESS"]),
 });
 export type Settings = z.infer<typeof SettingsSchema>;
 
@@ -52,7 +62,7 @@ export const SETTING_LABELS: Record<ToggleKey, [string, string]> = {
   stormHeadsUp: ["Storm heads-up", "Emails every plan client “you’re on our route” when a storm starts."],
   snowAlert: ["Snow alert to owners", "Emails you when the forecast meets a plan trigger in the next 36 hours."],
   allowPartialPayments: ["Partial payments", "New invoices let clients pay part of the balance online (you can change it per invoice)."],
-  reviewRequests: ["Google review requests", "Asks happy clients for a review after their first job of the season (needs your review link)."],
+  reviewRequests: ["Google review requests", "Asks clients how the job went, then sends happy ones to Google (needs your review link). How often: Marketing."],
   dailyDigest: ["6am daily digest", "Today’s visits, late work, unbilled charges and failed emails."],
   quoteFollowUp: ["Quote follow-up", "A reminder if the client hasn’t answered, by email or text (however the quote was last sent)."],
   quoteFollowUp2: ["Second quote follow-up", "One more reminder later on. Both stop once the client answers or the quote expires."],
@@ -60,5 +70,8 @@ export const SETTING_LABELS: Record<ToggleKey, [string, string]> = {
   clientReschedule: ["Clients can reschedule themselves", "The “confirm or change” link in reminders lets a client pick another open day and arrival window (when the people on the visit are free). You get a notice. Off: they can only ask."],
   reminderMorningOf: ["Morning-of reminder", "A second reminder at 7 am on the day of the visit."],
   assignmentAlerts: ["Assignment alerts to the team", "Emails the person you assign or move work for (and texts them, if their team record has a phone): what, where, when and a link to their route. Never prices."],
+  reviewFollowUp: ["Review request reminder", "One reminder a few days later if they haven’t rated (days and who gets asked: Marketing)."],
+  missedCallText: ["Missed-call text-back", "Texts a caller nobody answered (“Sorry we missed you”), once per number per day, and adds a call-back task. Hours: Marketing. Needs Telnyx keys."],
+  skipNotice: ["“We couldn’t do your visit” notice", "Tells the client, by text and email, when a visit is skipped for a reason they can fix (car in the way, couldn’t get in). Reasons: Marketing."],
   smsUpdates: ["Text updates", "Texts “on the way”, “all done” (with photos link) and storm days to clients who said yes to texts. Needs Telnyx keys."],
 };

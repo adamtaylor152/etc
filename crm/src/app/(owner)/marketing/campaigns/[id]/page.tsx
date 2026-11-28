@@ -1,14 +1,16 @@
 // Campaign editor: content (email blocks or text), audience with live count, test send, send now or schedule; results once sent.
 import { requireOwner } from "@/server/auth";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
+import { ConfirmButton } from "@/components/confirm-button";
 import { CampaignBlocks } from "@/components/campaign-blocks";
 import { DetailHeader } from "@/components/detail-header";
 import { Badge } from "@/components/ui";
 import { businessId, db } from "@/server/db";
-import { Audience, audienceClients, CAMPAIGN_EMAILS_PER_DAY, type Block } from "@/server/ops/campaigns";
+import { prettyDateTime } from "@/server/dates";
+import { Audience, audienceClients, CAMPAIGN_EMAILS_PER_DAY, campaignQueued, type Block } from "@/server/ops/campaigns";
 import { segments } from "@/server/segments";
-import { campaignSave } from "../../campaign-actions";
+import { campaignCancel, campaignDuplicate, campaignSave } from "../../campaign-actions";
 
 export const metadata = { title: "Campaign" };
 
@@ -19,9 +21,11 @@ export default async function CampaignPage({ params, searchParams }: PageProps<"
   const bid = await businessId();
   const c = await db.campaign.findFirst({ where: { id, businessId: bid }, include: { recipients: true } });
   if (!c) notFound();
+  if (c.automation) redirect(`/marketing/automations/${c.automation.toLowerCase()}`);
   const a = Audience.parse(c.audience);
   const draft = c.status === "DRAFT";
-  const [audience, biz, tagRows, communities] = await Promise.all([
+  const [queued, audience, biz, tagRows, communities] = await Promise.all([
+    draft ? 0 : campaignQueued(bid, c.id), // still waiting in the outbox: what Cancel would stop
     draft ? audienceClients(bid, a, c.channel) : Promise.resolve([]),
     db.business.findUniqueOrThrow({ where: { id: bid } }),
     db.client.findMany({ where: { businessId: bid }, select: { tags: true } }),
@@ -33,7 +37,14 @@ export default async function CampaignPage({ params, searchParams }: PageProps<"
   const days = Math.ceil(audience.length / CAMPAIGN_EMAILS_PER_DAY);
   return (
     <>
-      <DetailHeader back={{ href: "/marketing/campaigns", label: "Campaigns" }} kind={c.channel === "EMAIL" ? "Email campaign" : "Text campaign"} status={<Badge tone={c.status === "SENT" ? "green" : c.status === "DRAFT" ? "gray" : "blue"}>{c.status.toLowerCase()}</Badge>} title={c.name} />
+      <DetailHeader back={{ href: "/marketing/campaigns", label: "Campaigns" }} kind={c.channel === "EMAIL" ? "Email campaign" : "Text campaign"} status={<Badge tone={c.status === "SENT" ? "green" : c.status === "DRAFT" || c.status === "CANCELLED" ? "gray" : "blue"}>{c.status.toLowerCase()}</Badge>} title={c.name}
+        sub={c.status === "SCHEDULED" && c.scheduledFor ? `Goes out ${prettyDateTime(c.scheduledFor)}.` : undefined}
+        actions={<div className="flex gap-2">
+          {queued > 0 && <form action={campaignCancel}><input type="hidden" name="id" value={c.id} /><ConfirmButton message={`Cancel this campaign? ${queued} message${queued === 1 ? "" : "s"} not sent yet will never go out. This can't be undone (duplicate it to send again).`} className="min-h-10 rounded-lg border border-red-200 bg-white px-4 text-sm font-semibold text-red-700 hover:bg-red-50">Cancel {queued} unsent</ConfirmButton></form>}
+          <form action={campaignDuplicate}><input type="hidden" name="id" value={c.id} /><button className="min-h-10 rounded-lg border border-line bg-white px-4 text-sm font-semibold hover:bg-tint">Duplicate</button></form>
+        </div>} />
+      {typeof sp.cancelled === "string" && <p className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm">Cancelled. {sp.cancelled} message{sp.cancelled === "1" ? "" : "s"} will not be sent.</p>}
+      {sp.copied && <p className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm">This is a copy: same content and audience, nothing sent. Edit it and send when ready.</p>}
       {typeof sp.error === "string" && <p role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-medium text-red-800">{sp.error}</p>}
       {sp.tested && <p className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm">Test sent to the owners&apos; inboxes.</p>}
       {typeof sp.sent === "string" && <p className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm">Queued for {sp.sent} client{sp.sent === "1" ? "" : "s"}{Number(sp.days) > 1 ? `, spread over ${sp.days} days to stay under the daily email limit` : ""}.</p>}
