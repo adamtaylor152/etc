@@ -1,15 +1,18 @@
 // Invoices and payments: unbilled charges -> draft invoice -> send -> payment (cash / e-Transfer / card) -> receipt.
 import type { PaymentMethod, PaymentTerms, Prisma } from "@/generated/prisma/client";
-import { billingEmail, depositCents, depositCredit, draftEditProblem, dueDate, etransferRef, invoiceTotals, isCreditLine, statusAfterPayments } from "../billing/invoice";
+import { billingEmail, depositCents, depositCredit, draftEditProblem, dueDate, lateFeeDue, etransferRef, invoiceTotals, isCreditLine, statusAfterPayments } from "../billing/invoice";
 import { instalmentKey, instalmentSchedule } from "../billing/instalments";
+import { periodKey, periodLabel, periodsDue } from "../billing/periods";
 import { dateOnly, todayLocal, toDbDate } from "../dates";
-import { db, type Tx } from "../db";
+import { db, type Db, type Tx } from "../db";
 import { enqueue, kickOutbox } from "../email/outbox";
 import { env } from "../env";
 import { logActivity, nextNumber } from "../records";
 import { TransitionError } from "../status/visit";
 import { parseSettings } from "../settings";
 import { qualifyReferral } from "./marketing";
+import { autoPayChargeOn, autoPayReady } from "../billing/autopay";
+import { stripeEnabled } from "../stripe";
 
 /** Address for invoices, receipts and reminders (see billingEmail). */
 export const billingEmailFor = async (tx: Tx, client: { id: string; email: string }) =>
@@ -106,6 +109,7 @@ export async function invoiceFixedJob(user: Actor, jobId: string) {
   return db.$transaction(async (tx) => {
     const job = await tx.job.findFirstOrThrow({ where: { id: jobId, businessId: user.businessId }, include: { lineItems: { orderBy: { sortOrder: "asc" } } } });
     if (job.billingType !== "FIXED_PRICE") throw new TransitionError("This job is billed per visit");
+    if (job.kind === "RECURRING") throw new TransitionError("This job's fixed price is invoiced automatically each month");
     if (await tx.invoice.count({ where: { jobId, status: { not: "VOID" } } })) throw new TransitionError("This job already has an invoice");
     return createDraft(tx, user, {
       clientId: job.clientId, propertyId: job.propertyId, jobId, subject: job.title,
@@ -128,6 +132,42 @@ export async function billingRun(user: Actor) {
   let made = 0;
   for (const k of keys.values()) { await invoiceUnbilled(user, k); made++; }
   await invoiceSeasonalInstalments({ businessId: user.businessId }); // sent, not drafts: not part of the count
+  return made + await invoiceRecurringPeriods({ businessId: user.businessId });
+}
+
+/**
+ * Recurring jobs on a fixed price per month: one draft invoice per month that has come due (periodsDue), whatever the
+ * visit count. Same guard as seasonal instalments: each invoice carries a unique instalmentKey ("<jobId>:<YYYY-MM>"),
+ * so the hourly run and the billing run can both call this and never bill a month twice (a voided month is not
+ * re-issued). Closed jobs are skipped; nothing before the job was created is back-billed.
+ */
+export async function invoiceRecurringPeriods(where: { businessId?: string; id?: string } = {}) {
+  const today = todayLocal();
+  const jobs = await db.job.findMany({
+    where: { ...where, kind: "RECURRING", billingType: "FIXED_PRICE", closedAt: null, totalCents: { gt: 0 } },
+    include: { lineItems: { orderBy: { sortOrder: "asc" } } },
+  });
+  let made = 0;
+  for (const job of jobs) {
+    const created = todayLocal(job.createdAt), starts = dateOnly(job.recurrenceStartsOn);
+    const due = periodsDue({
+      startsOn: starts && starts > created ? starts : created, endsOn: dateOnly(job.recurrenceEndsOn), invoiceDay: job.invoiceDay,
+      pausedFrom: dateOnly(job.pausedFrom), pausedUntil: dateOnly(job.pausedUntil),
+    }, today);
+    for (const p of due) {
+      const key = periodKey(job.id, p.period);
+      if (await db.invoice.count({ where: { businessId: job.businessId, instalmentKey: key } })) continue;
+      try {
+        await db.$transaction((tx) => createDraft(tx, { id: null, businessId: job.businessId }, {
+          clientId: job.clientId, propertyId: job.propertyId, jobId: job.id, subject: `${job.title} · ${periodLabel(p.period)}`, instalmentKey: key,
+          lines: job.lineItems.map((l) => ({ name: l.name, quantity: Number(l.quantity), unitPriceCents: l.unitPriceCents, totalCents: l.totalCents, serviceDate: toDbDate(p.dueOn), jobId: job.id })),
+        }));
+        made++;
+      } catch (e) {
+        if ((e as { code?: string }).code !== "P2002") throw e; // unique instalmentKey: another run invoiced it first
+      }
+    }
+  }
   return made;
 }
 
@@ -168,6 +208,41 @@ export async function invoiceSeasonalInstalments(where: { businessId?: string; i
   return made;
 }
 
+/**
+ * Adds the late fee (Settings) to invoices that have earned one. Once per invoice, claimed with a conditional update so two
+ * runs can't both add it. The fee is not taxed (a late-payment charge isn't a taxable supply) and never chases a client
+ * who turned invoice follow-ups off, has a refund on the invoice, or whose saved card is still being tried.
+ */
+export async function applyLateFees() {
+  const today = todayLocal();
+  let added = 0;
+  for (const biz of await db.business.findMany({ select: { id: true, settings: true } })) {
+    const s = parseSettings(biz.settings);
+    if (!s.lateFee) continue;
+    const invs = await db.invoice.findMany({
+      where: {
+        businessId: biz.id, status: "AWAITING_PAYMENT", kind: "STANDARD", lateFeeAppliedAt: null, dueOn: { lt: toDbDate(today) },
+        client: { followUpInvoices: true }, payments: { none: { refundedCents: { gt: 0 } } }, OR: [{ autoPayState: null }, { autoPayState: { notIn: ["SCHEDULED", "RETRYING"] } }],
+      },
+      include: { client: true, _count: { select: { lineItems: true } } },
+    });
+    for (const inv of invs) {
+      const fee = lateFeeDue({ ...inv, dueOn: dateOnly(inv.dueOn) }, today, s);
+      if (fee <= 0) continue;
+      await db.$transaction(async (tx) => {
+        const claimed = await tx.invoice.updateMany({ where: { id: inv.id, lateFeeAppliedAt: null, status: "AWAITING_PAYMENT" }, data: { lateFeeAppliedAt: new Date(), subtotalCents: { increment: fee }, totalCents: { increment: fee } } });
+        if (claimed.count !== 1) return;
+        await tx.invoiceLineItem.create({ data: { invoiceId: inv.id, name: "Late fee", description: `Unpaid ${s.lateFeeDays} days past the due date`, quantity: 1, unitPriceCents: fee, totalCents: fee, serviceDate: toDbDate(today), sortOrder: inv._count.lineItems } });
+        await logActivity(tx, { businessId: biz.id, type: "invoice.late_fee", entityType: "Invoice", entityId: inv.id, actorType: "SYSTEM", clientId: inv.clientId, data: { cents: fee } });
+        for (const to of env.ownerEmails) await enqueue(tx, { businessId: biz.id, template: "owner.notice", to, priority: 5, dedupeKey: `invoice:${inv.id}:late-fee:${to}`, props: { title: `Late fee added to invoice #${inv.number}`, body: `${inv.client.firstName} ${inv.client.lastName}: $${(fee / 100).toFixed(2)} added. Their next reminder shows the new balance.`, path: `/invoices/${inv.id}` } });
+        added++;
+      });
+    }
+  }
+  if (added) kickOutbox();
+  return added;
+}
+
 export async function sendInvoice(user: Actor, invoiceId: string, tx?: Tx) {
   const run = async (t: Tx) => {
     const inv = await t.invoice.findFirstOrThrow({ where: { id: invoiceId, businessId: user.businessId }, include: { client: true } });
@@ -175,6 +250,11 @@ export async function sendInvoice(user: Actor, invoiceId: string, tx?: Tx) {
     const today = todayLocal();
     if (inv.status === "DRAFT") {
       await t.invoice.update({ where: { id: inv.id }, data: { status: "AWAITING_PAYMENT", issuedOn: toDbDate(today), dueOn: toDbDate(dueDate(today, inv.paymentTerms)), sentAt: new Date() } });
+      // Client opted in to auto-pay: stamp the day their card is charged. The email says so, and the scheduler does the charging.
+      // (Not when their email bounces: they couldn't be told first.)
+      const s = stripeEnabled() && inv.client.autoPayConsentAt && !inv.client.emailBouncedAt ? parseSettings((await t.business.findUniqueOrThrow({ where: { id: user.businessId } })).settings) : null;
+      const chargeOn = s && autoPayChargeOn({ kind: inv.kind, issuedOn: today, dueOn: dueDate(today, inv.paymentTerms) }, autoPayReady(inv.client, s, true), s.autoPayGraceDays);
+      if (chargeOn) await t.invoice.update({ where: { id: inv.id }, data: { autoPayState: "SCHEDULED", autoPayOn: toDbDate(chargeOn) } });
     }
     await enqueue(t, {
       businessId: user.businessId, template: "invoice.sent", to: await billingEmailFor(t, inv.client), replyTo: env.helpEmail, priority: 3, props: { invoiceId: inv.id },
@@ -196,9 +276,9 @@ export async function markSent(user: Actor, invoiceId: string) {
 }
 
 /** Re-derive paid amount and status after a payment or refund changes. */
-export const recomputeInvoice = (invoiceId: string) => recompute(db, invoiceId);
+export const recomputeInvoice = (invoiceId: string, tx: Db = db) => recompute(tx, invoiceId);
 
-async function recompute(tx: Tx, invoiceId: string) {
+async function recompute(tx: Db, invoiceId: string) {
   const inv = await tx.invoice.findUniqueOrThrow({ where: { id: invoiceId } });
   const agg = await tx.payment.aggregate({ where: { invoiceId }, _sum: { amountCents: true, refundedCents: true } });
   const paid = (agg._sum.amountCents ?? 0) - (agg._sum.refundedCents ?? 0);
@@ -216,7 +296,7 @@ async function recompute(tx: Tx, invoiceId: string) {
 
 export async function recordPayment(user: Actor, input: {
   invoiceId: string; method: PaymentMethod; amountCents: number; reference?: string; note?: string;
-  stripePaymentIntentId?: string; stripeCheckoutSessionId?: string; feeCents?: number; unmatchedPaymentId?: string; receivedAt?: Date;
+  stripePaymentIntentId?: string; stripeCheckoutSessionId?: string; feeCents?: number; unmatchedPaymentId?: string; receivedAt?: Date; tipCents?: number;
 }, outerTx?: Tx) {
   if (!Number.isInteger(input.amountCents) || input.amountCents <= 0) throw new TransitionError("Enter an amount");
   const run = async (tx: Tx) => {
@@ -227,7 +307,7 @@ export async function recordPayment(user: Actor, input: {
       data: {
         businessId: user.businessId, clientId: inv.clientId, invoiceId: inv.id, method: input.method, amountCents: input.amountCents,
         reference: input.reference || null, note: input.note || null, stripePaymentIntentId: input.stripePaymentIntentId,
-        stripeCheckoutSessionId: input.stripeCheckoutSessionId, feeCents: input.feeCents, recordedById: user.id ?? undefined,
+        stripeCheckoutSessionId: input.stripeCheckoutSessionId, feeCents: input.feeCents, tipCents: input.tipCents || null, recordedById: user.id ?? undefined,
         unmatchedPaymentId: input.unmatchedPaymentId, ...(input.receivedAt ? { receivedAt: input.receivedAt } : {}),
       },
     });
@@ -259,7 +339,11 @@ export async function recordPayment(user: Actor, input: {
 export async function deletePayment(user: Actor, paymentId: string) {
   await db.$transaction(async (tx) => {
     const p = await tx.payment.findFirstOrThrow({ where: { id: paymentId, businessId: user.businessId } });
-    if (p.method === "CARD") throw new TransitionError("Refund card payments in Stripe");
+    if (p.method === "CARD") throw new TransitionError("Card payments can't be removed. Refund it instead.");
+    // An overpayment's extra went to account credit: it leaves with the payment, unless it has been spent.
+    const extra = await tx.clientCredit.findMany({ where: { paymentId: p.id } });
+    if (extra.some((c) => c.appliedToInvoiceId)) throw new TransitionError("The extra from this payment was already used as credit on another invoice. Refund it instead.");
+    await tx.clientCredit.deleteMany({ where: { paymentId: p.id } });
     await tx.payment.delete({ where: { id: p.id } });
     await recompute(tx, p.invoiceId);
     await logActivity(tx, { businessId: user.businessId, type: "payment.deleted", entityType: "Invoice", entityId: p.invoiceId, actorType: "USER", actorUserId: user.id ?? undefined, clientId: p.clientId, data: { amountCents: p.amountCents } });
@@ -270,7 +354,7 @@ export async function deletePayment(user: Actor, paymentId: string) {
 export async function voidInvoice(user: Actor, invoiceId: string, reason: string) {
   await db.$transaction(async (tx) => {
     const inv = await tx.invoice.findFirstOrThrow({ where: { id: invoiceId, businessId: user.businessId }, include: { payments: true } });
-    if (inv.payments.length) throw new TransitionError("Remove its payments first");
+    if (inv.payments.some((p) => p.refundedCents < p.amountCents)) throw new TransitionError("Remove or refund its payments first"); // fully refunded payments hold no money
     await tx.visitCharge.updateMany({ where: { invoiceLineItem: { invoiceId } }, data: { invoiceLineItemId: null } });
     // Deposits and account credits this invoice used up go back to unused, so the re-issued invoice gets them again.
     await tx.invoice.updateMany({ where: { kind: "DEPOSIT", appliedToInvoiceId: invoiceId }, data: { appliedToInvoiceId: null } });

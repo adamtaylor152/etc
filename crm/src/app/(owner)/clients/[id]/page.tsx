@@ -1,10 +1,14 @@
 // Client profile, Jobber layout: header (+ Create / More), contact info, properties, contacts, tabbed work/activity/
 // communication/files, billing history; right column: lifetime value + balance, last communication, notes.
+import { siteFacts } from "@/server/clients";
 import { requireOwner } from "@/server/auth";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Archive, Banknote, FileText, Hammer, Inbox, ListTodo, Mail, MapPin, MessageSquare, Pencil, Phone, Plus, Receipt, Repeat, Snowflake } from "lucide-react";
+import { creditAdd, creditRemove } from "../../billing-extras-actions";
 import { clientArchive, clientMerge, propertyArchive } from "../../client-actions";
+import { clientAutoPayOff, clientCardRemove } from "../../card-actions";
+import { cardLabel } from "@/server/billing/autopay";
 import { ConfirmButton } from "@/components/confirm-button";
 import { Flash } from "@/components/flash";
 import { possibleDuplicates } from "@/server/ops/client-import";
@@ -15,7 +19,7 @@ import { Gallery } from "@/components/gallery";
 import { Menu } from "@/components/menu";
 import { NotesCard } from "@/components/notes-card";
 import { InvoiceBadge, JobBadge, QUOTE, RequestBadge, VisitBadge } from "@/components/status";
-import { Badge, Card, Empty, Tabs } from "@/components/ui";
+import { Badge, Card, Empty, Tabs, btn, inputCls } from "@/components/ui";
 import { activityFeed } from "@/server/activity";
 import { invoiceView } from "@/server/billing/invoice";
 import { ledger } from "@/server/billing/ledger";
@@ -67,12 +71,12 @@ export default async function ClientPage({ params, searchParams }: PageProps<"/c
     tab === "files" ? db.attachment.findMany({ where: { businessId: bid, clientId: id, deletedAt: null }, orderBy: { createdAt: "desc" }, take: 120 }) : Promise.resolve([]),
   ]);
   const books = ledger(c.invoices, c.payments);
-  const [referredBy, referredCount, creditAgg] = await Promise.all([
+  const [referredBy, referredCount, credits] = await Promise.all([
     c.referredById ? db.client.findUnique({ where: { id: c.referredById } }) : null,
     db.referral.count({ where: { referrerId: c.id } }),
-    db.clientCredit.aggregate({ where: { clientId: c.id, appliedToInvoiceId: null }, _sum: { amountCents: true } }),
+    db.clientCredit.findMany({ where: { clientId: c.id, appliedToInvoiceId: null }, orderBy: { createdAt: "asc" } }),
   ]);
-  const credit = creditAgg._sum.amountCents ?? 0;
+  const credit = credits.reduce((n, k) => n + k.amountCents, 0);
   const lifetime = c.payments.reduce((n, p) => n + p.amountCents - p.refundedCents, 0);
   const lead = !jobs.length && !c.invoices.some((i) => i.status !== "DRAFT") && !c.quotes.some((q) => q.status === "APPROVED" || q.status === "CONVERTED");
   const phones = (Array.isArray(c.phones) && c.phones.length ? c.phones : c.phone ? [{ number: c.phone, label: "Mobile", sms: c.smsOptIn }] : []) as { number: string; label: string; sms: boolean }[];
@@ -121,6 +125,7 @@ export default async function ClientPage({ params, searchParams }: PageProps<"/c
       />
 
       <Flash error={sp.error} />
+      {c.doNotService && <p role="alert" className="mb-5 rounded-lg border border-red-300 bg-red-50 p-3 text-sm font-semibold text-red-800">Do not service. Check the notes before booking anything for this client.</p>}
       {dups.length > 0 && !c.archivedAt && (
         <div className="mb-5 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm">
           <p className="font-semibold text-amber-900">Possible duplicate{dups.length === 1 ? "" : "s"}</p>
@@ -145,6 +150,13 @@ export default async function ClientPage({ params, searchParams }: PageProps<"/c
               <div><dt className="text-xs font-semibold uppercase text-ink-soft">Lead source</dt><dd>{c.leadSource ?? c.source.replaceAll("_", " ").toLowerCase()}</dd></div>
               <div><dt className="text-xs font-semibold uppercase text-ink-soft">Referrals</dt><dd className="text-sm">{referredBy ? <>Referred by <Link className="text-blue" href={`/clients/${referredBy.id}`}>{clientName(referredBy)}</Link>. </> : ""}{referredCount ? `Referred ${referredCount}. ` : ""}{c.referralCode ? <span className="text-ink-soft">Code {c.referralCode}</span> : <span className="text-ink-soft">Share code made on first hub visit</span>}{credit > 0 && <span className="ml-1 font-semibold text-emerald-700">· {money(credit)} credit</span>}</dd></div>
               <div><dt className="text-xs font-semibold uppercase text-ink-soft">Payment</dt><dd>{c.preferredPayment === "ETRANSFER" ? "e-Transfer" : c.preferredPayment ? c.preferredPayment.toLowerCase() : "—"}</dd></div>
+              {c.cardPaymentMethodId && (
+                <div className="sm:col-span-2"><dt className="text-xs font-semibold uppercase text-ink-soft">Card on file</dt><dd className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <span><b>{cardLabel(c)}</b> · exp {c.cardExpMonth}/{String(c.cardExpYear).slice(-2)} · {c.autoPayConsentAt ? `auto-pay on (client chose it ${prettyDateTime(c.autoPayConsentAt)}, ${c.autoPayConsentSource === "invoice" ? "paying an invoice" : "on their page"})` : "auto-pay off"}</span>
+                  {c.autoPayConsentAt && <form action={clientAutoPayOff}><input type="hidden" name="clientId" value={id} /><ConfirmButton message="Turn off auto-pay for this client? Invoices already waiting on the card go back to being paid the usual way. Only the client can turn it back on." className="text-xs font-semibold text-blue">Turn off auto-pay</ConfirmButton></form>}
+                  <form action={clientCardRemove}><input type="hidden" name="clientId" value={id} /><ConfirmButton message="Remove this card? Auto-pay goes off with it. Only the client can save a card again." className="text-xs font-semibold text-red-700">Remove card</ConfirmButton></form>
+                </dd></div>
+              )}
               <div className="sm:col-span-2"><dt className="text-xs font-semibold uppercase text-ink-soft">Messages</dt><dd className="text-ink-soft">
                 {[c.smsOptOutAt ? "Texted STOP" : c.smsOptIn ? "Text updates on" : "No text updates", c.visitReminders ? "visit reminders" : null, c.followUpQuotes ? "quote follow-ups" : null, c.followUpInvoices ? "invoice reminders" : null, c.marketingOptOut ? "no marketing" : null].filter(Boolean).join(" · ")}
               </dd></div>
@@ -162,7 +174,7 @@ export default async function ClientPage({ params, searchParams }: PageProps<"/c
                         <MapPin className="mt-0.5 size-4 shrink-0 text-ink-soft" aria-hidden />
                         <div className="min-w-0 flex-1">
                           <a className="font-semibold text-blue" href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(p.formatted)}`} target="_blank" rel="noreferrer">{p.label ? `${p.label}: ` : ""}{p.formatted}</a>
-                          <div className="text-xs text-ink-soft">{[p.isDefault && "Main", p.community?.name ?? "No community", p.gateCode && `Gate ${p.gateCode}`, p.accessNotes, p.petNotes && `Pets: ${p.petNotes}`].filter(Boolean).join(" · ")}</div>
+                          <div className="text-xs text-ink-soft">{[p.isDefault && "Main", p.community?.name ?? "No community", p.gateCode && `Gate ${p.gateCode}`, p.accessNotes, p.petNotes && `Pets: ${p.petNotes}`, siteFacts(p)].filter(Boolean).join(" · ")}</div>
                         </div>
                         <Link href={`/properties/${p.id}/edit`} className="text-xs font-semibold text-blue">Edit</Link>
                         {c.properties.length > 1 && <form action={propertyArchive}><input type="hidden" name="id" value={p.id} /><input type="hidden" name="archive" value="1" /><button className="text-xs text-ink-soft hover:text-red-700">Remove</button></form>}
@@ -258,6 +270,30 @@ export default async function ClientPage({ params, searchParams }: PageProps<"/c
               <div><dt className="text-xs font-semibold uppercase text-ink-soft">Lifetime value</dt><dd className="font-display text-xl font-bold">{money(lifetime)}</dd></div>
               <div><dt className="text-xs font-semibold uppercase text-ink-soft">Balance</dt><dd className={`font-display text-xl font-bold ${books.balanceCents > 0 ? "text-amber-700" : ""}`}>{money(books.balanceCents)}</dd></div>
             </dl>
+          </section>
+          <section className="rounded-lg border border-line bg-white p-4 shadow-card">
+            <h2 className="mb-2 text-base font-bold">Account credit{credit > 0 && <span className="ml-2 text-emerald-700">{money(credit)}</span>}</h2>
+            {credits.length ? (
+              <ul className="mb-2 divide-y divide-line text-sm">
+                {credits.map((k) => (
+                  <li key={k.id} className="flex items-center justify-between gap-2 py-1.5">
+                    <span><span className="font-semibold">{money(k.amountCents)}</span> {k.reason}<span className="block text-xs text-ink-soft">{prettyDate(dateOnly(k.createdAt))}</span></span>
+                    {!k.referralId && <form action={creditRemove}><input type="hidden" name="id" value={k.id} /><input type="hidden" name="back" value={here} /><ConfirmButton message={`Remove this ${money(k.amountCents)} credit?`} className="text-xs text-ink-soft">Remove</ConfirmButton></form>}
+                  </li>
+                ))}
+              </ul>
+            ) : <p className="mb-2 text-sm text-ink-soft">None waiting.</p>}
+            <p className="mb-2 text-xs text-ink-soft">Credit comes off this client&apos;s next invoice automatically.</p>
+            <details>
+              <summary className="cursor-pointer text-sm font-semibold text-blue">Add credit</summary>
+              <form action={creditAdd} className="mt-2 space-y-2">
+                <input type="hidden" name="clientId" value={id} /><input type="hidden" name="back" value={here} />
+                <label className="block text-sm font-semibold">Amount ($)<input name="amount" type="number" step="0.01" min="0.01" required className={inputCls} /></label>
+                <label className="block text-sm font-semibold">Reason <span className="font-normal text-ink-soft">(the client sees it on their invoice)</span><input name="reason" list="credit-reasons" defaultValue="Goodwill credit" maxLength={120} required className={inputCls} /></label>
+                <datalist id="credit-reasons"><option value="Goodwill credit" /><option value="Overpayment credit" /></datalist>
+                <button className={btn("secondary")}>Add credit</button>
+              </form>
+            </details>
           </section>
           <section className="rounded-lg border border-line bg-white p-4 shadow-card">
             <h2 className="mb-2 text-base font-bold">Last communication</h2>

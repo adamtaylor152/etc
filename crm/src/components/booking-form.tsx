@@ -17,7 +17,7 @@ export type HubOrder = {
 };
 const dayName = (d: string) => new Date(`${d}T12:00`).toLocaleDateString("en-CA", { weekday: "short", month: "short", day: "numeric" });
 
-export function BookingForm({ services, phone, mapsKey, refCode, hub }: { services: Service[]; phone: string; mapsKey?: string; refCode?: string; hub?: HubOrder }) {
+export function BookingForm({ services, phone, mapsKey, refCode, utm, hub }: { services: Service[]; phone: string; mapsKey?: string; refCode?: string; utm?: string; hub?: HubOrder }) {
   // Open times for the look-and-quote visit. ponytail: arrival windows only; the API also takes exact start times.
   const [slots, setSlots] = useState<Slots | null>(null);
   const [slot, setSlot] = useState<{ date: string; window: string } | null>(null);
@@ -53,7 +53,7 @@ export function BookingForm({ services, phone, mapsKey, refCode, hub }: { servic
       services: picked, plan: shovel ? plan : "", icemelt: shovel && f.get("icemelt") === "on",
       size: shovel ? f.get("size") : undefined, extraWalk: shovel && f.get("extraWalk") === "on",
       date: shovel && plan === "Every snowfall" ? "" : f.get("date"), notes: f.get("notes"), payment: f.get("payment"), website: f.get("website"), smsOptIn: f.get("smsOptIn") === "on",
-      offers: f.get("offers") === "on", ...(refCode ? { ref: refCode } : {}), ...(pickTime && slot ? { slot } : {}),
+      offers: f.get("offers") === "on", ...(refCode ? { ref: refCode } : {}), ...(utm ? { utm } : {}), ...(pickTime && slot ? { slot } : {}),
     };
     const res = hub ? null : await fetch("/api/public/bookings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).catch(() => null);
     const data = hub ? await hub.order(body).catch(() => null) : await res?.json().catch(() => ({}));

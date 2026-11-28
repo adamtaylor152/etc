@@ -53,6 +53,22 @@ export async function renderMessage(m: Pick<EmailMessage, "template" | "props" |
   return { html, text: toPlainText(html) };
 }
 
+/**
+ * PDFs a template attaches (invoice, quote, statement), made at send time. An invoice or quote still goes out if its
+ * PDF can't be made (the email has the link); a statement is nothing without one, so that failure is retried.
+ */
+export async function attachmentsFor(m: Pick<EmailMessage, "template" | "props" | "businessId" | "to">) {
+  const t = templates[m.template as TemplateName] as { attachments?: (p: unknown, c: { businessId: string; to: string }) => Promise<({ filename: string; bytes: Uint8Array } | null)[]> } | undefined;
+  if (!t?.attachments) return [];
+  try {
+    return (await t.attachments(m.props, { businessId: m.businessId, to: m.to })).filter((f) => f !== null);
+  } catch (e) {
+    if (m.template === "client.statement") throw e;
+    console.error(`attachment for ${m.template} failed, sending without it`, e);
+    return [];
+  }
+}
+
 async function sendOne(m: EmailMessage) {
   if (m.template.startsWith("sms.")) return sendText(m);
   const tx = mailer();
@@ -66,7 +82,8 @@ async function sendOne(m: EmailMessage) {
     // Marketing emails carry one-click unsubscribe headers (Gmail/Yahoo require them; CASL wants an easy opt-out).
     const cid = m.template === "campaign.email" ? (m.props as { clientId?: string }).clientId : null;
     const headers = cid ? { "List-Unsubscribe": `<${unsubscribeUrl(cid)}>`, "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" } : undefined;
-    const info = await tx.sendMail({ from: env.mailFrom, to: m.to, cc: m.cc.length ? m.cc : undefined, replyTo: m.replyTo ?? undefined, subject: m.subject, html, text, headers });
+    const attachments = (await attachmentsFor(m)).map((f) => ({ filename: f.filename, content: Buffer.from(f.bytes), contentType: "application/pdf" }));
+    const info = await tx.sendMail({ from: env.mailFrom, to: m.to, cc: m.cc.length ? m.cc : undefined, replyTo: m.replyTo ?? undefined, subject: m.subject, html, text, headers, attachments });
     await db.emailMessage.update({ where: { id: m.id }, data: { status: "SENT", sentAt: new Date(), providerMessageId: info.messageId, lastError: null } });
   } catch (e) {
     const dead = permanentRejection(e); // no such mailbox: retrying won't help

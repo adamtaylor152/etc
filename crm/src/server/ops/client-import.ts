@@ -37,7 +37,7 @@ const toInput = (r: ReturnType<typeof mapClientRows>[number]): ClientInput => ({
   firstName: r["First name"] ?? "", lastName: r["Last name"] ?? "", companyName: r.Company,
   emails: r.Email ? [{ address: r.Email.toLowerCase(), label: "Main" }] : [], phones: r.Phone ? [{ number: r.Phone, label: "Mobile", sms: true }] : [],
   leadSource: r["Lead source"], tags: (r.Tags ?? "").split(/[,;]/).map((t) => t.trim().toLowerCase()).filter(Boolean).slice(0, 20), notes: r.Notes,
-  followUpQuotes: true, followUpInvoices: true, visitReminders: true, marketingOptOut: false, smsOptIn: false, contacts: [],
+  followUpQuotes: true, followUpInvoices: true, visitReminders: true, marketingOptOut: false, smsOptIn: false, doNotService: false, contacts: [],
   property: r.Address && r.Address.length >= 3 ? { formatted: r.Address } : undefined,
 });
 
@@ -84,7 +84,7 @@ export async function possibleDuplicates(businessId: string, clientId: string) {
 /** Every table that points at a client. tests/unit/client-merge.test.ts fails if the schema gains one that isn't listed. */
 export const CLIENT_REFS = [
   "linkToken", "property", "request", "quote", "job", "invoice", "payment", "attachment", "note", "activityEvent", "emailMessage",
-  "textMessage", "clientContact", "callLog", "task", "reviewRequest", "clientCredit", "campaignRecipient",
+  "textMessage", "clientContact", "callLog", "task", "reviewRequest", "clientCredit", "campaignRecipient", "autoPayAttempt",
 ] as const;
 
 type Points = { emails: unknown; phones: unknown; email: string; phone: string | null };
@@ -130,6 +130,11 @@ export async function mergeClients(user: Actor, keepId: string, dupId: string) {
         // Opt-outs win: if either record said stop, we stop.
         marketingOptOut: keep.marketingOptOut || dup.marketingOptOut, smsOptOutAt: keep.smsOptOutAt ?? dup.smsOptOutAt,
         emailMarketingConsentAt: consent, emailMarketingConsentSource: keep.emailMarketingConsentSource ?? dup.emailMarketingConsentSource,
+        // Card on file: the kept client's own card stands; otherwise the duplicate's card (with its Stripe customer and auto-pay choice) comes along.
+        ...(!keep.cardPaymentMethodId && dup.cardPaymentMethodId ? {
+          stripeCustomerId: dup.stripeCustomerId, cardPaymentMethodId: dup.cardPaymentMethodId, cardBrand: dup.cardBrand, cardLast4: dup.cardLast4, cardExpMonth: dup.cardExpMonth,
+          cardExpYear: dup.cardExpYear, cardSavedAt: dup.cardSavedAt, autoPayConsentAt: dup.autoPayConsentAt, autoPayConsentSource: dup.autoPayConsentSource,
+        } : {}),
       },
     });
     await tx.client.delete({ where: { id: dup.id } });

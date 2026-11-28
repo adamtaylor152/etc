@@ -21,6 +21,7 @@ export const PropertyInput = z.object({
   lat: z.number().nullish(), lng: z.number().nullish(), placeId: z.string().max(300).nullish(), postalCode: z.string().max(12).nullish(),
   communityCode: z.string().max(10).nullish(), accessNotes: z.string().max(1000).nullish(), gateCode: z.string().max(60).nullish(),
   petNotes: z.string().max(300).nullish(), hazards: z.string().max(500).nullish(),
+  steps: z.number().int().min(0).max(200).nullish(), sidewalkM: z.number().int().min(0).max(2000).nullish(), lawnSqM: z.number().int().min(0).max(100_000).nullish(),
 });
 export const ClientInput = z.object({
   title: z.string().trim().max(10).optional(), firstName: z.string().trim().min(1, "Add a first name").max(80), lastName: z.string().trim().max(80).default(""),
@@ -29,7 +30,7 @@ export const ClientInput = z.object({
   leadSource: z.string().trim().max(60).optional(), tags: z.array(z.string().trim().toLowerCase().max(40)).max(20).default([]),
   notes: z.string().max(5000).optional(),
   followUpQuotes: z.boolean().default(true), followUpInvoices: z.boolean().default(true), visitReminders: z.boolean().default(true),
-  marketingOptOut: z.boolean().default(false), smsOptIn: z.boolean().default(false),
+  marketingOptOut: z.boolean().default(false), smsOptIn: z.boolean().default(false), doNotService: z.boolean().default(false),
   contacts: z.array(Contact).max(10).default([]),
   property: PropertyInput.optional(),
 });
@@ -52,6 +53,7 @@ export async function propertyData(businessId: string, clientId: string, p: z.in
     lat: p.lat ?? null, lng: p.lng ?? null, placeId: p.placeId || null, postalCode: p.postalCode || null,
     geocodeSource: p.lat != null ? ("PLACES_AUTOCOMPLETE" as const) : ("NONE" as const),
     communityCode: communityCode || null, accessNotes: p.accessNotes || null, gateCode: p.gateCode || null, petNotes: p.petNotes || null, hazards: p.hazards || null,
+    steps: p.steps ?? null, sidewalkM: p.sidewalkM ?? null, lawnSqM: p.lawnSqM ?? null,
   };
 }
 
@@ -65,7 +67,7 @@ export async function saveClient(user: Actor, raw: unknown, clientId?: string) {
     phones, emails, phone: phones[0]?.number ?? null, email: emails[0]?.address ?? "",
     leadSource: input.leadSource || null, tags: [...new Set(input.tags.filter(Boolean))], notes: input.notes || null,
     followUpQuotes: input.followUpQuotes, followUpInvoices: input.followUpInvoices, visitReminders: input.visitReminders,
-    marketingOptOut: input.marketingOptOut, smsOptIn: input.smsOptIn,
+    marketingOptOut: input.marketingOptOut, smsOptIn: input.smsOptIn, doNotService: input.doNotService,
   };
   const id = await db.$transaction(async (tx) => {
     let id = clientId;
@@ -98,6 +100,19 @@ export async function saveClient(user: Actor, raw: unknown, clientId?: string) {
 export function numbersOf(c: { phone: string | null; phones: unknown; contacts?: { phone: string | null }[] }) {
   const list = [c.phone, ...(Array.isArray(c.phones) ? (c.phones as { number?: string }[]).map((p) => p.number) : []), ...(c.contacts ?? []).map((x) => x.phone)];
   return [...new Set(list.map((n) => toE164(n)).filter((n): n is string => !!n))];
+}
+
+/** "6 steps · 22 m sidewalk · 180 m² lawn", or null when nothing is recorded. Pure, unit-tested. */
+export const siteFacts = (p: { steps: number | null; sidewalkM: number | null; lawnSqM: number | null }) =>
+  [p.steps != null && `${p.steps} step${p.steps === 1 ? "" : "s"}`, p.sidewalkM != null && `${p.sidewalkM} m sidewalk`, p.lawnSqM != null && `${p.lawnSqM} m² lawn`].filter(Boolean).join(" · ") || null;
+
+/** A booking link's utm_source as a lead source: known ones match the list below, anything else is tidied up. Pure, unit-tested. */
+export function leadSourceFromUtm(utm: unknown): string | null {
+  if (typeof utm !== "string") return null;
+  const u = utm.trim().toLowerCase().replace(/[^a-z0-9 _.-]/g, "").slice(0, 40);
+  if (!u) return null;
+  const known: [RegExp, string][] = [[/google|gmb|gbp/, "Google"], [/facebook|^fb$|instagram|^ig$|meta/, "Facebook"], [/nextdoor/, "Nextdoor"], [/door.?hanger|flyer/, "Door hanger"], [/referral/, "Referral"]];
+  return known.find(([re]) => re.test(u))?.[1] ?? u.charAt(0).toUpperCase() + u.slice(1);
 }
 
 export const LEAD_SOURCES = ["Google", "Website", "Referral", "Facebook", "Nextdoor", "Door hanger", "Drove by", "Repeat client", "Other"];

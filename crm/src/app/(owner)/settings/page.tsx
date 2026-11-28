@@ -59,10 +59,14 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
                     <input type="checkbox" name={k} defaultChecked={settings[k]} className="mt-1 size-5 shrink-0" />
                     <span><span className="block font-semibold">{SETTING_LABELS[k][0]}</span><span className="text-sm text-ink-soft">{SETTING_LABELS[k][1]}</span></span>
                   </label>
-                  {days && <label className="ml-8 mt-1 flex items-center gap-2 text-sm">Send <input name={days} type="number" min={1} max={60} defaultValue={settings[days]} className="h-9 w-20 rounded-lg border border-line px-2" /> days after the quote is sent</label>}
+                  {days && <label className="ml-8 mt-1 flex items-center gap-2 text-sm">Send <input name={days} type="number" min={1} max={60} defaultValue={settings[days]} className="h-9 w-20 rounded-lg border border-line px-2" /> {k === "lateFee" ? "days past due" : "days after the quote is sent"}</label>}
+                  {k === "lateFee" && <label className="ml-8 mt-1 flex flex-wrap items-center gap-2 text-sm">Fee: $<input name="lateFeeDollars" type="number" min={0} max={1000} step="0.01" defaultValue={(settings.lateFeeCents / 100).toFixed(2)} aria-label="Flat late fee" className="h-9 w-24 rounded-lg border border-line px-2" /> plus <input name="lateFeePercent" type="number" min={0} max={25} step="0.5" defaultValue={settings.lateFeeBps / 100} aria-label="Percent of balance" className="h-9 w-20 rounded-lg border border-line px-2" /> % of what is owing</label>}
                 </div>
               );
             })}
+            <Field label="Auto-pay: days between the invoice email and the charge" hint={stripeEnabled() ? "Time for the client to object. 0 = charged the same day. Never before the invoice is due." : "Needs card payments (Stripe) turned on."}>
+              <Input name="autoPayGraceDays" type="number" min={0} max={14} defaultValue={settings.autoPayGraceDays} className="max-w-24" />
+            </Field>
             <Button>Save automations</Button>
           </form>
         </Card>

@@ -14,8 +14,11 @@ import { reminderDue } from "./billing/invoice";
 import { addDays, dateOnly, todayLocal, toDbDate, TZ } from "./dates";
 import { forecast, snowByDay } from "./forecast";
 import { generateRecurringVisits } from "./ops/jobs";
-import { billingEmailFor, invoiceSeasonalInstalments, invoiceUnbilled } from "./ops/invoices";
+import { applyLateFees, billingEmailFor, invoiceRecurringPeriods, invoiceSeasonalInstalments, invoiceUnbilled } from "./ops/invoices";
+import { isInvoiceDay } from "./billing/periods";
 import { parseSettings } from "./settings";
+import { autoPayPending } from "./billing/autopay";
+import { runAutoPay } from "./ops/autopay";
 import { followUpDue } from "./status/quote";
 import { plansTriggered } from "./snow/select";
 import { enqueue, enqueueSms, processOutbox } from "./email/outbox";
@@ -52,12 +55,15 @@ let lastCallSync = 0;
 /** Hourly automations. Each one is idempotent (dedupe keys / state checks), so a missed or doubled run is harmless. */
 async function hourly() {
   const hour = Number(new Intl.DateTimeFormat("en-CA", { timeZone: TZ, hour: "numeric", hourCycle: "h23" }).format(new Date()));
+  if (hour === 9) await applyLateFees().catch((e) => console.error("late fees failed", e)); // once a day, before that day's reminders go out
   if (hour >= 8 && hour < 20) await invoiceReminders(); // no reminder emails at night
   if (hour >= 7 && hour < 22) await snowAlert();
   if (hour >= 9 && hour < 19) await quoteFollowUps();
   for (const b of await db.business.findMany({ select: { id: true } })) await generateRecurringVisits(b.id);
   if (hour === 7) await monthlyInvoices();
   if (hour >= 7 && hour < 20) await invoiceSeasonalInstalments(); // due instalments of seasonal snow plans; emails the client
+  if (hour >= 7 && hour < 20) await invoiceRecurringPeriods(); // recurring jobs on a fixed monthly price: a draft per month due
+  if (hour >= 8 && hour < 20) await runAutoPay().catch((e) => console.error("auto-pay run failed", e)); // saved cards: charge due invoices, retry failed ones
   if (hour >= 6 && hour < 22) await visitReminders(hour);
   if (hour >= 10 && hour < 18) await reviewRequests();
   if (hour >= 9 && hour < 19) await runAutomations(); // win-back and plan renewal emails, if switched on (Marketing)
@@ -79,17 +85,17 @@ async function opsAlerts() {
   }
 }
 
-/** 1st of the month: draft invoices for recurring (monthly-billed) work. Re-runs find nothing left to bill. */
+/** A job's invoice day (the 1st unless it picked another): draft invoices for monthly-billed work. Re-runs find nothing left to bill. */
 async function monthlyInvoices() {
-  if (todayLocal().slice(8) !== "01") return;
+  const today = todayLocal();
   const groups = await db.visitCharge.findMany({
     where: { invoiceLineItemId: null, visit: { job: { invoiceSchedule: "MONTHLY" } } },
-    select: { businessId: true, visit: { select: { jobId: true, job: { select: { clientId: true } } } } },
+    select: { businessId: true, visit: { select: { jobId: true, job: { select: { clientId: true, invoiceDay: true } } } } },
   });
   const seen = new Set<string>();
   for (const g of groups) {
     const key = `${g.businessId}:${g.visit.job.clientId}:${g.visit.jobId}`;
-    if (seen.has(key)) continue;
+    if (seen.has(key) || !isInvoiceDay(today, g.visit.job.invoiceDay)) continue;
     seen.add(key);
     await invoiceUnbilled({ id: null, businessId: g.businessId }, { clientId: g.visit.job.clientId, jobId: g.visit.jobId });
   }
@@ -189,12 +195,14 @@ async function snowAlert() {
 async function invoiceReminders() {
   const today = todayLocal();
   const due = await db.invoice.findMany({
-    where: { status: "AWAITING_PAYMENT", dueOn: { lt: toDbDate(today) }, remindersSent: { lt: 2 }, client: { followUpInvoices: true } },
+    // A refund re-opens an invoice; chasing the client for money we just sent back is the owner's call, not automatic.
+    where: { status: "AWAITING_PAYMENT", dueOn: { lt: toDbDate(today) }, remindersSent: { lt: 2 }, client: { followUpInvoices: true }, payments: { none: { refundedCents: { gt: 0 } } } },
     include: { client: true },
   });
   for (const inv of due) {
     const n = reminderDue({ status: inv.status, dueOn: dateOnly(inv.dueOn), remindersSent: inv.remindersSent }, today);
     if (!n || inv.client.emailBouncedAt) continue;
+    if (autoPayPending(inv.autoPayState)) continue; // the card will be charged (or retried): its own emails cover this
     await db.$transaction(async (tx) => {
       await enqueue(tx, {
         businessId: inv.businessId, template: "invoice.reminder", to: await billingEmailFor(tx, inv.client), replyTo: env.helpEmail, priority: 6,

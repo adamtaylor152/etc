@@ -89,6 +89,7 @@ export async function propertySave(f: FormData) {
       formatted: str(f, "formatted"), label: str(f, "label") || undefined, lat: num("lat"), lng: num("lng"), placeId: str(f, "placeId") || null,
       postalCode: str(f, "postalCode") || null, communityCode: str(f, "communityCode") || null, accessNotes: str(f, "accessNotes") || null,
       gateCode: str(f, "gateCode") || null, petNotes: str(f, "petNotes") || null, hazards: str(f, "hazards") || null,
+      steps: num("steps"), sidewalkM: num("sidewalkM"), lawnSqM: num("lawnSqM"),
     });
     const data = { ...(await propertyData(user.businessId, clientId, input)), routePriority: f.get("routePriority") === "on" };
     const makeDefault = f.get("isDefault") === "on";

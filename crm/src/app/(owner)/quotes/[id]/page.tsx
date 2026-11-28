@@ -8,7 +8,7 @@ import { QUOTE } from "@/components/status";
 import { Gallery } from "@/components/gallery";
 import { QuoteLinesEditor } from "@/components/quote-lines";
 import { RecordPanel } from "@/components/record-panel";
-import { Badge, Button, ButtonLink, Card, Dl, Field, Input, PageHeader, Textarea, inputCls } from "@/components/ui";
+import { Badge, Button, ButtonLink, Card, Dl, Field, Input, PageHeader, Textarea, btn, inputCls } from "@/components/ui";
 import { dateOnly, prettyDate, prettyDateTime, todayLocal } from "@/server/dates";
 import { business, businessId, db } from "@/server/db";
 import { money } from "@/server/money";
@@ -59,6 +59,7 @@ export default async function QuotePage({ params, searchParams }: PageProps<"/qu
           {q.status === "DECLINED" && <form action={quoteReopen}>{hidden}<Button variant="secondary">Reopen as draft</Button></form>}
           <ButtonLink href={`/quotes/new?client=${q.clientId}&similar=${q.id}`}>Create similar quote</ButtonLink>
           {q.status !== "DRAFT" && <form action={quoteViewAsClient}>{hidden}<Button variant="secondary">Client view</Button></form>}
+          <a href={`/api/export/pdf/quote/${q.id}`} target="_blank" rel="noreferrer" className={btn("secondary")}>PDF</a>
           {q.jobId && <Link href={`/jobs/${q.jobId}`} className="inline-flex min-h-11 items-center rounded-full border-2 border-blue bg-blue px-5 text-sm font-semibold text-white">Open job</Link>}
         </>}
       />

@@ -12,7 +12,8 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: { absolute: "Book · etc. snow shovelling & odd jobs" }, robots: { index: true, follow: true } };
 
 export default async function Book({ searchParams }: PageProps<"/book">) {
-  const ref = (await searchParams).ref; // referral links: /book?ref=CODE
+  const sp = await searchParams;
+  const ref = sp.ref; // referral links: /book?ref=CODE
   const { list } = await bookingMenu(await businessId());
   return (
     <div className="space-y-4">
@@ -20,7 +21,7 @@ export default async function Book({ searchParams }: PageProps<"/book">) {
         <h1 className="font-display text-3xl font-bold">Book etc.</h1>
         <p className="mt-1 text-ink-soft">Snow shovelling &amp; odd jobs in Evergreen and SW Calgary. Prices include tax; pay after the job. Every job helps Silas get to electrician school.</p>
       </div>
-      <BookingForm services={list} phone={env.phone} mapsKey={mapsKey()} refCode={typeof ref === "string" ? ref.slice(0, 20) : undefined} />
+      <BookingForm services={list} phone={env.phone} mapsKey={mapsKey()} refCode={typeof ref === "string" ? ref.slice(0, 20) : undefined} utm={typeof sp.utm_source === "string" ? sp.utm_source.slice(0, 40) : undefined} />
     </div>
   );
 }

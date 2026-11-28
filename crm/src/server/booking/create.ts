@@ -18,6 +18,8 @@ export type BookingMeta = {
   legacyBookingId?: number; createdAt?: Date; sendEmails?: boolean; number?: number; when?: string;
   /** Client hub: the signed-in client (never matched by email) and, when they picked one, their property. */
   clientId?: string; propertyId?: string;
+  /** Where a brand-new client came from (booking link's utm_source). Never changes an existing client. */
+  leadSource?: string | null;
 };
 
 const PAYMENT: Record<string, PaymentMethod> = { Cash: "CASH", "e-Transfer": "ETRANSFER" };
@@ -56,7 +58,7 @@ export async function createBooking(b: Booking, meta: BookingMeta) {
       client = await tx.client.create({
         data: {
           businessId, firstName: first, lastName: rest.join(" "), email, phone: b.phone || null,
-          preferredPayment: PAYMENT[b.payment], source: meta.source, tags: meta.source === "IMPORT" ? ["imported"] : [],
+          preferredPayment: PAYMENT[b.payment], source: meta.source, leadSource: meta.leadSource || null, tags: meta.source === "IMPORT" ? ["imported"] : [],
           createdAt: meta.createdAt,
         },
       });

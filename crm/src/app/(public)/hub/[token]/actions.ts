@@ -18,7 +18,8 @@ import { renewPlan, updatePlan } from "@/server/ops/jobs";
 import { addVisitExtra, removeVisitExtra } from "@/server/ops/visits";
 import { TransitionError } from "@/server/status/visit";
 import { peekToken } from "@/server/tokens";
-import { checkoutForInvoices, stripeEnabled } from "@/server/stripe";
+import { checkoutForCard, checkoutForInvoices, stripeEnabled } from "@/server/stripe";
+import { cardsOffered, customerFor, removeCard, setAutoPay } from "@/server/ops/autopay";
 
 async function hubClient(f: FormData) {
   const token = String(f.get("t") ?? "");
@@ -159,6 +160,37 @@ export async function hubSetTexts(f: FormData) {
   const on = f.get("on") === "1";
   await db.client.update({ where: { id: client.id }, data: { smsOptIn: on } });
   redirect(`/hub/${token}?texts=${on ? "on" : "off"}`);
+}
+
+/** Save (or replace) a card on Stripe's page. The auto-pay box is the client's opt-in for that card; unticked means off. */
+export async function hubSaveCard(f: FormData) {
+  const { token, client } = await hubClient(f);
+  if (!(await cardsOffered(client.businessId))) redirect(`/hub/${token}`);
+  let url: string | null = null;
+  try {
+    const s = await checkoutForCard({
+      customerId: await customerFor(client), businessId: client.businessId, clientId: client.id, autoPay: f.get("autopay") === "on", source: "hub",
+      successUrl: `${env.appUrl}/hub/${token}?card=saved`, cancelUrl: `${env.appUrl}/hub/${token}`,
+    });
+    url = s.url;
+  } catch (e) {
+    console.error("card setup checkout failed", e);
+  }
+  redirect(url ?? `/hub/${token}?error=${encodeURIComponent("We couldn't open the card page just now. Please try again later.")}`);
+}
+
+export async function hubRemoveCard(f: FormData) {
+  const { token, client } = await hubClient(f);
+  await removeCard(client.id, { actorType: "CLIENT", actorClientId: client.id });
+  redirect(`/hub/${token}?card=removed`);
+}
+
+/** The client's own switch: "Charge this card automatically for my invoices" on, or off again at any time. */
+export async function hubSetAutoPay(f: FormData) {
+  const { token, client } = await hubClient(f);
+  const on = f.get("on") === "1";
+  await setAutoPay(client.id, on, { actorType: "CLIENT", actorClientId: client.id }).catch((e) => { if (!(e instanceof TransitionError)) throw e; });
+  redirect(`/hub/${token}?autopay=${on ? "on" : "off"}`);
 }
 
 /** "Pay all" from the hub: one card checkout covering every open invoice (oldest first, up to 10). */

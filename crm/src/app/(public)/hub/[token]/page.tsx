@@ -16,7 +16,8 @@ import { addOnServices } from "@/server/ops/visits";
 import { stripeEnabled } from "@/server/stripe";
 import { referralCodeFor, referralLink } from "@/server/ops/marketing";
 import { parseSettings } from "@/server/settings";
-import { hubPausePlan, hubPayAll, hubPlanAddOn, hubRenewPlan, hubRequestWork, hubSetTexts, hubVisitExtra } from "./actions";
+import { autoPayPending, cardLabel } from "@/server/billing/autopay";
+import { hubPausePlan, hubPayAll, hubPlanAddOn, hubRemoveCard, hubRenewPlan, hubRequestWork, hubSaveCard, hubSetAutoPay, hubSetTexts, hubVisitExtra } from "./actions";
 
 export const metadata = { title: { absolute: "Your etc. page" } };
 
@@ -42,7 +43,9 @@ export default async function Hub({ params, searchParams }: PageProps<"/hub/[tok
   const [addOns, prices] = await Promise.all([addOnServices(c.businessId), snowPrices(db, c.businessId)]);
   const iceMeltCents = addOns.find((a) => a.key === "ice_melt")?.unitPriceCents ?? 500;
   const refCode = await referralCodeFor(c.id);
-  const refReward = parseSettings((await db.business.findUniqueOrThrow({ where: { id: c.businessId } })).settings).referralRewardCents;
+  const settings = parseSettings((await db.business.findUniqueOrThrow({ where: { id: c.businessId } })).settings);
+  const refReward = settings.referralRewardCents;
+  const cards = stripeEnabled() && settings.autoPay, card = cardLabel(c); // saved cards are optional: only with Stripe keys and the business switch on
   const creditLeft = (await db.clientCredit.aggregate({ where: { clientId: c.id, appliedToInvoiceId: null }, _sum: { amountCents: true } }))._sum.amountCents ?? 0;
   const payments = await db.payment.findMany({ where: { clientId: c.id }, include: { invoice: { select: { number: true } } }, orderBy: { receivedAt: "desc" }, take: 20 });
   // Fresh scoped links for each quote / invoice / visit report.
@@ -83,6 +86,32 @@ export default async function Hub({ params, searchParams }: PageProps<"/hub/[tok
           </form>
         </details>
       </Card>
+      {sp.card && <p className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 font-medium text-emerald-800">{sp.card === "saved" ? "Thanks! Your card is being saved. It will show here in a moment." : "Your card has been removed."}</p>}
+      {sp.autopay && <p className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 font-medium text-emerald-800">Automatic payments are {c.autoPayConsentAt ? "on" : "off"}.</p>}
+      {(cards || card) && (
+        <Card title="Card on file">
+          {card ? (
+            <>
+              <p className="text-sm"><b>{card}</b> · expires {String(c.cardExpMonth).padStart(2, "0")}/{String(c.cardExpYear).slice(-2)}</p>
+              <p className="mt-1 text-sm">{c.autoPayConsentAt
+                ? "Automatic payments are on. We email each new invoice first, with the date this card will be charged. Invoices we already sent are not charged."
+                : "Automatic payments are off: you pay each invoice yourself."}</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {cards && <form action={hubSetAutoPay}>{hidden}<input type="hidden" name="on" value={c.autoPayConsentAt ? "0" : "1"} />
+                  <button className={c.autoPayConsentAt ? "min-h-11 rounded-full border-2 border-line bg-white px-5 font-semibold" : "min-h-11 rounded-full bg-blue px-5 font-semibold text-white"}>{c.autoPayConsentAt ? "Turn off automatic payments" : "Charge this card automatically for my invoices"}</button></form>}
+                {cards && <form action={hubSaveCard}>{hidden}{c.autoPayConsentAt && <input type="hidden" name="autopay" value="on" />}<button className="min-h-11 rounded-full border-2 border-line bg-white px-5 font-semibold">Replace card</button></form>}
+                <form action={hubRemoveCard}>{hidden}<button className="min-h-11 rounded-full border-2 border-line bg-white px-5 font-semibold">Remove card</button></form>
+              </div>
+            </>
+          ) : (
+            <form action={hubSaveCard} className="space-y-3">{hidden}
+              <p className="text-sm">Optional. e-Transfer and cash always work; a saved card is there if you&apos;d rather not think about it. You type the card on Stripe&apos;s secure page, and we never see or keep the number.</p>
+              <label className="flex items-start gap-3 text-sm"><input type="checkbox" name="autopay" className="mt-0.5 size-5 shrink-0" /><span><b>Charge this card automatically for my invoices.</b> We email each invoice first, with the date the card will be charged. You can turn this off here any time.</span></label>
+              <button className="min-h-11 rounded-full bg-blue px-5 font-semibold text-white">Save a card</button>
+            </form>
+          )}
+        </Card>
+      )}
       <Card title="Send a neighbour our way">
         <p className="text-sm">Share your link. When they book and pay their first invoice, you get {money(refReward)} off your next one.</p>
         <p className="mt-2 select-all break-all rounded-lg bg-tint p-2 text-sm font-semibold">{referralLink(refCode)}</p>
@@ -198,7 +227,7 @@ export default async function Hub({ params, searchParams }: PageProps<"/hub/[tok
         <Card title="Invoices">
           <ul className="divide-y divide-line">{invoices.map((inv, i) => {
             const view = invoiceView({ ...inv, dueOn: dateOnly(inv.dueOn) }, today);
-            return <li key={inv.id}><a href={`/i/${invoiceLinks[i]}`} className="flex justify-between gap-2 py-2.5 text-sm"><span className="font-semibold text-blue">#{inv.number} {inv.subject}</span><span>{money(inv.totalCents)} · {view === "PAID" ? "Paid" : view === "PAST_DUE" ? "Past due" : "Pay now"}</span></a></li>;
+            return <li key={inv.id}><a href={`/i/${invoiceLinks[i]}`} className="flex justify-between gap-2 py-2.5 text-sm"><span className="font-semibold text-blue">#{inv.number} {inv.subject}</span><span>{money(inv.totalCents)} · {view === "PAID" ? "Paid" : autoPayPending(inv.autoPayState) && inv.autoPayOn ? `Card ${inv.autoPayState === "RETRYING" ? "tried again" : "charged"} ${prettyDate(dateOnly(inv.autoPayOn))}` : view === "PAST_DUE" ? "Past due" : "Pay now"}</span></a></li>;
           })}</ul>
         </Card>
       )}
