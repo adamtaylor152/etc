@@ -74,14 +74,14 @@ export default async function Jobs({ searchParams }: PageProps<"/jobs">) {
           id: j.id, href: `/jobs/${j.id}`,
           cells: {
             client: clientName(j.client),
-            number: <><span className="font-semibold">#{j.number}</span> <span className="text-ink-soft">{j.title}</span><span className="block text-xs text-ink-soft">{KIND[j.kind]}</span></>,
+            number: <><span className="font-semibold tabular-nums">#{j.number}</span> <span className="text-ink-soft">{j.title}</span><span className="block text-xs text-ink-soft">{KIND[j.kind]}</span></>,
             property: <>{j.property.formatted.split(",")[0]}{j.property.community && <span className="block text-xs text-ink-soft">{j.property.community.name}</span>}</>,
-            next: nv ? prettyDate(nv) : <span className="text-ink-soft">—</span>,
+            next: nv ? <span className="whitespace-nowrap tabular-nums">{prettyDate(nv)}</span> : <span className="text-ink-soft" aria-label="No visit scheduled">—</span>,
             status: <JobBadge s={j.status} />,
           },
         };
       })}
-      empty="No jobs match. Try another filter."
+      empty="No jobs match. Try another status or type, or clear the search."
     />
   );
 }

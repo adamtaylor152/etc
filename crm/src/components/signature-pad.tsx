@@ -26,20 +26,22 @@ export function SignaturePad({ name = "signature", height = 160 }: { name?: stri
   }, [height]);
 
   const pos = (e: React.PointerEvent) => { const c = canvas.current!, r = c.getBoundingClientRect(); return { x: ((e.clientX - r.left) / r.width) * c.width, y: ((e.clientY - r.top) / r.height) * c.height }; };
+  const tool = "inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-line bg-white px-3 text-sm font-semibold text-navy hover:bg-tint disabled:opacity-50";
   return (
     <div>
-      <div className="relative rounded-lg border-2 border-dashed border-line bg-white">
-        <canvas ref={canvas} style={{ height, touchAction: "none" }} className="block w-full cursor-crosshair rounded-lg" aria-label="Signature pad: sign with your finger or mouse"
+      <div className="relative rounded-xl border border-line bg-white shadow-card">
+        <canvas ref={canvas} style={{ height, touchAction: "none" }} className="block w-full cursor-crosshair rounded-xl" aria-label="Signature pad: sign with your finger or mouse"
           onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); drawing.current = [pos(e)]; redraw([...strokes, drawing.current]); }}
           onPointerMove={(e) => { if (!drawing.current) return; drawing.current.push(pos(e)); redraw([...strokes, drawing.current]); }}
           onPointerUp={() => { if (drawing.current) { const next = [...strokes, drawing.current]; drawing.current = null; setStrokes(next); redraw(next); } }} />
-        {!strokes.length && <span className="pointer-events-none absolute inset-x-0 bottom-3 text-center text-xs text-ink-soft">Sign here</span>}
-        <span className="pointer-events-none absolute inset-x-6 bottom-8 border-b border-line" />
+        <span className="pointer-events-none absolute bottom-10 left-5 text-lg leading-none text-ink-faint" aria-hidden>×</span>
+        <span className="pointer-events-none absolute inset-x-5 bottom-9 border-b border-ink-faint/50" aria-hidden />
+        {!strokes.length && <span className="pointer-events-none absolute inset-x-0 bottom-2.5 text-center text-xs text-ink-soft">Sign above the line</span>}
       </div>
       <input ref={out} type="hidden" name={name} />
-      <div className="mt-1 flex gap-3 text-xs font-semibold text-blue">
-        <button type="button" onClick={() => { const n = strokes.slice(0, -1); setStrokes(n); redraw(n); }} disabled={!strokes.length} className="inline-flex items-center gap-1 disabled:opacity-40"><Undo2 className="size-3.5" />Undo</button>
-        <button type="button" onClick={() => { setStrokes([]); redraw([]); }} disabled={!strokes.length} className="inline-flex items-center gap-1 disabled:opacity-40"><Eraser className="size-3.5" />Clear</button>
+      <div className="mt-2 flex gap-2">
+        <button type="button" onClick={() => { const n = strokes.slice(0, -1); setStrokes(n); redraw(n); }} disabled={!strokes.length} title={strokes.length ? undefined : "Nothing to undo yet"} className={tool}><Undo2 className="size-4" aria-hidden />Undo</button>
+        <button type="button" onClick={() => { setStrokes([]); redraw([]); }} disabled={!strokes.length} title={strokes.length ? undefined : "Nothing to clear yet"} className={tool}><Eraser className="size-4" aria-hidden />Clear</button>
       </div>
     </div>
   );
