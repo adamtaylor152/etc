@@ -1,4 +1,5 @@
 // Marketing dashboard: review requests (ratings, Google clicks, private feedback), referrals and credits, leads by source.
+import { requireOwner } from "@/server/auth";
 import Link from "next/link";
 import { DetailHeader } from "@/components/detail-header";
 import { Badge } from "@/components/ui";
@@ -12,6 +13,7 @@ import { saveMarketingSettings } from "./actions";
 export const metadata = { title: "Marketing" };
 
 export default async function Marketing({ searchParams }: PageProps<"/marketing">) {
+  await requireOwner();
   const sp = await searchParams;
   const bid = await businessId();
   const since = localDayStart(addDays(todayLocal(), -90));

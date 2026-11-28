@@ -1,5 +1,6 @@
 // Size check: every snow booking whose driveway nobody has looked at yet, with the satellite view, plus jobs held
 // waiting on a client's OK or a quote. Confirm the size and the price follows (see server/ops/drive-size.ts).
+import { requireOwner } from "@/server/auth";
 import Link from "next/link";
 import { Card, Empty, PageHeader } from "@/components/ui";
 import { businessId, db } from "@/server/db";
@@ -12,6 +13,7 @@ export const metadata = { title: "Size check" };
 const snowJob = { closedAt: null, OR: [{ kind: "SNOW_PLAN" as const }, { kind: "ONE_OFF" as const, title: { startsWith: "Snow" } }] };
 
 export default async function SizeCheck({ searchParams }: PageProps<"/snow/sizes">) {
+  await requireOwner();
   const sp = await searchParams;
   const bid = await businessId();
   const prices = await snowPrices(db, bid);

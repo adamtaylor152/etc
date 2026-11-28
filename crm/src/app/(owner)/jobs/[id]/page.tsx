@@ -1,3 +1,4 @@
+import { requireOwner } from "@/server/auth";
 import { jobRequireSignature } from "../../signature-actions";
 import { jobChecklistSet } from "../../checklist-actions";
 import { JobCosting } from "@/components/job-costing";
@@ -21,6 +22,7 @@ import { describeRule } from "@/server/recurrence";
 import { jobClose, planPause, recurringUpdate, planUpdate, visitAdd, visitDelete, visitSchedule } from "../../work-actions";
 
 export default async function JobPage({ params, searchParams }: PageProps<"/jobs/[id]">) {
+  await requireOwner();
   const { id } = await params;
   const sp = await searchParams;
   const bid = await businessId();

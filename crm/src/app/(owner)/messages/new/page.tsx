@@ -1,4 +1,5 @@
 // Start a conversation: pick a client with a mobile number, or type any number.
+import { requireOwner } from "@/server/auth";
 import Link from "next/link";
 import { Flash } from "@/components/flash";
 import { Button, Field, Input } from "@/components/ui";
@@ -8,6 +9,7 @@ import { toE164 } from "@/server/sms";
 import { textStart } from "../../text-actions";
 
 export default async function NewMessage({ searchParams }: PageProps<"/messages/new">) {
+  await requireOwner();
   const sp = await searchParams;
   const bid = await businessId();
   const clients = (await db.client.findMany({ where: { businessId: bid, archivedAt: null, phone: { not: null } }, orderBy: [{ firstName: "asc" }, { lastName: "asc" }] }))

@@ -1,4 +1,5 @@
 // Settings → Checklists: templates that visits fill in on the field view.
+import { requireOwner } from "@/server/auth";
 import { ChecklistEditor } from "@/components/checklist-editor";
 import { DetailHeader } from "@/components/detail-header";
 import { businessId, db } from "@/server/db";
@@ -8,6 +9,7 @@ import { checklistSave } from "../../checklist-actions";
 export const metadata = { title: "Checklists" };
 
 export default async function Checklists({ searchParams }: PageProps<"/settings/checklists">) {
+  await requireOwner();
   const sp = await searchParams;
   const bid = await businessId();
   await seedStarters(bid); // first visit: two starter templates to edit

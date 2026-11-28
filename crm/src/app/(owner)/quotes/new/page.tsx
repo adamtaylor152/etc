@@ -1,4 +1,5 @@
 // New quote from a request (/quotes/new?request=...) or for a client (?client=...).
+import { requireOwner } from "@/server/auth";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ClientPick } from "@/components/client-pick";
@@ -12,6 +13,7 @@ import { quoteCreate } from "../../quote-actions";
 export const metadata = { title: "New quote" };
 
 export default async function NewQuote({ searchParams }: PageProps<"/quotes/new">) {
+  await requireOwner();
   const sp = await searchParams;
   const bid = await businessId();
   const request = sp.request ? await db.request.findFirst({ where: { id: String(sp.request), businessId: bid } }) : null;

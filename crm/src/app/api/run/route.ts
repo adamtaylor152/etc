@@ -6,7 +6,7 @@ import { currentUser } from "@/server/auth";
 import { todayLocal } from "@/server/dates";
 import { db } from "@/server/db";
 import { transitionVisit } from "@/server/ops/visits";
-import { runStops } from "@/server/runner";
+import { runStops, visitScope } from "@/server/runner";
 import { TransitionError } from "@/server/status/visit";
 
 export async function GET(req: Request) {
@@ -14,7 +14,7 @@ export async function GET(req: Request) {
   if (!user) return Response.json({ error: "Sign in again" }, { status: 401 });
   const u = new URL(req.url);
   const date = /^\d{4}-\d{2}-\d{2}$/.test(u.searchParams.get("date") ?? "") ? u.searchParams.get("date")! : todayLocal();
-  const who = u.searchParams.get("who") === "all" ? "all" : user.id;
+  const who = u.searchParams.get("who") === "all" && user.role === "OWNER" ? "all" : user.id;
   return Response.json({ date, stops: await runStops(user.businessId, date, who), at: new Date().toISOString() }, { headers: { "Cache-Control": "no-store" } });
 }
 
@@ -31,7 +31,7 @@ export async function POST(req: Request) {
   if (!user) return Response.json({ error: "Sign in again" }, { status: 401 });
   const a = Action.safeParse(await req.json().catch(() => null));
   if (!a.success) return Response.json({ error: "Bad action" }, { status: 400 });
-  const v = await db.visit.findFirst({ where: { id: a.data.visitId, businessId: user.businessId } });
+  const v = await db.visit.findFirst({ where: { id: a.data.visitId, businessId: user.businessId, ...visitScope(user) } });
   if (!v) return Response.json({ error: "Visit not found" }, { status: 404 });
   // Replays and out-of-order sends: already there (or past it) means nothing to do.
   if (v.state === a.data.to || v.state === "SKIPPED" || v.state === "CANCELLED" || (ORDER.indexOf(v.state) >= ORDER.indexOf(a.data.to) && a.data.to !== "SKIPPED")) {

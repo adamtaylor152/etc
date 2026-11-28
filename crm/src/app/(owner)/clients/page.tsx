@@ -1,3 +1,4 @@
+import { requireOwner } from "@/server/auth";
 import { clientTagsBulk } from "../client-actions";
 import { ListPage, listHref, sortRows } from "@/components/list-page";
 import { Badge } from "@/components/ui";
@@ -10,6 +11,7 @@ export const metadata = { title: "Clients" };
 type Status = "lead" | "active" | "archived";
 
 export default async function Clients({ searchParams }: PageProps<"/clients">) {
+  await requireOwner();
   const sp = await searchParams;
   const one = (k: string) => (typeof sp[k] === "string" ? (sp[k] as string) : undefined);
   const params = { status: one("status"), tag: one("tag"), q: one("q"), sort: one("sort"), dir: one("dir") };

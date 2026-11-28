@@ -1,3 +1,4 @@
+import { requireOwner } from "@/server/auth";
 import { invoiceAllowPartial } from "../../work2-actions";
 import { SignatureCard } from "@/components/signatures";
 import Link from "next/link";
@@ -16,6 +17,7 @@ import { invoiceBadDebt, invoiceMarkSent, invoiceSend, invoiceVoid, paymentDelet
 const METHOD: Record<string, string> = { CASH: "Cash", ETRANSFER: "e-Transfer", CARD: "Card", CHEQUE: "Cheque", OTHER: "Other" };
 
 export default async function InvoicePage({ params, searchParams }: PageProps<"/invoices/[id]">) {
+  await requireOwner();
   const { id } = await params;
   const sp = await searchParams;
   const bid = await businessId();

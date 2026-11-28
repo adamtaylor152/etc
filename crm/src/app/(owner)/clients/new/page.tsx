@@ -1,3 +1,4 @@
+import { requireOwner } from "@/server/auth";
 import { ClientForm } from "@/components/client-form";
 import { DetailHeader } from "@/components/detail-header";
 import { communityOptions, LEAD_SOURCES, mapsKey, PHONE_LABELS, TITLES } from "@/server/clients";
@@ -7,6 +8,7 @@ import { clientSave } from "../../client-actions";
 export const metadata = { title: "New client" };
 
 export default async function NewClient({ searchParams }: PageProps<"/clients/new">) {
+  await requireOwner();
   const sp = await searchParams;
   return (
     <>

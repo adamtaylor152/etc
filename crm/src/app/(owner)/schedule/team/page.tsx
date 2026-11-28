@@ -1,4 +1,5 @@
 // Team view: who's doing what (day lanes or a week grid) and a map of the day's stops coloured by person.
+import { requireOwner } from "@/server/auth";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { RouteMap } from "@/components/route-map";
@@ -12,6 +13,7 @@ import { loadAvailability } from "@/server/schedule-data";
 export const metadata = { title: "Team schedule" };
 
 export default async function TeamSchedule({ searchParams }: PageProps<"/schedule/team">) {
+  await requireOwner();
   const sp = await searchParams;
   const date = typeof sp.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(sp.date) ? sp.date : todayLocal();
   const week = sp.span === "week";

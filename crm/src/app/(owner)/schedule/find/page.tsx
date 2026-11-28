@@ -1,4 +1,5 @@
 // Find a time: pick a visit, get the best open slots (by person, working hours, time off, and closeness to their other stops).
+import { requireOwner } from "@/server/auth";
 import Link from "next/link";
 import { ScheduleTabs } from "@/components/schedule-tabs";
 import { fmtMin, localParts, suggestSlots } from "@/server/availability";
@@ -11,6 +12,7 @@ import { bookSlot } from "../../schedule-actions";
 export const metadata = { title: "Find a time" };
 
 export default async function FindTime({ searchParams }: PageProps<"/schedule/find">) {
+  await requireOwner();
   const sp = await searchParams;
   const bid = await businessId();
   const today = todayLocal();

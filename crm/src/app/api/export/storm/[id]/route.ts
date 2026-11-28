@@ -1,10 +1,10 @@
-import { currentUser } from "@/server/auth";
+import { currentOwner } from "@/server/auth";
 import { stormReport } from "@/server/stormReport";
 
 const csv = (v: unknown) => { const s = String(v ?? ""); return /[",\n]/.test(s) ? `"${s.replaceAll('"', '""')}"` : s; };
 
 export async function GET(_req: Request, ctx: RouteContext<"/api/export/storm/[id]">) {
-  const user = await currentUser();
+  const user = await currentOwner();
   if (!user) return new Response("Not found", { status: 404 });
   const { id } = await ctx.params;
   const { ev, rows } = await stormReport(user.businessId, id);

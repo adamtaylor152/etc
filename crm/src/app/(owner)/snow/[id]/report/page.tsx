@@ -1,4 +1,5 @@
 // Printable proof-of-service report for a storm (keep for slip-and-fall claims).
+import { requireOwner } from "@/server/auth";
 import { notFound } from "next/navigation";
 import { businessId } from "@/server/db";
 import { stormReport } from "@/server/stormReport";
@@ -6,6 +7,7 @@ import { stormReport } from "@/server/stormReport";
 export const metadata = { title: "Storm report" };
 
 export default async function StormReport({ params }: PageProps<"/snow/[id]/report">) {
+  await requireOwner();
   const { id } = await params;
   const data = await stormReport(await businessId(), id).catch(() => null);
   if (!data) notFound();

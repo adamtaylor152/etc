@@ -1,3 +1,4 @@
+import { requireOwner } from "@/server/auth";
 import { DetailHeader } from "@/components/detail-header";
 import { TaskForm } from "@/components/task-form";
 import { businessId, db } from "@/server/db";
@@ -7,6 +8,7 @@ import { team } from "@/server/schedule";
 export const metadata = { title: "New task" };
 
 export default async function NewTask({ searchParams }: PageProps<"/tasks/new">) {
+  await requireOwner();
   const sp = await searchParams;
   const s = (k: string) => (typeof sp[k] === "string" ? (sp[k] as string) : "");
   const bid = await businessId();

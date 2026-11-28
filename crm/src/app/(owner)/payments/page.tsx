@@ -1,3 +1,4 @@
+import { requireOwner } from "@/server/auth";
 import Link from "next/link";
 import { Card, Empty, PageHeader } from "@/components/ui";
 import { prettyDateTime, todayLocal } from "@/server/dates";
@@ -9,6 +10,7 @@ export const metadata = { title: "Payments" };
 const METHOD: Record<string, string> = { CASH: "Cash", ETRANSFER: "e-Transfer", CARD: "Card", CHEQUE: "Cheque", OTHER: "Other" };
 
 export default async function Payments() {
+  await requireOwner();
   const bid = await businessId();
   const toMatch = await db.unmatchedPayment.count({ where: { businessId: bid, status: "OPEN" } });
   const payments = await db.payment.findMany({ where: { businessId: bid }, include: { client: true, invoice: true }, orderBy: { receivedAt: "desc" }, take: 300 });

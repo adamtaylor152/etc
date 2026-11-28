@@ -1,5 +1,5 @@
 // CSV of payments for bookkeeping/taxes: /api/export/payments?from=2026-01-01&to=2026-12-31
-import { currentUser } from "@/server/auth";
+import { currentOwner } from "@/server/auth";
 import { db } from "@/server/db";
 import { addDays, localDayStart, TZ } from "@/server/dates";
 import { clientName } from "@/server/queries";
@@ -7,7 +7,7 @@ import { clientName } from "@/server/queries";
 const csv = (v: unknown) => { const s = String(v ?? ""); return /[",\n]/.test(s) ? `"${s.replaceAll('"', '""')}"` : s; };
 
 export async function GET(req: Request) {
-  const user = await currentUser();
+  const user = await currentOwner();
   if (!user) return new Response("Not found", { status: 404 });
   const url = new URL(req.url);
   const from = url.searchParams.get("from"), to = url.searchParams.get("to");

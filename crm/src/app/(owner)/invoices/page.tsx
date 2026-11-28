@@ -1,3 +1,4 @@
+import { requireOwner } from "@/server/auth";
 import Link from "next/link";
 import { ListPage, listHref, sortRows } from "@/components/list-page";
 import { INVOICE_LABEL, InvoiceBadge } from "@/components/status";
@@ -12,6 +13,7 @@ const VIEWS: InvoiceView[] = ["DRAFT", "AWAITING_PAYMENT", "PARTIAL", "PAST_DUE"
 const DOT: Record<InvoiceView, string> = { DRAFT: "bg-ink-soft/50", AWAITING_PAYMENT: "bg-amber-500", PARTIAL: "bg-amber-500", PAST_DUE: "bg-red-600", PAID: "bg-emerald-600", BAD_DEBT: "bg-ink-soft/40", VOID: "bg-ink-soft/30" };
 
 export default async function Invoices({ searchParams }: PageProps<"/invoices">) {
+  await requireOwner();
   const sp = await searchParams;
   const one = (k: string) => (typeof sp[k] === "string" ? (sp[k] as string) : undefined);
   const params = { status: one("status") ?? one("tab"), q: one("q"), sort: one("sort"), dir: one("dir") };

@@ -1,4 +1,5 @@
 // All expenses, filterable by month and category, with a CSV for the accountant.
+import { requireOwner } from "@/server/auth";
 import Link from "next/link";
 import { Download, Paperclip, Trash2 } from "lucide-react";
 import { expenseAdd, expenseDelete } from "../costing-actions";
@@ -10,6 +11,7 @@ import { EXPENSE_CATEGORIES } from "@/server/ops/costing";
 export const metadata = { title: "Expenses" };
 
 export default async function Expenses({ searchParams }: PageProps<"/expenses">) {
+  await requireOwner();
   const sp = await searchParams;
   const month = typeof sp.month === "string" && /^\d{4}-\d{2}$/.test(sp.month) ? sp.month : todayLocal().slice(0, 7);
   const cat = typeof sp.category === "string" ? sp.category : "";

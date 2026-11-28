@@ -1,5 +1,5 @@
 // Private photos: owners (session) or a signed URL (emails, client pages). Everyone else gets a 404.
-import { currentUser } from "@/server/auth";
+import { currentOwner } from "@/server/auth";
 import { db } from "@/server/db";
 import { VARIANTS, verifyMediaSig } from "@/server/media";
 import { getStream } from "@/server/storage";
@@ -10,7 +10,7 @@ export async function GET(req: Request, ctx: RouteContext<"/api/media/[id]/[vari
   if (!(variant in VARIANTS) && variant !== "mms" && variant !== "file") return new Response("Not found", { status: 404 });
   const signed = url.searchParams.has("sig");
   if (signed && !verifyMediaSig(id, variant, url.searchParams.get("exp"), url.searchParams.get("sig"))) return new Response("Forbidden", { status: 403 });
-  const user = signed ? null : await currentUser();
+  const user = signed ? null : await currentOwner();
   if (!signed && !user) return new Response("Not found", { status: 404 });
   const a = await db.attachment.findUnique({ where: { id } });
   if (!a || a.deletedAt || (user && a.businessId !== user.businessId)) return new Response("Not found", { status: 404 });

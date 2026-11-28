@@ -1,4 +1,5 @@
 // Home (Jobber layout): workflow cards, today's appointments (by visit or by person), to-do list, business performance.
+import { requireOwner } from "@/server/auth";
 import Link from "next/link";
 import { Suspense } from "react";
 import { ArrowRight, Banknote, Check, ClipboardList, FileText, Hammer, Inbox, MessageSquare, Receipt } from "lucide-react";
@@ -24,6 +25,7 @@ function WorkCard({ title, icon, color, href, rows }: { title: string; icon: Rea
 }
 
 export default async function Home({ searchParams }: PageProps<"/">) {
+  await requireOwner();
   const sp = await searchParams;
   const byPerson = sp.view === "people";
   const bid = await businessId();

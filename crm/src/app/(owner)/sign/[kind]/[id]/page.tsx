@@ -1,4 +1,5 @@
 // Hand the phone to the client: they read the statement, type their name and sign.
+import { requireOwner } from "@/server/auth";
 import { notFound } from "next/navigation";
 import { SignaturePad } from "@/components/signature-pad";
 import { businessId, db } from "@/server/db";
@@ -10,6 +11,7 @@ import { signInPerson } from "../../../signature-actions";
 export const metadata = { title: "Signature" };
 
 export default async function Sign({ params, searchParams }: PageProps<"/sign/[kind]/[id]">) {
+  await requireOwner();
   const { kind, id } = await params;
   const sp = await searchParams;
   const bid = await businessId();

@@ -1,3 +1,4 @@
+import { requireOwner } from "@/server/auth";
 import { notFound } from "next/navigation";
 import { ClientForm, type ClientFormValues } from "@/components/client-form";
 import { DetailHeader } from "@/components/detail-header";
@@ -9,6 +10,7 @@ import { clientSave } from "../../../client-actions";
 export const metadata = { title: "Edit client" };
 
 export default async function EditClient({ params, searchParams }: PageProps<"/clients/[id]/edit">) {
+  await requireOwner();
   const { id } = await params;
   const sp = await searchParams;
   const bid = await businessId();

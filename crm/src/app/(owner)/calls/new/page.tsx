@@ -1,4 +1,5 @@
 // Log a phone call by hand (calls to 403-656-8200 are also logged automatically from Telnyx).
+import { requireOwner } from "@/server/auth";
 import { DetailHeader } from "@/components/detail-header";
 import { Field, Input, Textarea } from "@/components/ui";
 import { toLocalInput } from "@/server/dates";
@@ -9,6 +10,7 @@ import { callLog } from "../../client-actions";
 export const metadata = { title: "Log a call" };
 
 export default async function NewCall({ searchParams }: PageProps<"/calls/new">) {
+  await requireOwner();
   const sp = await searchParams;
   const bid = await businessId();
   const pre = typeof sp.client === "string" ? sp.client : "";

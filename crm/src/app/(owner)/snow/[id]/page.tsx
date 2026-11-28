@@ -1,3 +1,4 @@
+import { requireOwner } from "@/server/auth";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Flash } from "@/components/flash";
@@ -10,6 +11,7 @@ import { routeVisits } from "@/server/routing";
 import { stormCancel, stormDepth, stormFinish, stormPush, stormStart } from "../../work-actions";
 
 export default async function StormPage({ params, searchParams }: PageProps<"/snow/[id]">) {
+  await requireOwner();
   const { id } = await params;
   const sp = await searchParams;
   const bid = await businessId();

@@ -1,3 +1,4 @@
+import { requireOwner } from "@/server/auth";
 import type { RequestStatus } from "@/generated/prisma/client";
 import { ListPage, listHref, sortRows } from "@/components/list-page";
 import { RequestBadge } from "@/components/status";
@@ -11,6 +12,7 @@ const LABEL: Record<RequestStatus, string> = { NEW: "New", ASSESSMENT_SCHEDULED:
 const DOT: Record<RequestStatus, string> = { NEW: "bg-blue", ASSESSMENT_SCHEDULED: "bg-amber-500", CONVERTED: "bg-emerald-600", ARCHIVED: "bg-ink-soft/40" };
 
 export default async function Requests({ searchParams }: PageProps<"/requests">) {
+  await requireOwner();
   const sp = await searchParams;
   const one = (k: string) => (typeof sp[k] === "string" ? (sp[k] as string) : undefined);
   const params = { status: one("status"), q: one("q"), sort: one("sort"), dir: one("dir") };

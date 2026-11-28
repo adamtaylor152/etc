@@ -1,3 +1,4 @@
+import { requireOwner } from "@/server/auth";
 import Link from "next/link";
 import { Mail, MessageSquare } from "lucide-react";
 import { DetailHeader } from "@/components/detail-header";
@@ -9,6 +10,7 @@ import { campaignNew } from "../campaign-actions";
 export const metadata = { title: "Campaigns" };
 
 export default async function Campaigns() {
+  await requireOwner();
   const list = await db.campaign.findMany({ where: { businessId: await businessId() }, include: { recipients: { select: { openedAt: true, clickedAt: true } } }, orderBy: { createdAt: "desc" } });
   return (
     <>

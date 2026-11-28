@@ -1,11 +1,11 @@
 // Owner sends a text or MMS from the Messages composer. multipart/form-data: key (client id or n<digits>), body, file[].
-import { currentUser } from "@/server/auth";
+import { currentOwner } from "@/server/auth";
 import { MediaError } from "@/server/media";
 import { MAX_MMS_FILES, sendText } from "@/server/ops/texts";
 import { TransitionError } from "@/server/status/visit";
 
 export async function POST(req: Request) {
-  const user = await currentUser();
+  const user = await currentOwner();
   if (!user) return Response.json({ error: "Sign in again" }, { status: 401 });
   const form = await req.formData();
   const key = String(form.get("key") ?? "");

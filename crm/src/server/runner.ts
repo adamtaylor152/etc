@@ -11,11 +11,15 @@ export type RunStop = {
   sizeNote: string | null; // snow stop whose driveway size nobody has checked yet
 };
 
+/** Crew work their own stops plus ones nobody is assigned to; owners work any. Spread into a visit `where`. */
+export const visitScope = (u: { id: string; role: string }) =>
+  u.role === "OWNER" ? {} : { OR: [{ assignees: { some: { userId: u.id } } }, { assignees: { none: {} } }] };
+
 export async function runStops(businessId: string, date: string, userId: string | "all") {
   // Same order as the route planner (service-area community order, then standing routeSort).
   const { visits } = await routeVisits(businessId, {
     scheduledDate: toDbDate(date), state: { not: "CANCELLED" },
-    ...(userId === "all" ? {} : { OR: [{ assignees: { some: { userId } } }, { assignees: { none: {} } }] }),
+    ...(userId === "all" ? {} : visitScope({ id: userId, role: "CREW" })),
   });
   const who = await db.visitAssignee.findMany({ where: { visitId: { in: visits.map((v) => v.id) } }, include: { user: { select: { name: true, email: true } } } });
   return visits.map((v): RunStop => ({

@@ -1,4 +1,5 @@
 // Bulk reschedule & reassign (weather days, someone sick): pick visits/tasks, move them or hand them to someone else.
+import { requireOwner } from "@/server/auth";
 import { ScheduleTabs } from "@/components/schedule-tabs";
 import { fmtMin } from "@/server/availability";
 import { todayLocal } from "@/server/dates";
@@ -9,6 +10,7 @@ import { bulkSchedule } from "../../schedule-actions";
 export const metadata = { title: "Bulk schedule changes" };
 
 export default async function Bulk({ searchParams }: PageProps<"/schedule/bulk">) {
+  await requireOwner();
   const sp = await searchParams;
   const today = todayLocal();
   const from = typeof sp.from === "string" && /^\d{4}-\d{2}-\d{2}$/.test(sp.from) ? sp.from : today;

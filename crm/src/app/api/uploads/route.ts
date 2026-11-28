@@ -1,7 +1,9 @@
-// Owner photo uploads (before/after on a visit, or onto a job/request). multipart/form-data.
+// Photo uploads (before/after on a visit, or onto a job/request). multipart/form-data.
+// Crew can only add to a visit on their own route; jobs and requests are owner-only.
 import { currentUser } from "@/server/auth";
 import { db } from "@/server/db";
 import { MediaError, saveImage } from "@/server/media";
+import { visitScope } from "@/server/runner";
 
 const KINDS = ["BEFORE", "AFTER", "PROOF", "REQUEST_PHOTO", "OTHER"] as const;
 
@@ -18,9 +20,11 @@ export async function POST(req: Request) {
   // Resolve and authorize what the photo attaches to.
   let links: { clientId?: string; propertyId?: string; jobId?: string; visitId?: string; requestId?: string } = {};
   if (visitId) {
-    const v = await db.visit.findFirst({ where: { id: visitId, businessId: user.businessId }, include: { job: true } });
+    const v = await db.visit.findFirst({ where: { id: visitId, businessId: user.businessId, ...visitScope(user) }, include: { job: true } });
     if (!v) return Response.json({ error: "Visit not found" }, { status: 404 });
     links = { visitId, jobId: v.jobId, clientId: v.job.clientId, propertyId: v.propertyId };
+  } else if (user.role !== "OWNER") {
+    return Response.json({ error: "Not allowed" }, { status: 403 });
   } else if (jobId) {
     const j = await db.job.findFirst({ where: { id: jobId, businessId: user.businessId } });
     if (!j) return Response.json({ error: "Job not found" }, { status: 404 });

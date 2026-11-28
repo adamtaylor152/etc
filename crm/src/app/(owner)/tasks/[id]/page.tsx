@@ -1,3 +1,4 @@
+import { requireOwner } from "@/server/auth";
 import { notFound } from "next/navigation";
 import { DetailHeader } from "@/components/detail-header";
 import { TaskForm } from "@/components/task-form";
@@ -12,6 +13,7 @@ export const metadata = { title: "Task" };
 const hm = (d: Date | null) => (d ? d.toLocaleTimeString("en-CA", { timeZone: "America/Edmonton", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }) : "");
 
 export default async function TaskPage({ params, searchParams }: PageProps<"/tasks/[id]">) {
+  await requireOwner();
   const { id } = await params;
   const sp = await searchParams;
   const bid = await businessId();

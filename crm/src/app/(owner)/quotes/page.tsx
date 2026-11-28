@@ -1,3 +1,4 @@
+import { requireOwner } from "@/server/auth";
 import type { QuoteStatus } from "@/generated/prisma/client";
 import { ListPage, listHref, sortRows } from "@/components/list-page";
 import { QUOTE } from "@/components/status";
@@ -12,6 +13,7 @@ const STATUSES: QuoteStatus[] = ["DRAFT", "AWAITING_RESPONSE", "CHANGES_REQUESTE
 const DOT: Record<QuoteStatus, string> = { DRAFT: "bg-ink-soft/50", AWAITING_RESPONSE: "bg-amber-500", CHANGES_REQUESTED: "bg-red-600", APPROVED: "bg-emerald-600", CONVERTED: "bg-blue", ARCHIVED: "bg-ink-soft/30" };
 
 export default async function Quotes({ searchParams }: PageProps<"/quotes">) {
+  await requireOwner();
   const sp = await searchParams;
   const one = (k: string) => (typeof sp[k] === "string" ? (sp[k] as string) : undefined);
   const params = { status: one("status") ?? one("tab"), q: one("q"), sort: one("sort"), dir: one("dir") };

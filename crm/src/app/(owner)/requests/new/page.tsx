@@ -1,4 +1,5 @@
 // New request by hand: client, property, what they want, optional on-site assessment.
+import { requireOwner } from "@/server/auth";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ClientPick } from "@/components/client-pick";
@@ -12,6 +13,7 @@ import { requestCreate } from "../../work2-actions";
 export const metadata = { title: "New request" };
 
 export default async function NewRequest({ searchParams }: PageProps<"/requests/new">) {
+  await requireOwner();
   const sp = await searchParams;
   const s = (k: string) => (typeof sp[k] === "string" ? (sp[k] as string) : "");
   const bid = await businessId();

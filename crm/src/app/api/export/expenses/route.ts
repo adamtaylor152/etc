@@ -1,12 +1,12 @@
 // Expenses CSV for a month (owners only).
-import { currentUser } from "@/server/auth";
+import { currentOwner } from "@/server/auth";
 import { dateOnly, toDbDate } from "@/server/dates";
 import { db } from "@/server/db";
 
 const cell = (v: string) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
 
 export async function GET(req: Request) {
-  const user = await currentUser();
+  const user = await currentOwner();
   if (!user) return new Response("Not found", { status: 404 });
   const month = new URL(req.url).searchParams.get("month") ?? "";
   if (!/^\d{4}-\d{2}$/.test(month)) return new Response("month=YYYY-MM", { status: 400 });

@@ -1,4 +1,5 @@
 // Time sheets: one week at a time, a row per person, minutes per day, and every entry (editable).
+import { requireOwner } from "@/server/auth";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
 import { timeAdd, timeDelete, timeUpdate } from "../costing-actions";
@@ -11,6 +12,7 @@ export const metadata = { title: "Time sheets" };
 const local = (d: Date) => d.toLocaleDateString("en-CA", { timeZone: "America/Edmonton" });
 
 export default async function Timesheets({ searchParams }: PageProps<"/timesheets">) {
+  await requireOwner();
   const sp = await searchParams;
   const today = todayLocal();
   const anchor = typeof sp.week === "string" && /^\d{4}-\d{2}-\d{2}$/.test(sp.week) ? sp.week : today;

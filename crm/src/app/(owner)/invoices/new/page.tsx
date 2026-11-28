@@ -1,4 +1,5 @@
 // New invoice: pick a client, then bill their unbilled work in one click, or build a custom invoice.
+import { requireOwner } from "@/server/auth";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ClientPick } from "@/components/client-pick";
@@ -14,6 +15,7 @@ import { invoiceCustom } from "../../work2-actions";
 export const metadata = { title: "New invoice" };
 
 export default async function NewInvoice({ searchParams }: PageProps<"/invoices/new">) {
+  await requireOwner();
   const sp = await searchParams;
   const s = (k: string) => (typeof sp[k] === "string" ? (sp[k] as string) : "");
   const bid = await businessId();

@@ -1,4 +1,5 @@
 // Messages: conversation list on the left, the open thread on the right (one at a time on phones).
+import { requireOwner } from "@/server/auth";
 import { Inbox, type Convo } from "@/components/messages/inbox";
 import { businessId, db } from "@/server/db";
 import { clientName } from "@/server/queries";
@@ -6,6 +7,7 @@ import { clientName } from "@/server/queries";
 export const metadata = { title: "Messages" };
 
 export default async function MessagesLayout({ children }: LayoutProps<"/messages">) {
+  await requireOwner();
   const bid = await businessId();
   // ponytail: newest 3000 texts grouped in JS; a DISTINCT ON query if the history ever gets huge.
   const texts = await db.textMessage.findMany({
