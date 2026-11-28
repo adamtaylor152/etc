@@ -25,6 +25,7 @@ enum TokenPurpose {
   CLIENT_HUB
   PHOTO_UPLOAD
   VISIT_REPORT
+  REVIEW
 }
 
 enum ClientSource {
@@ -316,6 +317,8 @@ model Client {
   leadSource       String? // how they found us (Google, referral, door hanger...)
   phones           Json           @default("[]") // [{number,label,sms}]; phone above mirrors the first
   emails           Json           @default("[]") // [{address,label}]; email above mirrors the first
+  referralCode     String? // their share code (etccrew.ca/book.html?ref=CODE)
+  referredById     String? // the client who referred them
   followUpQuotes   Boolean        @default(true)
   followUpInvoices Boolean        @default(true)
   visitReminders   Boolean        @default(true)
@@ -1151,4 +1154,54 @@ model Signature {
 enum InvoiceKind {
   STANDARD
   DEPOSIT
+}
+
+/** "How did we do?" sent after work; 4-5 stars go to Google, 1-3 to private feedback. */
+model ReviewRequest {
+  id              String    @id @default(cuid())
+  businessId      String
+  clientId        String
+  jobId           String?
+  channel         String // EMAIL | SMS
+  sentAt          DateTime  @default(now())
+  rating          Int?
+  feedback        String?
+  ratedAt         DateTime?
+  googleClickedAt DateTime?
+
+  @@index([businessId, sentAt])
+  @@index([clientId])
+}
+
+enum ReferralStatus {
+  PENDING // referred client booked
+  QUALIFIED // their first invoice is paid; referrer credit issued
+  REWARDED // the credit was used on an invoice
+}
+
+model Referral {
+  id          String         @id @default(cuid())
+  businessId  String
+  referrerId  String
+  refereeId   String         @unique
+  status      ReferralStatus @default(PENDING)
+  rewardCents Int            @default(0)
+  qualifiedAt DateTime?
+  createdAt   DateTime       @default(now())
+
+  @@index([referrerId])
+}
+
+/** Money owed to a client as credit (referral rewards); used up as a negative line on their next invoice. */
+model ClientCredit {
+  id                 String   @id @default(cuid())
+  businessId         String
+  clientId           String
+  amountCents        Int
+  reason             String
+  referralId         String?
+  appliedToInvoiceId String?
+  createdAt          DateTime @default(now())
+
+  @@index([clientId])
 }

@@ -3,7 +3,7 @@ import { Button, Card, Field, Input, PageHeader, inputCls } from "@/components/u
 import { dateOnly } from "@/server/dates";
 import { business, businessId, db } from "@/server/db";
 import { env } from "@/server/env";
-import { parseSettings, SETTING_LABELS, type Settings } from "@/server/settings";
+import { parseSettings, SETTING_LABELS, type ToggleKey } from "@/server/settings";
 import { stripeEnabled } from "@/server/stripe";
 import { saveAutomations, saveBusiness, savePrice, saveSeason, saveTax } from "./actions";
 
@@ -45,7 +45,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
 
         <Card title="Automations">
           <form action={saveAutomations} className="space-y-3">
-            {(Object.keys(SETTING_LABELS) as (keyof Settings)[]).map((k) => (
+            {(Object.keys(SETTING_LABELS) as ToggleKey[]).map((k) => (
               <label key={k} className="flex items-start gap-3">
                 <input type="checkbox" name={k} defaultChecked={settings[k]} className="mt-1 size-5 shrink-0" />
                 <span><span className="block font-semibold">{SETTING_LABELS[k][0]}</span><span className="text-sm text-ink-soft">{SETTING_LABELS[k][1]}</span></span>

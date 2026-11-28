@@ -217,11 +217,13 @@ async function scheduledEmail(visitId: string, reminder: boolean) {
 const visitScheduled: Template<{ visitId: string }> = { subject: () => "You're booked with etc.", render: (p) => scheduledEmail(p.visitId, false) };
 const visitReminder: Template<{ visitId: string }> = { subject: () => "Reminder: etc. is coming tomorrow", render: (p) => scheduledEmail(p.visitId, true) };
 
-const reviewRequest: Template<{ clientId: string }> = {
+const reviewRequest: Template<{ clientId: string; reviewId?: string }> = {
   subject: () => "How did we do?",
   async render(p, ctx) {
     const [c, biz] = await Promise.all([db.client.findUniqueOrThrow({ where: { id: p.clientId } }), db.business.findUniqueOrThrow({ where: { id: ctx.businessId } })]);
-    return <ReviewRequest name={clientName(c)} url={biz.googleReviewUrl ?? env.siteUrl} site={env.siteUrl} phone={env.phone} />;
+    // New flow: a rating page first (/r/...), which sends happy clients to Google and others to private feedback.
+    const url = p.reviewId ? `${env.appUrl}/r/${await mintToken(db, ctx.businessId, "REVIEW", { clientId: c.id, redirectPath: p.reviewId })}` : biz.googleReviewUrl ?? env.siteUrl;
+    return <ReviewRequest name={clientName(c)} url={url} site={env.siteUrl} phone={env.phone} />;
   },
 };
 

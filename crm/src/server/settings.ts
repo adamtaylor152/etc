@@ -9,7 +9,10 @@ export const SettingsSchema = z.object({
   stormHeadsUp: z.boolean().default(false),         // email plan clients "you're on our route" when a storm starts
   snowAlert: z.boolean().default(true),             // email owners when the forecast meets a plan trigger
   reviewRequests: z.boolean().default(false),
-  allowPartialPayments: z.boolean().default(false), // new invoices let clients pay part online       // ask for a Google review after the first job of the season
+  allowPartialPayments: z.boolean().default(false),
+  reviewDelayHours: z.coerce.number().int().min(1).max(240).default(24), // after a visit is done
+  referralRewardCents: z.coerce.number().int().min(0).max(50_000).default(1000), // credit for the referrer
+  referralDiscountCents: z.coerce.number().int().min(0).max(50_000).default(0), // credit for the new client // new invoices let clients pay part online       // ask for a Google review after the first job of the season
   dailyDigest: z.boolean().default(false),          // 6am summary email to owners
   quoteFollowUp: z.boolean().default(true),         // nudge unanswered quotes after 3 days
   visitReminders: z.boolean().default(true),        // day-before reminder for scheduled (non-snow) visits
@@ -24,7 +27,9 @@ export async function getSettings(db: Db, businessId: string): Promise<Settings>
   return parseSettings(b.settings);
 }
 
-export const SETTING_LABELS: Record<keyof Settings, [string, string]> = {
+/** The on/off settings (shown as checkboxes in Settings → Automations). */
+export type ToggleKey = { [K in keyof Settings]: Settings[K] extends boolean ? K : never }[keyof Settings];
+export const SETTING_LABELS: Record<ToggleKey, [string, string]> = {
   visitDoneEmail: ["“All done” email", "Before & after photos to the client after each visit (5 min after Done)."],
   autoSendVisitInvoices: ["Invoice per-visit jobs on Done", "One-off jobs get their invoice right away; the pay link rides in the “all done” email."],
   onMyWayEmail: ["“On my way” email", "Emails the client when you tap On my way."],
