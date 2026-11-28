@@ -1,6 +1,7 @@
 // Business.settings JSON, typed with defaults. Every automation switch lives here (Settings → Automations).
 import { z } from "zod";
 import type { Db } from "./db";
+import { WINDOWS } from "./windows";
 
 export const SettingsSchema = z.object({
   visitDoneEmail: z.boolean().default(true),        // "all done" email with before/after photos
@@ -13,12 +14,22 @@ export const SettingsSchema = z.object({
   reviewDelayHours: z.coerce.number().int().min(1).max(240).default(24), // after a visit is done
   referralRewardCents: z.coerce.number().int().min(0).max(50_000).default(1000), // credit for the referrer
   referralDiscountCents: z.coerce.number().int().min(0).max(50_000).default(0), // credit for the new client // new invoices let clients pay part online       // ask for a Google review after the first job of the season
+  serviceMinutes: z.coerce.number().int().min(1).max(240).default(12), // time at a stop, for route ETAs (12 = a snow stop)
   dailyDigest: z.boolean().default(false),          // 6am summary email to owners
   quoteFollowUp: z.boolean().default(true),         // first nudge for unanswered quotes
   quoteFollowUpDays: z.coerce.number().int().min(1).max(60).default(3), // days after sending
   quoteFollowUp2: z.boolean().default(false),       // second nudge
   quoteFollowUp2Days: z.coerce.number().int().min(1).max(60).default(7),
   visitReminders: z.boolean().default(true),        // day-before reminder for scheduled (non-snow) visits
+  assignmentAlerts: z.boolean().default(true),      // tell the assigned person when an owner assigns or moves their work
+  reminderDaysBefore: z.coerce.number().int().min(1).max(7).default(1), // first visit reminder: this many days ahead...
+  reminderHour: z.coerce.number().int().min(6).max(21).default(17),     // ...at this hour (Calgary time)
+  clientReschedule: z.boolean().default(false),      // clients can move their own visit to an open window from the reminder link
+  reminderMorningOf: z.boolean().default(false),    // second reminder at 7am on the day
+  arrivalWindows: z.array(z.object({
+    key: z.string().regex(/^[a-z0-9_-]{1,20}$/), label: z.string().trim().min(1).max(20),
+    from: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/), to: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+  }).refine((w) => w.from < w.to, "A window has to end after it starts")).min(1).max(6).default(WINDOWS),
   smsUpdates: z.boolean().default(true),            // texts (on my way, all done, storm day) to clients who opted in; needs Telnyx keys
 });
 export type Settings = z.infer<typeof SettingsSchema>;
@@ -45,6 +56,9 @@ export const SETTING_LABELS: Record<ToggleKey, [string, string]> = {
   dailyDigest: ["6am daily digest", "Today’s visits, late work, unbilled charges and failed emails."],
   quoteFollowUp: ["Quote follow-up", "A reminder if the client hasn’t answered, by email or text (however the quote was last sent)."],
   quoteFollowUp2: ["Second quote follow-up", "One more reminder later on. Both stop once the client answers or the quote expires."],
-  visitReminders: ["Visit reminders", "Day-before reminder for scheduled visits (not snow)."],
+  visitReminders: ["Visit reminders", "Reminder before scheduled visits (not snow), by email and text. Clients can confirm with a tap or by replying YES."],
+  clientReschedule: ["Clients can reschedule themselves", "The “confirm or change” link in reminders lets a client pick another open day and arrival window (when the people on the visit are free). You get a notice. Off: they can only ask."],
+  reminderMorningOf: ["Morning-of reminder", "A second reminder at 7 am on the day of the visit."],
+  assignmentAlerts: ["Assignment alerts to the team", "Emails the person you assign or move work for (and texts them, if their team record has a phone): what, where, when and a link to their route. Never prices."],
   smsUpdates: ["Text updates", "Texts “on the way”, “all done” (with photos link) and storm days to clients who said yes to texts. Needs Telnyx keys."],
 };

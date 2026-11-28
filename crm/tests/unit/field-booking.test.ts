@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { freeInWindow, openTimes, slotText, whoIsFree } from "@/server/booking/slots";
 import { splitRoute } from "@/server/runner";
+import { windowOf, WINDOWS } from "@/server/windows";
+const win = (k: string) => windowOf(WINDOWS, k)!;
 
 describe("splitRoute", () => {
   const stops = (spec: string) => [...spec].map((c, i) => ({ id: `v${i}`, community: c }));
@@ -45,10 +47,10 @@ describe("booking slots", () => {
     expect(whoIsFree(av(), MON, 480)).toBeNull();
   });
   it("windows: first free person and time inside the window", () => {
-    expect(freeInWindow(av(), MON, "early")).toEqual({ userId: "a", start: 540 });
-    expect(freeInWindow(av([{ userIds: ["a"], start: 540, end: 720 }]), MON, "midday")).toEqual({ userId: "b", start: 600 });
-    expect(freeInWindow(av(), MON, "evening")).toBeNull();
-    expect(freeInWindow(av([{ userIds: [], start: 540, end: 720 }]), MON, "early")).toBeNull();
+    expect(freeInWindow(av(), MON, win("early"))).toEqual({ userId: "a", start: 540 });
+    expect(freeInWindow(av([{ userIds: ["a"], start: 540, end: 720 }]), MON, win("midday"))).toEqual({ userId: "b", start: 600 });
+    expect(freeInWindow(av(), MON, win("evening"))).toBeNull();
+    expect(freeInWindow(av([{ userIds: [], start: 540, end: 720 }]), MON, win("early"))).toBeNull();
   });
   it("tells the client the window, not the planned time", () => {
     expect(slotText({ date: MON, start: 540, window: { label: "Early", hint: "6–11 am" } })).toBe("Monday, December 7, Early (6–11 am)");

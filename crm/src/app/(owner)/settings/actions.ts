@@ -7,6 +7,7 @@ import { requireOwner } from "@/server/auth";
 import { toDbDate } from "@/server/dates";
 import { db } from "@/server/db";
 import { deleteQuoteTemplate, renameQuoteTemplate } from "@/server/ops/quotes";
+import * as routes from "@/server/ops/routes";
 import { SETTING_DAYS, SETTING_LABELS, SettingsSchema } from "@/server/settings";
 import { TransitionError } from "@/server/status/visit";
 
@@ -55,6 +56,37 @@ export async function saveAutomations(f: FormData) {
   await db.business.update({ where: { id: biz.id }, data: { settings: next as Prisma.InputJsonValue } });
   revalidatePath("/", "layout");
   redirect("/settings?saved=automations");
+}
+
+/** Route settings that aren't on/off switches (Settings › Route). */
+export async function saveRouteSettings(f: FormData) {
+  const user = await requireOwner();
+  const biz = await db.business.findUniqueOrThrow({ where: { id: user.businessId } });
+  const next = SettingsSchema.parse({ ...(biz.settings as object), serviceMinutes: s(f, "serviceMinutes") || undefined });
+  await db.business.update({ where: { id: biz.id }, data: { settings: next as Prisma.InputJsonValue } });
+  revalidatePath("/", "layout");
+  redirect("/settings/route?saved=1");
+}
+
+/** The order routes visit communities in: `ids` is the community codes, first to last. */
+export async function saveCommunityOrder(f: FormData) {
+  const user = await requireOwner();
+  await routes.saveCommunityOrder(user, z.array(z.string().min(1).max(10)).max(500).parse(s(f, "ids").split(",").filter(Boolean)));
+  revalidatePath("/", "layout");
+  redirect("/settings/route?saved=1");
+}
+
+/** Reminder timing and the arrival windows (label + start + end, up to 6; blank rows are dropped). */
+export async function saveSchedule(f: FormData) {
+  const user = await requireOwner();
+  const biz = await db.business.findUniqueOrThrow({ where: { id: user.businessId } });
+  const labels = f.getAll("winLabel").map(String), froms = f.getAll("winFrom").map(String), tos = f.getAll("winTo").map(String), keys = f.getAll("winKey").map(String);
+  const arrivalWindows = labels.map((label, i) => ({ key: keys[i] || `w${i}-${label.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 12)}`, label: label.trim(), from: froms[i], to: tos[i] })).filter((w) => w.label);
+  const next = SettingsSchema.safeParse({ ...(biz.settings as object), reminderDaysBefore: s(f, "reminderDaysBefore"), reminderHour: s(f, "reminderHour"), arrivalWindows });
+  if (!next.success) redirect(`/settings?error=${encodeURIComponent(next.error.issues[0].message)}#schedule`);
+  await db.business.update({ where: { id: biz.id }, data: { settings: next.data as Prisma.InputJsonValue } });
+  revalidatePath("/", "layout");
+  redirect("/settings?saved=schedule#schedule");
 }
 
 export async function saveSeason(f: FormData) {

@@ -2,18 +2,17 @@
 // The CRM's own booking form (app.etccrew.ca/book). Posts to the same /api/public/bookings as etccrew.ca's wizard,
 // so validation, pricing and emails are identical. Services and prices come from the price book.
 import { useEffect, useState } from "react";
-import type { WindowKey } from "@/server/windows";
 import { AddressField } from "./address-field";
 import { shrink } from "./photo-uploader";
 
 type Service = { label: string; description?: string | null; price: string | null };
-type Slots = { windows: { key: WindowKey; label: string; hint: string }[]; days: { date: string; windows: WindowKey[] }[] };
+type Slots = { windows: { key: string; label: string; hint: string }[]; days: { date: string; windows: string[] }[] };
 const dayName = (d: string) => new Date(`${d}T12:00`).toLocaleDateString("en-CA", { weekday: "short", month: "short", day: "numeric" });
 
 export function BookingForm({ services, phone, mapsKey, refCode }: { services: Service[]; phone: string; mapsKey?: string; refCode?: string }) {
   // Open times for the look-and-quote visit. ponytail: arrival windows only; the API also takes exact start times.
   const [slots, setSlots] = useState<Slots | null>(null);
-  const [slot, setSlot] = useState<{ date: string; window: WindowKey } | null>(null);
+  const [slot, setSlot] = useState<{ date: string; window: string } | null>(null);
   const [dayPick, setDayPick] = useState<string | null>(null);
   const loadSlots = () => fetch("/api/public/slots", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then(setSlots).catch(() => setSlots(null));
   useEffect(() => { void loadSlots(); }, []);

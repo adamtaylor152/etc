@@ -1,3 +1,4 @@
+import { getSettings } from "@/server/settings";
 import { requireOwner } from "@/server/auth";
 import { DetailHeader } from "@/components/detail-header";
 import { TaskForm } from "@/components/task-form";
@@ -19,7 +20,7 @@ export default async function NewTask({ searchParams }: PageProps<"/tasks/new">)
   return (
     <>
       <DetailHeader back={{ href: back, label: "Back" }} title={s("kind") === "EVENT" ? "New calendar event" : "New task"} />
-      <TaskForm back={back} error={s("error") || undefined} team={people} clients={clients.map((c) => ({ id: c.id, name: clientName(c) }))}
+      <TaskForm windows={(await getSettings(db, bid)).arrivalWindows} back={back} error={s("error") || undefined} team={people} clients={clients.map((c) => ({ id: c.id, name: clientName(c) }))}
         d={{ kind: s("kind") === "EVENT" ? "EVENT" : "TASK", title: "", instructions: "", clientId: s("client"), jobId: s("job"), date: s("date"), startTime: time, endTime: plusHour, allDay: !time, repeat: "", assigneeIds: [], series: false }} />
     </>
   );

@@ -1,4 +1,5 @@
 // New job or every-snowfall plan for an existing client (/jobs/new?client=...&kind=plan).
+import { getSettings } from "@/server/settings";
 import { requireOwner } from "@/server/auth";
 import { WindowChips } from "@/components/window-chips";
 import Link from "next/link";
@@ -7,6 +8,7 @@ import { Button, Card, Field, Input, PageHeader, Textarea, inputCls } from "@/co
 import { businessId, db } from "@/server/db";
 import { clientName } from "@/server/queries";
 import { RepeatFields } from "@/components/repeat-fields";
+import { PlanBillingFields } from "@/components/plan-billing-fields";
 import { todayLocal } from "@/server/dates";
 import { planCreate, recurringCreate } from "../../work-actions";
 import { jobCreateFull } from "../../work2-actions";
@@ -60,6 +62,7 @@ export default async function NewJob({ searchParams }: PageProps<"/jobs/new">) {
               <Field label="Per push ($)"><Input name="price" type="number" step="0.01" defaultValue={30} /></Field>
               <label className="flex items-center gap-2 pt-6 text-sm font-semibold"><input type="checkbox" name="iceMelt" className="size-5" /> Ice melt (+$5)</label>
             </div>
+            <PlanBillingFields firstDueOn={todayLocal()} />
             <Button>Create plan</Button>
           </form>
         </Card>
@@ -103,7 +106,7 @@ export default async function NewJob({ searchParams }: PageProps<"/jobs/new">) {
                 <Field label="Start time" hint="Blank = any time"><Input name="startTime" type="time" defaultValue={s("time")} /></Field>
                 <Field label="End time"><Input name="endTime" type="time" /></Field>
               </div>
-              <WindowChips />
+              <WindowChips windows={(await getSettings(db, bid)).arrivalWindows} />
               <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="later" className="size-4" />Schedule later (goes to the Unscheduled list)</label>
               <details>
                 <summary className="cursor-pointer text-sm font-semibold text-blue">More visits on other days</summary>

@@ -6,7 +6,7 @@ The back office for etc. Built with Next.js 16, Postgres 17 and Prisma 7, and se
 - **Bookings:** from etccrew.ca or `/book`, each becoming a client, a property (with its Calgary community), a request, and a job or snow plan.
 - **Snow:** every-snowfall plans with trigger depths. "It's snowing" starts a storm and creates visits in route order. Extra pushes, depth changes, cancelling, a printable proof-of-service report, and forecast alerts from MET Norway.
 - **Field view on the phone:** On my way, Arrived, Done (depth, ice melt, GPS), Skip, before/after photos, and Got cash / Got e-Transfer.
-- **Routes:** a map with community outlines and numbered stops, auto-ordered by distance from home, nudged with ↑/↓, printable, with one-tap multi-stop navigation.
+- **Routes:** a map with community outlines, numbered stops and the route line. Auto-ordered by drive time (community by community, in the order set in Settings › Route, "do first" properties first), with an ETA per stop and a total per person. Drag or ↑/↓ to reorder for one day or for every time. Printable, with one-tap multi-stop navigation.
 - **Billing:**
   - Visits make charges, and charges make invoices (per visit, per storm, monthly, or fixed price).
   - e-Transfer reference codes, Stripe Checkout for cards, an Interac email auto-match.
@@ -103,6 +103,7 @@ GOOGLE_GEOCODING_KEY=... pnpm import:legacy bookings.json
 | `INTERAC_INBOUND_SECRET` | Optional: 32+ random chars, shared with the Cloudflare Email Worker below |
 | `WEATHER_USER_AGENT` | Sent to MET Norway, e.g. `etc-crm/1.0 help@etccrew.ca` |
 | `GOOGLE_GEOCODING_KEY` | Optional: only for `import:legacy` |
+| `ROUTING_URL` | Optional: base URL of an OSRM-compatible road-routing server (see Road routing below). Unset = straight-line estimates. |
 
 4. **Cloudflare:** add a proxied A record for `app`. Turn Rocket Loader off for `app.`.
 5. **Switch the site over:** set `CRM_BOOKING_URL=https://app.etccrew.ca/api/public/bookings` on the Python site.
@@ -155,6 +156,16 @@ What texting does:
 - **Messages page:** two-way texts with clients. Replies show up in the conversation, and owners get an email for each new text (at most one every 15 minutes per conversation).
 - **Automatic texts:** "on the way", "all done" with a photo link, and storm day, sent only to clients who opted in.
 - **Opt-out:** a client who texts STOP gets no texts at all until they text START.
+
+### Road routing (OSRM)
+
+Routes work without this: drive times are then straight-line distance at 30 km/h, and the "on the way" text carries no arrival time.
+
+Set `ROUTING_URL` to the base URL of an [OSRM](https://project-osrm.org)-compatible server (the app calls `GET {ROUTING_URL}/table/v1/driving/{lng,lat;...}?annotations=duration,distance`) to get real road drive times for auto-order, ETAs, route totals, splitting a route between people, and a 30-minute arrival window in the "on the way" text.
+
+- **Intended setup:** self-host OSRM next to the app with an Alberta extract (`alberta-latest.osm.pbf` from Geofabrik, car profile: `osrm-extract`, `osrm-partition`, `osrm-customize`, then `osrm-routed --algorithm mld`), and point `ROUTING_URL` at it, e.g. `http://osrm:5000`.
+- **Not for production:** the public demo server `https://router.project-osrm.org` is fine for trying it out, but it has no uptime promise and a usage policy that rules out production traffic.
+- **If it's down or slow:** requests time out after 4 seconds, the app falls back to straight-line estimates and leaves the server alone for a minute. Lists over 100 points also fall back. Results are cached in memory for 5 minutes.
 
 ### Support scripts
 

@@ -1,6 +1,10 @@
 // Team: everyone who can sign in (by email link), with their schedule colour and cost rate.
+import { env } from "@/server/env";
+import { feedPath } from "@/server/ical";
 import { requireOwner } from "@/server/auth";
+import { AddressField } from "@/components/address-field";
 import { DetailHeader } from "@/components/detail-header";
+import { mapsKey } from "@/server/clients";
 import { businessId, db } from "@/server/db";
 import { personName } from "@/server/schedule";
 import { teamSave } from "./actions";
@@ -18,6 +22,14 @@ export default async function Team({ searchParams }: PageProps<"/settings/team">
   const users = await db.user.findMany({ where: { businessId: bid }, orderBy: { createdAt: "asc" } });
   const offs = await db.timeOff.findMany({ where: { businessId: bid, endDate: { gte: toDbDate(todayLocal()) } }, orderBy: { startDate: "asc" } });
   const inp = "min-h-10 rounded-lg border border-line bg-white px-3 text-sm";
+  const key = mapsKey();
+  // Route start / end: blank = the business depot. Only an address picked from the suggestions has a map pin.
+  const point = (label: string, prefix: string, address?: string | null, lat?: number | null) => (
+    <div className="text-xs font-semibold text-ink-soft">{label}
+      <div className="mt-1"><AddressField mapsKey={key} prefix={prefix} required={false} defaults={{ formatted: address ?? "" }} /></div>
+      <span className="font-normal">{!address ? "Blank = the depot." : lat != null ? "Pinned on the map." : "No map pin yet (the depot is used): pick the address from the suggestions."}</span>
+    </div>
+  );
   const row = (u?: (typeof users)[number]) => (
     <form key={u?.id ?? "new"} action={teamSave} className="grid items-end gap-2 border-b border-line py-3 last:border-0 sm:grid-cols-[1.2fr_1.6fr_1fr_6rem_6rem_5rem_auto]">
       {u && <input type="hidden" name="id" value={u.id} />}
@@ -35,11 +47,16 @@ export default async function Team({ searchParams }: PageProps<"/settings/team">
         {u && <label className="flex items-center gap-1 text-xs"><input type="checkbox" name="active" defaultChecked={u.active} className="size-4" />Active</label>}
         <button className="min-h-10 rounded-lg bg-navy px-3 text-sm font-semibold text-white">{u ? "Save" : "Add"}</button>
       </div>
+      <div className="grid gap-2 sm:col-span-full sm:grid-cols-2">
+        {point("Route starts at", "start", u?.startAddress, u?.startLat)}
+        {point("Route ends at", "end", u?.endAddress, u?.endLat)}
+      </div>
+      {u && <p className="text-xs text-ink-soft sm:col-span-full">Calendar feed (add to Google, Apple or Outlook as a subscribed calendar; anyone with this link can see {personName(u)}&apos;s schedule): <span className="select-all break-all font-mono">{env.appUrl}{feedPath(u.id)}.ics</span></p>}
     </form>
   );
   return (
     <>
-      <DetailHeader back={{ href: "/settings", label: "Settings" }} title="Team" sub="Everyone here can sign in with an email link and be assigned visits and tasks. Crew only see their route for the day: no prices, billing, clients or settings. Cost per hour feeds job profit." />
+      <DetailHeader back={{ href: "/settings", label: "Settings" }} title="Team" sub="Everyone here can sign in with an email link and be assigned visits and tasks. Crew only see their route for the day: no prices, billing, clients or settings. Cost per hour feeds job profit. A start and end address make their route and its ETAs run from there instead of the depot." />
       {typeof sp.error === "string" && <p role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-medium text-red-800">{sp.error}</p>}
       {sp.saved && <p className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm font-medium text-emerald-800">Saved.</p>}
       <section className="rounded-lg border border-line bg-white px-4 shadow-card">{users.map((u) => row(u))}</section>

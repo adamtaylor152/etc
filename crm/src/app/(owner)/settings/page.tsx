@@ -8,7 +8,7 @@ import { business, businessId, db } from "@/server/db";
 import { env } from "@/server/env";
 import { parseSettings, SETTING_DAYS, SETTING_LABELS, type ToggleKey } from "@/server/settings";
 import { stripeEnabled } from "@/server/stripe";
-import { quoteTemplateDelete, quoteTemplateRename, saveAutomations, saveBusiness, saveSeason, saveTax } from "./actions";
+import { quoteTemplateDelete, quoteTemplateRename, saveAutomations, saveBusiness, saveSchedule, saveSeason, saveTax } from "./actions";
 
 export const metadata = { title: "Settings" };
 
@@ -79,6 +79,28 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
           <p className={`text-sm text-ink-soft ${templates.length ? "mt-3" : ""}`}>{templates.length ? "" : "None yet. "}Open any quote and choose “Save as template”; pick the template when you start a new quote.</p>
         </Card>
 
+        <Card title="Reminders & arrival windows">
+          <form id="schedule" action={saveSchedule} className="space-y-3">
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              Remind clients <input name="reminderDaysBefore" type="number" min={1} max={7} defaultValue={settings.reminderDaysBefore} aria-label="Days before" className="h-9 w-16 rounded-lg border border-line px-2" /> day(s) before, at
+              <select name="reminderHour" defaultValue={settings.reminderHour} aria-label="Hour" className="h-9 rounded-lg border border-line bg-white px-2">
+                {Array.from({ length: 16 }, (_, i) => i + 6).map((h) => <option key={h} value={h}>{h % 12 || 12} {h < 12 ? "am" : "pm"}</option>)}
+              </select>
+            </div>
+            <p className="text-sm font-semibold">Arrival windows <span className="font-normal text-ink-soft">(offered in online booking and as one-tap times on the schedule forms)</span></p>
+            {[...settings.arrivalWindows, ...Array.from({ length: Math.max(0, 6 - settings.arrivalWindows.length) }, () => ({ key: "", label: "", from: "", to: "" }))].map((w, i) => (
+              <div key={i} className="grid grid-cols-[1fr_7rem_7rem] gap-2">
+                <input type="hidden" name="winKey" value={w.key} />
+                <Input name="winLabel" defaultValue={w.label} placeholder={w.key ? undefined : "Add a window"} maxLength={20} aria-label="Window name" />
+                <Input name="winFrom" type="time" defaultValue={w.from} aria-label="From" />
+                <Input name="winTo" type="time" defaultValue={w.to} aria-label="To" />
+              </div>
+            ))}
+            <p className="text-xs text-ink-soft">Clear a name to remove that window. Times already booked keep their own start and end.</p>
+            <Button>Save</Button>
+          </form>
+        </Card>
+
         <Card title="GST & payments">
           <form action={saveTax} className="space-y-3">
             <label className="flex items-center gap-3"><input type="checkbox" name="taxRegistered" defaultChecked={biz.taxRegistered} className="size-5" /> <span><b>GST registered</b><span className="block text-sm text-ink-soft">Leave off while under the $30,000 small-supplier threshold: no GST is charged or shown.</span></span></label>
@@ -118,7 +140,8 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
 
         <Card title="Service area">
           <p className="text-sm">{area.map((a) => a.community.name).join(", ")}</p>
-          <p className="mt-2 text-xs text-ink-soft">Routes visit communities in this order (Evergreen first). Addresses outside it still work; they land under &quot;No community&quot; until pinned.</p>
+          <p className="mt-2 text-xs text-ink-soft">Routes visit communities in this order. Addresses outside it still work; they land under &quot;No community&quot; until pinned.</p>
+          <Link href="/settings/route" className="mt-2 inline-block text-sm font-semibold text-blue">Change the order &amp; stop times</Link>
         </Card>
       </div>
     </>

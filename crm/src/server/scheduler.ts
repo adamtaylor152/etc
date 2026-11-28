@@ -12,7 +12,7 @@ import { reminderDue } from "./billing/invoice";
 import { addDays, dateOnly, todayLocal, toDbDate, TZ } from "./dates";
 import { forecast, snowByDay } from "./forecast";
 import { generateRecurringVisits } from "./ops/jobs";
-import { billingEmailFor, invoiceUnbilled } from "./ops/invoices";
+import { billingEmailFor, invoiceSeasonalInstalments, invoiceUnbilled } from "./ops/invoices";
 import { parseSettings } from "./settings";
 import { followUpDue } from "./status/quote";
 import { plansTriggered } from "./snow/select";
@@ -55,7 +55,8 @@ async function hourly() {
   if (hour >= 9 && hour < 19) await quoteFollowUps();
   for (const b of await db.business.findMany({ select: { id: true } })) await generateRecurringVisits(b.id);
   if (hour === 7) await monthlyInvoices();
-  if (hour === 17) await visitReminders();
+  if (hour >= 7 && hour < 20) await invoiceSeasonalInstalments(); // due instalments of seasonal snow plans; emails the client
+  if (hour >= 6 && hour < 22) await visitReminders(hour);
   if (hour >= 10 && hour < 18) await reviewRequests();
   if (hour === 6) await dailyDigest();
   await opsAlerts();
@@ -90,21 +91,29 @@ async function monthlyInvoices() {
   }
 }
 
-/** Day-before reminder for scheduled (non-snow) visits. */
-async function visitReminders() {
-  const tomorrow = addDays(todayLocal(), 1);
-  const visits = await db.visit.findMany({
-    where: { scheduledDate: toDbDate(tomorrow), state: "SCHEDULED", job: { kind: { not: "SNOW_PLAN" }, closedAt: null, client: { visitReminders: true } } },
-    include: { job: { include: { client: true } } },
-  });
-  for (const v of visits) {
-    const biz = await db.business.findUniqueOrThrow({ where: { id: v.businessId } });
-    if (!parseSettings(biz.settings).visitReminders || v.job.client.emailBouncedAt) continue;
-    await enqueue(db, {
-      businessId: v.businessId, template: "visit.reminder", to: v.job.client.email, replyTo: env.helpEmail, priority: 5, props: { visitId: v.id },
-      dedupeKey: `visit:${v.id}:reminder:${tomorrow}`, clientId: v.job.clientId, entityType: "Visit", entityId: v.id,
-    });
-    await enqueueSms(db, { businessId: v.businessId, template: "sms.visit_reminder", client: v.job.client, props: { visitId: v.id }, dedupeKey: `visit:${v.id}:reminder-sms:${tomorrow}` });
+/** Which days' visits get a reminder this hour: the first one N days ahead at the chosen hour, plus 7am on the day if on. Pure, unit-tested. */
+export function reminderDates(today: string, hour: number, s: { visitReminders: boolean; reminderDaysBefore: number; reminderHour: number; reminderMorningOf: boolean }) {
+  if (!s.visitReminders) return [];
+  return [...(hour === s.reminderHour ? [addDays(today, s.reminderDaysBefore)] : []), ...(s.reminderMorningOf && hour === 7 ? [today] : [])];
+}
+
+/** Reminders for scheduled (non-snow) visits, by email and (if they opted in) text. Timing is per business (Settings). */
+async function visitReminders(hour: number) {
+  const today = todayLocal();
+  for (const biz of await db.business.findMany({ select: { id: true, settings: true } })) {
+    for (const date of reminderDates(today, hour, parseSettings(biz.settings))) {
+      const visits = await db.visit.findMany({
+        where: { businessId: biz.id, scheduledDate: toDbDate(date), state: "SCHEDULED", job: { kind: { not: "SNOW_PLAN" }, closedAt: null, client: { visitReminders: true } } },
+        include: { job: { include: { client: true } } },
+      });
+      for (const v of visits) {
+        if (!v.job.client.emailBouncedAt) await enqueue(db, {
+          businessId: v.businessId, template: "visit.reminder", to: v.job.client.email, replyTo: env.helpEmail, priority: 5, props: { visitId: v.id },
+          dedupeKey: `visit:${v.id}:reminder:${date}:${date === today ? "day-of" : "ahead"}`, clientId: v.job.clientId, entityType: "Visit", entityId: v.id,
+        });
+        await enqueueSms(db, { businessId: v.businessId, template: "sms.visit_reminder", client: v.job.client, props: { visitId: v.id }, dedupeKey: `visit:${v.id}:reminder-sms:${date}:${date === today ? "day-of" : "ahead"}`, entityType: "Visit", entityId: v.id });
+      }
+    }
   }
 }
 
