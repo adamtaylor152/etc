@@ -6,11 +6,12 @@ import { notFound } from "next/navigation";
 import { Flash } from "@/components/flash";
 import { STORM } from "@/components/status";
 import { Badge, Button, ButtonLink, Card, Input, PageHeader } from "@/components/ui";
-import { prettyDateTime } from "@/server/dates";
+import { prettyDateTime, toLocalInput } from "@/server/dates";
+import { bylawStatus } from "@/server/snow/bylaw";
 import { businessId, db } from "@/server/db";
 import { money } from "@/server/money";
 import { routeVisits } from "@/server/routing";
-import { stormCancel, stormDepth, stormFinish, stormPush, stormStart } from "../../work-actions";
+import { stormCancel, stormDepth, stormSnowEnded, stormFinish, stormPush, stormStart } from "../../work-actions";
 
 export default async function StormPage({ params, searchParams }: PageProps<"/snow/[id]">) {
   await requireOwner();
@@ -28,6 +29,8 @@ export default async function StormPage({ params, searchParams }: PageProps<"/sn
   const done = count(["COMPLETED"]);
   const live = ev.status === "ACTIVE";
   const here = `/snow/${id}`;
+  const bylaw = bylawStatus(ev.snowEndedAt, visits);
+  const hrs = (h: number) => (Math.abs(h) < 1 ? `${Math.round(Math.abs(h) * 60)} min` : `${Math.round(Math.abs(h))} h`);
   const hidden = <><input type="hidden" name="id" value={ev.id} /><input type="hidden" name="back" value={here} /></>;
 
   return (
@@ -84,6 +87,22 @@ export default async function StormPage({ params, searchParams }: PageProps<"/sn
                 <form action={stormPush}>{hidden}<Button variant="secondary" className="w-full">Still snowing: add push #{ev.pushCount + 1}</Button></form>
                 <form action={stormFinish}>{hidden}<Button className="w-full" disabled={open > 0} title={open > 0 ? "Finish or skip the remaining visits first" : undefined}>Finish storm</Button></form>
               </div>
+            </Card>
+          )}
+          {ev.status !== "FORECAST" && ev.status !== "CANCELLED" && (
+            <Card title="City sidewalk deadline" className={bylaw?.level === "over" ? "border-red-300 bg-red-50" : bylaw?.level === "soon" ? "border-amber-300 bg-amber-50" : ""}>
+              {bylaw ? (
+                <>
+                  <p className="font-display text-2xl font-bold">{bylaw.level === "ok" ? "All cleared" : bylaw.level === "over" ? `${hrs(bylaw.hoursLeft)} over` : `${hrs(bylaw.hoursLeft)} left`}</p>
+                  <p className="mt-1 text-sm text-ink-soft">Snow stopped {prettyDateTime(ev.snowEndedAt)}. Sidewalks are due by {prettyDateTime(bylaw.deadline)}.</p>
+                  <p className="mt-1 text-sm">{bylaw.open > 0 ? `${bylaw.open} stop${bylaw.open === 1 ? "" : "s"} still to do. ` : ""}{bylaw.onTime} cleared in time{bylaw.late > 0 ? `, ${bylaw.late} after the deadline` : ""}.</p>
+                </>
+              ) : <p className="text-sm text-ink-soft">Calgary gives 24 hours after the snow stops to clear sidewalks. Record when it stopped to start the clock.</p>}
+              <form action={stormSnowEnded} className="mt-3 flex flex-wrap items-end gap-2">{hidden}
+                <label className="flex-1 text-sm font-semibold">Snow stopped at<Input name="at" type="datetime-local" defaultValue={toLocalInput(ev.snowEndedAt ?? new Date())} /></label>
+                <Button variant="secondary">{bylaw ? "Update" : "Start the clock"}</Button>
+                {bylaw && <button name="clear" value="1" className="min-h-10 text-sm text-ink-soft underline">Clear</button>}
+              </form>
             </Card>
           )}
           {(ev.status === "FORECAST" || live) && (
