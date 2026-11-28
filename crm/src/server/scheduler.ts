@@ -12,8 +12,9 @@ import { reminderDue } from "./billing/invoice";
 import { addDays, dateOnly, todayLocal, toDbDate, TZ } from "./dates";
 import { forecast, snowByDay } from "./forecast";
 import { generateRecurringVisits } from "./ops/jobs";
-import { billingEmailFor, invoiceUnbilled } from "./ops/invoices";
+import { billingEmailFor, invoiceSeasonalInstalments, invoiceUnbilled } from "./ops/invoices";
 import { parseSettings } from "./settings";
+import { followUpDue } from "./status/quote";
 import { plansTriggered } from "./snow/select";
 import { enqueue, enqueueSms, processOutbox } from "./email/outbox";
 
@@ -54,7 +55,8 @@ async function hourly() {
   if (hour >= 9 && hour < 19) await quoteFollowUps();
   for (const b of await db.business.findMany({ select: { id: true } })) await generateRecurringVisits(b.id);
   if (hour === 7) await monthlyInvoices();
-  if (hour === 17) await visitReminders();
+  if (hour >= 7 && hour < 20) await invoiceSeasonalInstalments(); // due instalments of seasonal snow plans; emails the client
+  if (hour >= 6 && hour < 22) await visitReminders(hour);
   if (hour >= 10 && hour < 18) await reviewRequests();
   if (hour === 6) await dailyDigest();
   await opsAlerts();
@@ -89,21 +91,29 @@ async function monthlyInvoices() {
   }
 }
 
-/** Day-before reminder for scheduled (non-snow) visits. */
-async function visitReminders() {
-  const tomorrow = addDays(todayLocal(), 1);
-  const visits = await db.visit.findMany({
-    where: { scheduledDate: toDbDate(tomorrow), state: "SCHEDULED", job: { kind: { not: "SNOW_PLAN" }, closedAt: null, client: { visitReminders: true } } },
-    include: { job: { include: { client: true } } },
-  });
-  for (const v of visits) {
-    const biz = await db.business.findUniqueOrThrow({ where: { id: v.businessId } });
-    if (!parseSettings(biz.settings).visitReminders || v.job.client.emailBouncedAt) continue;
-    await enqueue(db, {
-      businessId: v.businessId, template: "visit.reminder", to: v.job.client.email, replyTo: env.helpEmail, priority: 5, props: { visitId: v.id },
-      dedupeKey: `visit:${v.id}:reminder:${tomorrow}`, clientId: v.job.clientId, entityType: "Visit", entityId: v.id,
-    });
-    await enqueueSms(db, { businessId: v.businessId, template: "sms.visit_reminder", client: v.job.client, props: { visitId: v.id }, dedupeKey: `visit:${v.id}:reminder-sms:${tomorrow}` });
+/** Which days' visits get a reminder this hour: the first one N days ahead at the chosen hour, plus 7am on the day if on. Pure, unit-tested. */
+export function reminderDates(today: string, hour: number, s: { visitReminders: boolean; reminderDaysBefore: number; reminderHour: number; reminderMorningOf: boolean }) {
+  if (!s.visitReminders) return [];
+  return [...(hour === s.reminderHour ? [addDays(today, s.reminderDaysBefore)] : []), ...(s.reminderMorningOf && hour === 7 ? [today] : [])];
+}
+
+/** Reminders for scheduled (non-snow) visits, by email and (if they opted in) text. Timing is per business (Settings). */
+async function visitReminders(hour: number) {
+  const today = todayLocal();
+  for (const biz of await db.business.findMany({ select: { id: true, settings: true } })) {
+    for (const date of reminderDates(today, hour, parseSettings(biz.settings))) {
+      const visits = await db.visit.findMany({
+        where: { businessId: biz.id, scheduledDate: toDbDate(date), state: "SCHEDULED", job: { kind: { not: "SNOW_PLAN" }, closedAt: null, client: { visitReminders: true } } },
+        include: { job: { include: { client: true } } },
+      });
+      for (const v of visits) {
+        if (!v.job.client.emailBouncedAt) await enqueue(db, {
+          businessId: v.businessId, template: "visit.reminder", to: v.job.client.email, replyTo: env.helpEmail, priority: 5, props: { visitId: v.id },
+          dedupeKey: `visit:${v.id}:reminder:${date}:${date === today ? "day-of" : "ahead"}`, clientId: v.job.clientId, entityType: "Visit", entityId: v.id,
+        });
+        await enqueueSms(db, { businessId: v.businessId, template: "sms.visit_reminder", client: v.job.client, props: { visitId: v.id }, dedupeKey: `visit:${v.id}:reminder-sms:${date}:${date === today ? "day-of" : "ahead"}`, entityType: "Visit", entityId: v.id });
+      }
+    }
   }
 }
 
@@ -123,17 +133,25 @@ async function dailyDigest() {
   }
 }
 
-/** One nudge, 3 days after sending, for quotes still waiting on the client. */
-async function quoteFollowUps() {
-  const cutoff = new Date(Date.now() - 3 * 86_400_000);
-  const quotes = await db.quote.findMany({ where: { status: "AWAITING_RESPONSE", sentAt: { lte: cutoff }, client: { followUpQuotes: true } }, include: { client: true } });
+/**
+ * Up to two nudges (Settings: days after sending, each on/off) for quotes still waiting on the client, by the channel
+ * the quote was last sent by. Each goes once per quote (dedupe key), whatever the hourly run does.
+ */
+export async function quoteFollowUps(now = new Date()) {
+  const today = todayLocal();
+  const quotes = await db.quote.findMany({ where: { status: "AWAITING_RESPONSE", sentAt: { not: null }, client: { followUpQuotes: true } }, include: { client: true } });
   for (const q of quotes) {
-    const biz = await db.business.findUniqueOrThrow({ where: { id: q.businessId } });
-    if (!parseSettings(biz.settings).quoteFollowUp || q.client.emailBouncedAt) continue;
-    await enqueue(db, {
-      businessId: q.businessId, template: "quote.follow_up", to: q.client.email, replyTo: env.helpEmail, priority: 6, props: { quoteId: q.id },
-      dedupeKey: `quote:${q.id}:followup`, clientId: q.clientId, entityType: "Quote", entityId: q.id,
-    });
+    const s = parseSettings((await db.business.findUniqueOrThrow({ where: { id: q.businessId } })).settings);
+    const n = followUpDue({ status: q.status, validUntil: dateOnly(q.validUntil), sentAt: q.lastSentAt ?? q.sentAt }, [{ on: s.quoteFollowUp, days: s.quoteFollowUpDays }, { on: s.quoteFollowUp2, days: s.quoteFollowUp2Days }], now, today);
+    if (!n) continue;
+    const dedupeKey = `quote:${q.id}:followup${n > 1 ? n : ""}`; // the first keeps the key the single follow-up used
+    if (q.lastSentVia === "SMS") await enqueueSms(db, { businessId: q.businessId, template: "sms.quote", client: q.client, props: { quoteId: q.id, followUp: true }, dedupeKey, entityType: "Quote", entityId: q.id });
+    else if (!q.client.emailBouncedAt) {
+      await enqueue(db, {
+        businessId: q.businessId, template: "quote.follow_up", to: q.client.email, replyTo: env.helpEmail, priority: 6, props: { quoteId: q.id },
+        dedupeKey, clientId: q.clientId, entityType: "Quote", entityId: q.id,
+      });
+    }
   }
 }
 

@@ -43,7 +43,7 @@ export default async function SizeCheck({ searchParams }: PageProps<"/snow/sizes
                     <div>
                       <p className="text-base font-bold">{p.formatted}</p>
                       <p className="text-ink-soft"><Link href={`/clients/${p.clientId}`} className="text-blue">{clientName(p.client)}</Link> · booked as <b>{SIZES[size].short}</b>{p.extraWalk ? " + extra sidewalk" : ""}</p>
-                      {p.jobs.map((j) => { const c = currentCharge(j.lineItems); return <p key={j.id} className="text-ink-soft"><Link href={`/jobs/${j.id}`} className="text-blue">Job #{j.number}</Link> · {j.kind === "SNOW_PLAN" ? "every snowfall" : "one-time"} · {dollars(c.base + c.walk)}</p>; })}
+                      {p.jobs.map((j) => { const c = currentCharge(j.lineItems); return <p key={j.id} className="text-ink-soft"><Link href={`/jobs/${j.id}`} className="text-blue">Job #{j.number}</Link> · {j.kind === "SNOW_PLAN" ? "every snowfall" : "one-time"} · {j.snowBillingMode === "SEASONAL" ? "flat season price (size won't change it)" : dollars(c.base + c.walk)}</p>; })}
                       <a href={`https://www.google.com/maps/@${p.lat},${p.lng},40m/data=!3m1!1e3`} target="_blank" rel="noreferrer" className="text-xs font-semibold text-blue">Open in Google Maps (measure distance)</a>
                     </div>
                     {held && pend && (

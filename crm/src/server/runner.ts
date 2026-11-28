@@ -17,7 +17,7 @@ export const visitScope = (u: { id: string; role: string }) =>
   u.role === "OWNER" ? {} : { OR: [{ assignees: { some: { userId: u.id } } }, { assignees: { none: {} } }] };
 
 export async function runStops(businessId: string, date: string, userId: string | "all") {
-  // Same order as the route planner (service-area community order, then standing routeSort).
+  // Same order as the route planner (community order, do-first stops, then the day's or the standing routeSort).
   const { visits } = await routeVisits(businessId, {
     scheduledDate: toDbDate(date), state: { not: "CANCELLED" },
     ...(userId === "all" ? {} : visitScope({ id: userId, role: "CREW" })),
@@ -35,6 +35,24 @@ export async function runStops(businessId: string, date: string, userId: string 
   }));
 }
 
+/** One person's assigned work for a day as plain lines ("when · what · where"), for assignment alerts. Never prices. */
+export async function dayLines(businessId: string, userId: string, date: string) {
+  const mine = { businessId, assignees: { some: { userId } } };
+  const [visits, tasks] = await Promise.all([
+    db.visit.findMany({ where: { ...mine, scheduledDate: toDbDate(date), state: { notIn: ["CANCELLED", "SKIPPED"] } }, include: { job: { select: { kind: true, title: true } }, property: { select: { formatted: true } } }, orderBy: [{ startAt: "asc" }, { routeSort: "asc" }] }),
+    db.task.findMany({ where: { ...mine, date: toDbDate(date), completedAt: null }, orderBy: { startAt: "asc" } }),
+  ]);
+  const props = new Map((await db.property.findMany({ where: { businessId, id: { in: tasks.map((t) => t.propertyId).filter((x): x is string => !!x) } }, select: { id: true, formatted: true } })).map((p) => [p.id, p.formatted]));
+  const when = (d: Date | null, timed: boolean) => (d && timed ? d.toLocaleTimeString("en-CA", { timeZone: "America/Edmonton", hour: "numeric", minute: "2-digit" }) : "Any time");
+  const street = (a: string | undefined) => (a ? ` · ${a.split(",")[0]}` : "");
+  return {
+    stops: visits.map((v) => `${when(v.startAt, !v.anytime)} · ${v.job.kind === "SNOW_PLAN" || v.snowEventId ? "Snow" : v.job.title}${street(v.property.formatted)}`),
+    tasks: tasks.map((t) => `${when(t.startAt, !t.allDay)} · ${t.title}${street(t.propertyId ? props.get(t.propertyId) : undefined)}`),
+  };
+}
+export const dayCount = (d: { stops: string[]; tasks: string[] }) =>
+  [d.stops.length && `${d.stops.length} stop${d.stops.length === 1 ? "" : "s"}`, d.tasks.length && `${d.tasks.length} task${d.tasks.length === 1 ? "" : "s"}`].filter(Boolean).join(", ") || "nothing";
+
 /** Crew warning for a snow stop whose size hasn't been checked on the satellite view. */
 export function sizeNote(snow: boolean, p: { sizeCheckedAt: Date | null; driveSize: string | null }) {
   if (!snow || p.sizeCheckedAt) return null;
@@ -43,27 +61,28 @@ export function sizeNote(snow: boolean, p: { sizeCheckedAt: Date | null; driveSi
 }
 
 /**
- * Split stops (already in route order) between people: keep each community together where possible and balance counts.
+ * Split stops (already in route order) between people: keep each community together where possible and balance the
+ * load. A stop's `weight` is its estimated minutes (drive there + time on site); without weights every stop counts 1.
  * Pure, unit-tested. Returns userId per visitId.
  */
-export function splitRoute(stops: { id: string; community: string | null }[], people: string[]) {
+export function splitRoute(stops: { id: string; community: string | null; weight?: number }[], people: string[]) {
   if (!people.length) return new Map<string, string>();
-  const groups: { community: string | null; ids: string[] }[] = [];
+  const groups: { community: string | null; stops: typeof stops; weight: number }[] = [];
   for (const s of stops) {
     const g = groups.at(-1);
-    if (g && g.community === s.community) g.ids.push(s.id);
-    else groups.push({ community: s.community, ids: [s.id] });
+    if (g && g.community === s.community) { g.stops.push(s); g.weight += s.weight ?? 1; }
+    else groups.push({ community: s.community, stops: [s], weight: s.weight ?? 1 });
   }
-  const target = Math.ceil(stops.length / people.length);
+  const target = Math.ceil(groups.reduce((a, g) => a + g.weight, 0) / people.length);
   const out = new Map<string, string>();
-  let p = 0, count = 0;
+  let p = 0, load = 0;
   for (const g of groups) {
     // Move to the next person when this group would push us well past the fair share.
-    if (count > 0 && count + g.ids.length > target + Math.floor(target / 3) && p < people.length - 1) { p++; count = 0; }
-    for (const id of g.ids) {
-      out.set(id, people[p]);
-      count++;
-      if (count >= target && p < people.length - 1 && g.ids.length > target) { p++; count = 0; } // a huge community gets split
+    if (load > 0 && load + g.weight > target + Math.floor(target / 3) && p < people.length - 1) { p++; load = 0; }
+    for (const s of g.stops) {
+      out.set(s.id, people[p]);
+      load += s.weight ?? 1;
+      if (load >= target && p < people.length - 1 && g.weight > target) { p++; load = 0; } // a huge community gets split
     }
   }
   return out;

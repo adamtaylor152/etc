@@ -1,6 +1,7 @@
 // Driveway size pricing for snow shovelling. Clients pick a size when booking; an owner checks it on the satellite view
 // before the first visit. Smaller or same: price applied. Bigger: the job is held and the client gets a link to OK the
 // new price (or cancel). Oversized: held until someone sends a quote.
+import { WALK_PREFIX } from "../billing/charges";
 import { Prisma, type DriveSize } from "@/generated/prisma/client";
 import { db, type Tx } from "../db";
 import { enqueue, enqueueSms, kickOutbox } from "../email/outbox";
@@ -32,7 +33,7 @@ export function snowCharge(prices: SnowPrices, plan: boolean, size: DriveSize, e
 }
 
 const isBase = (name: string) => name.startsWith("Snow shovelling");
-const isWalk = (name: string) => name.startsWith("Extra sidewalk");
+const isWalk = (name: string) => name.startsWith(WALK_PREFIX);
 export const BASE_NAME = { plan: { STANDARD: "Snow shovelling, every snowfall (per push)", LARGE: "Snow shovelling, every snowfall, large driveway (per push)" }, once: { STANDARD: "Snow shovelling (one-time)", LARGE: "Snow shovelling (one-time), large driveway" } };
 export const WALK_NAME = "Extra sidewalk (corner lot / long walk)";
 
@@ -74,6 +75,7 @@ export async function confirmSize(user: Actor, propertyId: string, size: DriveSi
     const prop = await tx.property.update({ where: { id: propertyId, businessId: user.businessId }, data: { driveSize: size, extraWalk, sizeCheckedAt: new Date() }, include: { client: true } });
     const jobs = await tx.job.findMany({ where: openSnowJobs(user.businessId, propertyId), include: { lineItems: true } });
     for (const job of jobs) {
+      if (job.snowBillingMode === "SEASONAL") { out.push("applied"); continue; } // flat season price: the size doesn't reprice it
       const next = snowCharge(prices, job.kind === "SNOW_PLAN", size, extraWalk);
       if (!next) {
         await tx.job.update({ where: { id: job.id }, data: { sizeHoldAt: new Date(), pendingPrice: { size, extraWalk, base: 0, walk: 0, quote: true } satisfies Pending as unknown as Prisma.InputJsonValue } });

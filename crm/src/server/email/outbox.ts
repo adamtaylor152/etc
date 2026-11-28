@@ -140,7 +140,8 @@ async function sendText(m: EmailMessage) {
     const body = clip(await t(m.props as never, { businessId: m.businessId }));
     const sid = await sendSms(m.to, body);
     await db.emailMessage.update({ where: { id: m.id }, data: { status: "SENT", sentAt: new Date(), providerMessageId: sid, lastError: null } });
-    await db.textMessage.create({ data: { businessId: m.businessId, clientId: m.clientId, direction: "OUT", from: smsFrom(), to: m.to, body, status: "sent", providerId: sid || null } });
+    // Texts to the team (assignment alerts) stay out of the client inbox.
+    if (m.entityType !== "User") await db.textMessage.create({ data: { businessId: m.businessId, clientId: m.clientId, direction: "OUT", from: smsFrom(), to: m.to, body, status: "sent", providerId: sid || null } });
   } catch (e) {
     const failed = m.attempts >= MAX_ATTEMPTS;
     await db.emailMessage.update({
@@ -159,6 +160,19 @@ export async function enqueueSms<T extends SmsTemplateName>(tx: Db, m: {
   const data = {
     businessId: m.businessId, template: m.template, to, cc: [], subject: m.template, props: m.props as Prisma.InputJsonValue,
     priority: 3, dedupeKey: m.dedupeKey, clientId: m.client.id, entityType: m.entityType, entityId: m.entityId, nextAttemptAt: m.sendAfter ?? new Date(),
+  };
+  return tx.emailMessage.upsert({ where: { businessId_dedupeKey: { businessId: m.businessId, dedupeKey: m.dedupeKey } }, create: data, update: {} });
+}
+
+/** Queue a text for someone on the team, to the phone on their user record. No-op without one, or without Telnyx keys. */
+export async function enqueueStaffSms<T extends SmsTemplateName>(tx: Db, m: {
+  businessId: string; template: T; user: { id: string; phone: string | null }; props: Parameters<(typeof smsTemplates)[T]>[0]; dedupeKey: string; sendAfter?: Date;
+}) {
+  const to = toE164(m.user.phone);
+  if (!to || !smsEnabled()) return null;
+  const data = {
+    businessId: m.businessId, template: m.template, to, cc: [], subject: m.template, props: m.props as Prisma.InputJsonValue,
+    priority: 3, dedupeKey: m.dedupeKey, entityType: "User", entityId: m.user.id, nextAttemptAt: m.sendAfter ?? new Date(),
   };
   return tx.emailMessage.upsert({ where: { businessId_dedupeKey: { businessId: m.businessId, dedupeKey: m.dedupeKey } }, create: data, update: {} });
 }

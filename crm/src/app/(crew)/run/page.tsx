@@ -25,6 +25,7 @@ export default async function Run({ searchParams }: PageProps<"/run">) {
           <Link href={`/run?date=${date}&who=all`} className={`rounded-md px-2 py-1 ${who === "all" ? "bg-navy text-white" : "text-ink-soft"}`}>Everyone</Link>
         </span>}
       </div>
+      <p className="mx-auto mb-3 max-w-lg text-right text-sm"><Link href="/time" className="font-semibold text-blue">Clock in / out</Link></p>
       {stops.length ? <RouteRunner date={`${date}-${who}`} initial={stops} /> : <p className="mx-auto max-w-lg rounded-2xl bg-white p-6 text-center text-sm text-ink-soft">Nothing on your route today. {owner && <Link href="/routes" className="font-semibold text-blue">See all routes</Link>}</p>}
     </>
   );

@@ -26,7 +26,7 @@ export default async function Snow({ searchParams }: PageProps<"/snow">) {
     }),
     season ? db.job.findMany({
       where: { businessId: bid, kind: "SNOW_PLAN", seasonId: season.id, closedAt: null },
-      include: { client: true, property: { include: { community: true } } }, orderBy: { number: "asc" },
+      include: { client: true, property: { include: { community: true } }, invoices: { where: { instalmentKey: { not: null }, status: "PAID" }, select: { id: true } } }, orderBy: { number: "asc" },
     }) : [],
   ]);
   const active = plans.filter((p) => !p.planPausedAt);
@@ -60,7 +60,9 @@ export default async function Snow({ searchParams }: PageProps<"/snow">) {
                     <Link href={`/jobs/${p.id}`} className="flex items-center justify-between gap-3 py-2.5 text-sm">
                       <span><span className="font-semibold">{clientName(p.client)}</span><span className="block text-ink-soft">{p.property.formatted}</span></span>
                       <span className="flex shrink-0 flex-col items-end gap-1">
-                        <span>{p.triggerCm ?? season?.defaultTriggerCm} cm · {money(p.pricePerPushCents ?? 3000)}{p.iceMelt ? " + melt" : ""}</span>
+                        <span>{p.triggerCm ?? season?.defaultTriggerCm} cm · {p.snowBillingMode === "SEASONAL"
+                          ? `${money(p.seasonalPriceCents ?? 0)} season · ${p.invoices.length}/${p.seasonalInstalments ?? 1} paid${p.iceMelt && !p.addonsIncluded ? " + melt" : ""}`
+                          : `${money(p.pricePerPushCents ?? 3000)}${p.snowBillingMode === "PER_EVENT" ? " per storm" : ""}${p.iceMelt ? " + melt" : ""}`}</span>
                         {p.planPausedAt ? <Badge>Paused</Badge> : p.property.community && <Badge>{p.property.community.name}</Badge>}
                       </span>
                     </Link>

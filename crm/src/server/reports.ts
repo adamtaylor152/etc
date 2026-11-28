@@ -7,7 +7,7 @@ import { personName } from "./schedule";
 
 export type Kind = "text" | "money" | "num";
 export type Table = { columns: [string, Kind][]; rows: (string | number | null)[][]; note?: string };
-export type Range = { from: string; to: string };
+export type Range = { from: string; to: string; person?: string }; // person: one team member (timesheets only)
 
 /** ?from&to, or a preset (?range=month|last-month|year|12m). Defaults to this calendar year. Pure, unit-tested. */
 export function parseRange(sp: { from?: unknown; to?: unknown; range?: unknown }, today = todayLocal(), fallback = "year"): Range & { preset: string } {
@@ -69,6 +69,17 @@ export const REPORTS: Record<string, Report> = {
       };
     },
   },
+  "gst-paid": {
+    title: "GST paid", sub: "GST on expenses in the period (input tax credits), to set against GST collected.", ranged: true,
+    async run(businessId, r) {
+      const rows = await db.expense.findMany({ where: { businessId, date: dates(r) }, orderBy: { date: "asc" } });
+      return {
+        columns: [["Date", "text"], ["Bought from", "text"], ["What", "text"], ["Category", "text"], ["Before GST", "money"], ["GST", "money"], ["Paid", "money"]],
+        rows: rows.map((e) => [dateOnly(e.date) ?? "", e.vendor ?? "", e.description, e.category, e.amountCents - e.gstCents, e.gstCents, e.amountCents]),
+        note: "Only expenses with a GST amount entered count toward the GST column.",
+      };
+    },
+  },
   "client-balances": {
     title: "Client balances", sub: "Everyone who owes money or has credit waiting. As of today.", ranged: false,
     async run(businessId) {
@@ -105,13 +116,13 @@ export const REPORTS: Record<string, Report> = {
   timesheets: {
     title: "Timesheets", sub: "Every time entry in the period, with what it cost.", ranged: true,
     async run(businessId, r) {
-      const entries = await db.timeEntry.findMany({ where: { businessId, endedAt: { not: null }, startedAt: instants(r) }, include: { user: true }, orderBy: { startedAt: "asc" } });
+      const entries = await db.timeEntry.findMany({ where: { businessId, userId: r.person || undefined, endedAt: { not: null }, startedAt: instants(r) }, include: { user: true }, orderBy: { startedAt: "asc" } });
       const jobs = await db.job.findMany({ where: { id: { in: [...new Set(entries.map((e) => e.jobId).filter((x): x is string => !!x))] } }, select: { id: true, number: true, title: true } });
       const rows = entries.map((e) => {
         const j = jobs.find((x) => x.id === e.jobId), min = e.minutes ?? 0;
-        return [day(e.startedAt), personName(e.user), j ? `#${j.number} ${j.title}` : "General", e.note ?? "", Math.round((min / 60) * 100) / 100, Math.round((min / 60) * e.user.hourlyCostCents)];
+        return [day(e.startedAt), personName(e.user), j ? `#${j.number} ${j.title}` : "General", e.note ?? "", Math.round((min / 60) * 100) / 100, Math.round((min / 60) * e.user.hourlyCostCents), e.approvedAt ? "Yes" : "No"];
       });
-      return { columns: [["Date", "text"], ["Person", "text"], ["Job", "text"], ["Note", "text"], ["Hours", "num"], ["Cost", "money"]], rows };
+      return { columns: [["Date", "text"], ["Person", "text"], ["Job", "text"], ["Note", "text"], ["Hours", "num"], ["Cost", "money"], ["Approved", "text"]], rows };
     },
   },
   invoices: {

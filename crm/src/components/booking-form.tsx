@@ -4,12 +4,11 @@
 // The client hub reuses it (`hub`): the client is already known, so it asks which of their addresses instead of who
 // they are, and sends the order through a token-checked server action that runs the same booking pipeline.
 import { useEffect, useState } from "react";
-import type { WindowKey } from "@/server/windows";
 import { AddressField } from "./address-field";
 import { shrink } from "./photo-uploader";
 
 type Service = { label: string; description?: string | null; price: string | null };
-type Slots = { windows: { key: WindowKey; label: string; hint: string }[]; days: { date: string; windows: WindowKey[] }[] };
+type Slots = { windows: { key: string; label: string; hint: string }[]; days: { date: string; windows: string[] }[] };
 export type HubOrderResult = { ok: false; error: string; slotTaken?: boolean } | { ok: true; id: number; estimate: string; uploadUrl?: string; lines: string[]; next: string };
 export type HubOrder = {
   back: string; payment: string; properties: { id: string; address: string; size: string | null }[]; // size null = nobody has said yet, so ask
@@ -21,7 +20,7 @@ const dayName = (d: string) => new Date(`${d}T12:00`).toLocaleDateString("en-CA"
 export function BookingForm({ services, phone, mapsKey, refCode, hub }: { services: Service[]; phone: string; mapsKey?: string; refCode?: string; hub?: HubOrder }) {
   // Open times for the look-and-quote visit. ponytail: arrival windows only; the API also takes exact start times.
   const [slots, setSlots] = useState<Slots | null>(null);
-  const [slot, setSlot] = useState<{ date: string; window: WindowKey } | null>(null);
+  const [slot, setSlot] = useState<{ date: string; window: string } | null>(null);
   const [dayPick, setDayPick] = useState<string | null>(null);
   const loadSlots = () => fetch("/api/public/slots", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then(setSlots).catch(() => setSlots(null));
   useEffect(() => { void loadSlots(); }, []);

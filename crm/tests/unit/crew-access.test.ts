@@ -27,10 +27,12 @@ describe("owner guard coverage", () => {
     expect(missing).toEqual([]);
   });
 
-  it("only the runner and photo uploads accept a crew session", () => {
+  it("only the runner, my-time and photo uploads accept a crew session", () => {
     const anyUser = walk("src/app").filter((f) => /\.(ts|tsx)$/.test(f) && /\b(currentUser|requireUser)\(/.test(read(f)));
     expect(anyUser.sort()).toEqual([
-      "src/app/(crew)/layout.tsx", "src/app/(crew)/run/page.tsx", "src/app/api/run/route.ts", "src/app/api/uploads/route.ts",
+      "src/app/(crew)/layout.tsx", "src/app/(crew)/run/page.tsx",
+      "src/app/(crew)/time/actions.ts", "src/app/(crew)/time/page.tsx", // clock in/out and the caller's own week; every query is scoped to user.id
+      "src/app/api/run/route.ts", "src/app/api/uploads/route.ts",
       "src/app/auth/go/page.tsx", "src/app/login/page.tsx", // "already signed in? skip the form"
     ]);
   });

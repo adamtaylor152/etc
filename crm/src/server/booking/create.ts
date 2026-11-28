@@ -145,7 +145,7 @@ export async function createBooking(b: Booking, meta: BookingMeta) {
             ] },
             visits: { create: [{
               businessId, propertyId: property.id, scheduledDate: b.date ? toDbDate(b.date) : null, anytime: true,
-              source: "BOOKING", routeSort: property.routeSort, iceMeltApplied: b.icemelt || null,
+              source: "BOOKING", iceMeltApplied: b.icemelt || null,
             }] },
           },
         });

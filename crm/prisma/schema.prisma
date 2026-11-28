@@ -102,6 +102,7 @@ enum QuoteStatus {
   APPROVED
   CONVERTED
   ARCHIVED
+  DECLINED
 }
 
 enum JobKind {
@@ -267,6 +268,13 @@ model User {
   role        UserRole  @default(OWNER)
   active      Boolean   @default(true)
   lastLoginAt DateTime?
+  // Where their route starts and ends (null = the business depot)
+  startAddress String?
+  startLat    Float?
+  startLng    Float?
+  endAddress  String?
+  endLat      Float?
+  endLng      Float?
   createdAt   DateTime  @default(now())
   sessions    Session[]
   visitAssignments VisitAssignee[]
@@ -386,6 +394,7 @@ model Property {
   petNotes      String?
   hazards       String?
   routeSort     Int?
+  routePriority Boolean       @default(false) // "do first" in its community (seniors, medical, early commuters)
   driveSize     DriveSize? // what the client picked, until someone checks it
   extraWalk     Boolean       @default(false) // corner lot / long public sidewalk
   sizeCheckedAt DateTime? // null = nobody has looked at the satellite view yet
@@ -506,7 +515,9 @@ model Quote {
   title                String?
   message              String?
   subtotalCents        Int         @default(0)
-  discountCents        Int         @default(0)
+  discountCents        Int         @default(0) // computed dollars off (what every reader uses)
+  discountType         String      @default("FIXED") // FIXED | PERCENT
+  discountValue        Int         @default(0) // cents, or percent x100 (1250 = 12.5%)
   taxCents             Int         @default(0)
   totalCents           Int         @default(0)
   validUntil           DateTime?   @db.Date
@@ -520,6 +531,10 @@ model Quote {
   approvedIp           String?
   changesRequestedAt   DateTime?
   changeRequestMessage String?
+  declinedAt           DateTime?
+  declineReason        String?
+  lastSentAt           DateTime? // follow-ups count from the latest send
+  lastSentVia          String      @default("EMAIL") // EMAIL | SMS: follow-ups use the same channel
   convertedAt          DateTime?
   archivedAt           DateTime?
   jobId                String?     @unique
@@ -529,6 +544,24 @@ model Quote {
   attachments Attachment[]
 
   @@unique([businessId, number])
+}
+
+// A reusable quote: title, message, lines (JSON, same shape as QuoteLineInput), discount and deposit settings.
+model QuoteTemplate {
+  id              String   @id @default(cuid())
+  businessId      String
+  name            String
+  title           String?
+  message         String?
+  lines           Json     @default("[]")
+  discountType    String   @default("FIXED")
+  discountValue   Int      @default(0)
+  depositType     String   @default("NONE")
+  depositValue    Int      @default(0)
+  depositRequired Boolean  @default(false)
+  createdAt       DateTime @default(now())
+
+  @@unique([businessId, name])
 }
 
 model QuoteLineItem {
@@ -615,6 +648,9 @@ model Job {
   snowBillingMode    SnowBillingMode?
   pricePerPushCents  Int?
   seasonalPriceCents Int?
+  seasonalInstalments Int? // SEASONAL: 1 = paid in full up front, N = monthly instalments
+  seasonalFirstDueOn  DateTime? @db.Date // SEASONAL: when instalment 1 is invoiced; the rest follow on the 1st of each month
+  addonsIncluded      Boolean   @default(false) // SEASONAL: ice melt is covered by the season price
   iceMelt            Boolean          @default(false)
   planPausedAt       DateTime?
   sizeHoldAt         DateTime? // waiting on the client to OK a new price for a bigger driveway; no visits until then
@@ -666,7 +702,7 @@ model Visit {
   endAt                  DateTime?
   anytime                Boolean     @default(true)
   state                  VisitState  @default(SCHEDULED)
-  routeSort              Int?
+  routeSort              Int? // set only by a "today only" reorder; null = follow the property's standing routeSort
   assigneeId             String?
   source                 VisitSource @default(MANUAL)
   recurrenceDate         DateTime?   @db.Date
@@ -770,6 +806,8 @@ model Invoice {
 
   @@unique([businessId, number])
   @@unique([businessId, etransferRef])
+  @@unique([businessId, instalmentKey])
+  instalmentKey      String? // seasonal snow plan instalment "<jobId>:<n>": never invoiced twice
   kind               InvoiceKind @default(STANDARD)
   quoteId            String? // deposit invoices: the quote they're for
   appliedToInvoiceId String? // deposit invoices: the job invoice that used this deposit up
@@ -1104,7 +1142,8 @@ model TaskAssignee {
   @@index([userId])
 }
 
-/** Time on a visit or job. A running timer has no endedAt. minutes is filled when it stops (or for manual entries). */
+/** Time on a visit or job, or on the day's general clock (no visit/job). A running timer has no endedAt; minutes is
+ * filled when it stops (or for manual entries). Approved entries are locked until an owner un-approves them. */
 model TimeEntry {
   id         String    @id @default(cuid())
   businessId String
@@ -1116,6 +1155,8 @@ model TimeEntry {
   endedAt    DateTime?
   minutes    Int?
   note       String?
+  approvedAt   DateTime?
+  approvedById String?
   createdAt  DateTime  @default(now())
 
   @@index([businessId, startedAt])
@@ -1132,7 +1173,9 @@ model Expense {
   date         DateTime @db.Date
   category     String   @default("Materials")
   description  String
-  amountCents  Int
+  amountCents  Int // what was paid, GST included
+  gstCents     Int      @default(0) // the GST part of amountCents (input tax credit)
+  vendor       String? // where it was bought
   attachmentId String?
   createdAt    DateTime @default(now())
 

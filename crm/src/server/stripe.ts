@@ -12,7 +12,7 @@ export function stripe(): Stripe {
 }
 
 /** A Checkout Session for an invoice's remaining balance; created when the client clicks Pay, never in advance. */
-export async function checkoutForInvoice(inv: { id: string; businessId: string; number: number; balanceCents: number; email: string }, token: string) {
+export async function checkoutForInvoice(inv: { id: string; businessId: string; number: number; balanceCents: number; email: string }, returnPath: string) {
   return stripe().checkout.sessions.create({
     mode: "payment",
     currency: "cad",
@@ -20,8 +20,8 @@ export async function checkoutForInvoice(inv: { id: string; businessId: string; 
     line_items: [{ quantity: 1, price_data: { currency: "cad", unit_amount: inv.balanceCents, product_data: { name: `etc. invoice #${inv.number}` } } }],
     metadata: { invoiceId: inv.id, businessId: inv.businessId },
     payment_intent_data: { metadata: { invoiceId: inv.id, businessId: inv.businessId }, statement_descriptor_suffix: "ETC CREW" },
-    success_url: `${env.appUrl}/i/${token}?paid=1`,
-    cancel_url: `${env.appUrl}/i/${token}`,
+    success_url: `${env.appUrl}${returnPath}?paid=1`,
+    cancel_url: `${env.appUrl}${returnPath}`,
   });
 }
 

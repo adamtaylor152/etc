@@ -1,13 +1,13 @@
 import { BODY_FONT, Button, EtcEmail, Eyebrow, FONT, Footer, H1, Header, INK_SOFT, LINE, NAVY, P, Table, firstName } from "./ui";
 
-export function VisitScheduled({ name, what, date, address, reminder, site, phone, confirmUrl }: { name: string; what: string; date: string; address: string; reminder?: boolean; site: string; phone: string; confirmUrl?: string }) {
+export function VisitScheduled({ name, what, date, address, reminder, when = "tomorrow", site, phone, confirmUrl }: { name: string; what: string; date: string; address: string; reminder?: boolean; when?: string; site: string; phone: string; confirmUrl?: string }) {
   return (
-    <EtcEmail title={reminder ? "See you tomorrow" : "You're booked"} preheader={`${what} on ${date}`}>
+    <EtcEmail title={reminder ? `See you ${when}` : "You're booked"} preheader={`${what} on ${date}`}>
       <Header right={reminder ? "Reminder" : "Booked"} />
       <tr>
         <td className="px" style={{ padding: "32px 40px 26px" }}>
           <Eyebrow>{date}</Eyebrow>
-          <H1>{reminder ? `See you tomorrow, ${firstName(name)}!` : `You're booked, ${firstName(name)}!`}</H1>
+          <H1>{reminder ? `See you ${when}, ${firstName(name)}!` : `You're booked, ${firstName(name)}!`}</H1>
           <P>{what} at {address} is set for <b style={{ color: NAVY }}>{date}</b>. No need to be home. If anything changes, just reply to this email.</P>
           {confirmUrl && <Button href={confirmUrl} label="Confirm or change the time" />}
         </td>

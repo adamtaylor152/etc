@@ -12,6 +12,7 @@ export const env = {
   get etransferEmail() { return process.env.ETRANSFER_EMAIL ?? ""; },
   get mailFrom() { return process.env.MAIL_FROM ?? ""; },
   get phone() { return "403-656-8200"; },
+  get routingUrl() { return (process.env.ROUTING_URL ?? "").trim().replace(/\/+$/, ""); }, // OSRM-compatible; empty = straight-line
   get cronDisabled() { return !!process.env.CRON_DISABLED; },
   get secure() { return (process.env.APP_URL ?? "").startsWith("https://"); },
 };

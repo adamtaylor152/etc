@@ -103,7 +103,7 @@ export default async function VisitPage({ params, searchParams }: PageProps<"/vi
       {(v.job.requireSignature || v.state === "COMPLETED") && <div className="my-4"><SignatureCard where={{ visitId: v.id }} signHref={`/sign/visit/${v.id}`} title={v.job.requireSignature ? "Client signature (needed before Done)" : "Client signature"} /></div>}
       <Card title="Time" className="my-4">
         <VisitTimer visitId={v.id} runningSince={running?.visitId === v.id ? running.startedAt.toISOString() : null} back={`/visits/${v.id}`} />
-        {running && running.visitId !== v.id && <p className="mt-2 text-xs text-ink-soft">Your timer is running on another visit. Starting here stops that one.</p>}
+        {running && running.visitId !== v.id && <p className="mt-2 text-xs text-ink-soft">{running.visitId ? "Your timer is running on another visit. Starting here stops that one." : "You're on the day clock. Starting here pauses it until you stop this timer."}</p>}
         {visitTime.length > 0 && <p className="mt-2 text-sm text-ink-soft">Logged: {visitTime.map((t) => `${personName(t.user)} ${hm(t.minutes ?? 0)}`).join(" · ")}</p>}
       </Card>
       <Card title="Who's on it" className="my-4">
