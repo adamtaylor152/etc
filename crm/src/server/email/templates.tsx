@@ -11,7 +11,7 @@ import { OwnerPhotosUploaded, PhotoUploadRequest, VisitDone } from "@/emails/vis
 import { invoiceTotals } from "../billing/invoice";
 import { money } from "../money";
 import { stripeEnabled } from "../stripe";
-import { dateOnly, prettyDate, todayLocal, toDbDate } from "../dates";
+import { dateOnly, dayWord, prettyDate, todayLocal, toDbDate } from "../dates";
 import { signedMediaPath } from "../media";
 import { clientName } from "../queries";
 import { db } from "../db";
@@ -227,10 +227,10 @@ const hubLink: Template<{ clientId: string }> = {
 async function scheduledEmail(visitId: string, reminder: boolean) {
   const v = await db.visit.findUniqueOrThrow({ where: { id: visitId }, include: { job: { include: { client: true } }, property: true } });
   const confirmUrl = reminder ? `${env.appUrl}/c/${await mintToken(db, v.businessId, "VISIT_CONFIRM", { visitId: v.id, clientId: v.job.clientId })}` : undefined;
-  return <VisitScheduled name={clientName(v.job.client)} what={v.job.title} date={prettyDate(dateOnly(v.scheduledDate))} address={v.property.formatted} reminder={reminder} site={env.siteUrl} phone={env.phone} confirmUrl={confirmUrl} />;
+  return <VisitScheduled name={clientName(v.job.client)} what={v.job.title} date={prettyDate(dateOnly(v.scheduledDate))} address={v.property.formatted} reminder={reminder} when={dayWord(dateOnly(v.scheduledDate) ?? todayLocal())} site={env.siteUrl} phone={env.phone} confirmUrl={confirmUrl} />;
 }
 const visitScheduled: Template<{ visitId: string }> = { subject: () => "You're booked with etc.", render: (p) => scheduledEmail(p.visitId, false) };
-const visitReminder: Template<{ visitId: string }> = { subject: () => "Reminder: etc. is coming tomorrow", render: (p) => scheduledEmail(p.visitId, true) };
+const visitReminder: Template<{ visitId: string }> = { subject: () => "Reminder: etc. is coming soon", render: (p) => scheduledEmail(p.visitId, true) };
 
 const reviewRequest: Template<{ clientId: string; reviewId?: string }> = {
   subject: () => "How did we do?",

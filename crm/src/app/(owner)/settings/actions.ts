@@ -52,6 +52,19 @@ export async function saveAutomations(f: FormData) {
   redirect("/settings?saved=automations");
 }
 
+/** Reminder timing and the arrival windows (label + start + end, up to 6; blank rows are dropped). */
+export async function saveSchedule(f: FormData) {
+  const user = await requireOwner();
+  const biz = await db.business.findUniqueOrThrow({ where: { id: user.businessId } });
+  const labels = f.getAll("winLabel").map(String), froms = f.getAll("winFrom").map(String), tos = f.getAll("winTo").map(String), keys = f.getAll("winKey").map(String);
+  const arrivalWindows = labels.map((label, i) => ({ key: keys[i] || `w${i}-${label.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 12)}`, label: label.trim(), from: froms[i], to: tos[i] })).filter((w) => w.label);
+  const next = SettingsSchema.safeParse({ ...(biz.settings as object), reminderDaysBefore: s(f, "reminderDaysBefore"), reminderHour: s(f, "reminderHour"), arrivalWindows });
+  if (!next.success) redirect(`/settings?error=${encodeURIComponent(next.error.issues[0].message)}#schedule`);
+  await db.business.update({ where: { id: biz.id }, data: { settings: next.data as Prisma.InputJsonValue } });
+  revalidatePath("/", "layout");
+  redirect("/settings?saved=schedule#schedule");
+}
+
 export async function saveSeason(f: FormData) {
   const user = await requireOwner();
   const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
