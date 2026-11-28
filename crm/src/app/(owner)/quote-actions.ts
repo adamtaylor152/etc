@@ -10,9 +10,10 @@ import { archiveQuote, convertQuote, createQuote, declineQuote, markQuoteApprove
 import { OPTION_KEYS } from "@/server/status/quote";
 import { TransitionError } from "@/server/status/visit";
 import { mintToken } from "@/server/tokens";
+import { safePath } from "@/server/safe-path";
 
 const s = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
-const back = (f: FormData, fallback: string) => { const p = s(f, "back"); return p.startsWith("/") && !p.startsWith("//") ? p : fallback; };
+const back = (f: FormData, fallback: string) => { const p = s(f, "back"); return safePath(p, fallback); };
 
 /** Indexed rows: line_0_name, line_0_qty, line_0_price, line_0_optional, line_0_selected, line_0_option, line_0_photo... Blank names are skipped. */
 function parseLines(f: FormData): QuoteLineInput[] {

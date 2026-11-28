@@ -54,6 +54,10 @@ export async function createBooking(b: Booking, meta: BookingMeta) {
       ? await tx.client.findFirstOrThrow({ where: { id: meta.clientId, businessId } })
       : await tx.client.findFirst({ where: { businessId, email }, orderBy: { createdAt: "asc" } });
     const [first, ...rest] = b.name.split(" ");
+    const clientCreated = !client;
+    // Knowing an email is not being that client: a public booking that lands on an existing client still makes its
+    // request (and shovelling job), but changes nothing we already hold about them or their property.
+    const byEmailOnly = !clientCreated && !meta.clientId && meta.source !== "IMPORT";
     if (!client) {
       client = await tx.client.create({
         data: {
@@ -62,7 +66,7 @@ export async function createBooking(b: Booking, meta: BookingMeta) {
           createdAt: meta.createdAt,
         },
       });
-    } else if (!client.phone && b.phone) {
+    } else if (!client.phone && b.phone && !byEmailOnly) {
       client = await tx.client.update({ where: { id: client.id }, data: { phone: b.phone } });
     }
 
@@ -81,7 +85,7 @@ export async function createBooking(b: Booking, meta: BookingMeta) {
           ...(b.size ? { driveSize: sizeFromLabel(b.size), extraWalk: b.extraWalk } : {}),
         },
       });
-    } else if ((b.access && b.access !== property.accessNotes) || (b.size && !property.sizeCheckedAt)) {
+    } else if (!byEmailOnly && ((b.access && b.access !== property.accessNotes) || (b.size && !property.sizeCheckedAt))) {
       // A size someone already checked on the satellite view beats what the form says.
       property = await tx.property.update({ where: { id: property.id }, data: {
         ...(b.access ? { accessNotes: b.access } : {}), ...(b.size && !property.sizeCheckedAt ? { driveSize: sizeFromLabel(b.size), extraWalk: b.extraWalk } : {}),
@@ -186,7 +190,7 @@ export async function createBooking(b: Booking, meta: BookingMeta) {
     }
     // A link for the "send us photos" step on book.html's done screen.
     const uploadToken = quoted.length && meta.sendEmails !== false ? await mintToken(tx, businessId, "PHOTO_UPLOAD", { requestId: request.id }) : null;
-    return { requestId: request.id, number, clientId: client.id, jobId, uploadUrl: uploadToken ? `${env.appUrl}/u/${uploadToken}` : null };
+    return { requestId: request.id, number, clientId: client.id, clientCreated, jobId, uploadUrl: uploadToken ? `${env.appUrl}/u/${uploadToken}` : null };
   });
 
   if (meta.sendEmails !== false) kickOutbox();

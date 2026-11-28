@@ -15,9 +15,10 @@ import { env } from "@/server/env";
 import { addPush, cancelStorm, createStorm, finishStorm, setSnowEnded, setStormDepth, startStorm } from "@/server/ops/storms";
 import { TransitionError } from "@/server/status/visit";
 import { tiersFromRows } from "@/server/snow/tiers";
+import { safePath } from "@/server/safe-path";
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
-const back = (f: FormData) => { const p = str(f, "back"); return p.startsWith("/") && !p.startsWith("//") ? p : "/"; };
+const back = (f: FormData) => { const p = str(f, "back"); return safePath(p, "/"); };
 const date = z.union([z.literal(""), z.string().regex(/^\d{4}-\d{2}-\d{2}$/)]).transform((s) => s || null);
 const cm = z.coerce.number().int().min(0).max(300);
 const bags = z.coerce.number().min(0).max(999).transform((b) => Math.round(b * 100) / 100);

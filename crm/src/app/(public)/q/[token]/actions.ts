@@ -4,7 +4,9 @@ import { saveSignature } from "@/server/ops/signatures";
 import { redirect } from "next/navigation";
 import { db } from "@/server/db";
 import { approveQuote, declineQuote, requestQuoteChanges } from "@/server/ops/quotes";
-import { quoteOptions } from "@/server/status/quote";
+import { dateOnly, todayLocal } from "@/server/dates";
+import { limited } from "@/server/http";
+import { assertApprovable, quoteOptions } from "@/server/status/quote";
 import { TransitionError } from "@/server/status/visit";
 import { peekToken } from "@/server/tokens";
 
@@ -27,7 +29,14 @@ export async function clientApprove(f: FormData) {
   const selected = f.getAll("selected").map(String);
   const offered = quoteOptions(q.options);
   if (offered.length && !offered.some((o) => o.key === option)) redirect(`/q/${token}?error=${encodeURIComponent("Choose one of the options to approve")}`);
-  // Signature first: a missing/blank one stops the approval before anything changes.
+  // Check it can still be approved BEFORE keeping a signature (approveQuote checks again): an expired or already-answered
+  // quote must not end up with a "signed" record. Then the signature: a missing/blank one stops the approval.
+  try {
+    assertApprovable({ status: q.status, validUntil: dateOnly(q.validUntil) }, todayLocal());
+  } catch (e) {
+    if (e instanceof TransitionError) redirect(`/q/${token}?error=${encodeURIComponent("This quote can't be approved any more. Give us a call.")}`);
+    throw e;
+  }
   try {
     await saveSignature({ businessId: q.businessId, kind: "QUOTE", quoteId, clientId: q.clientId, dataUrl: String(f.get("signature") ?? ""), signerName: name, ip, userAgent: h.get("user-agent"), inPerson: false, quoteChoice: offered.length ? { option, selected } : undefined });
   } catch (e) {
@@ -47,6 +56,8 @@ export async function clientRequestChanges(f: FormData) {
   const { token, quoteId } = await quoteFor(f);
   const message = String(f.get("message") ?? "").trim().slice(0, 2000);
   if (!message) redirect(`/q/${token}?error=${encodeURIComponent("Tell us what you'd like changed")}`);
+  // Each one emails the owners.
+  if (await limited(`quote-changes:${quoteId}`, 5, 3_600_000)) redirect(`/q/${token}?error=${encodeURIComponent("That's a lot of messages. Give us a call instead.")}`);
   try {
     await requestQuoteChanges(quoteId, message);
   } catch (e) {

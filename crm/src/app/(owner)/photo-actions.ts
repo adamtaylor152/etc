@@ -5,8 +5,9 @@ import { requireOwner } from "@/server/auth";
 import { db } from "@/server/db";
 import { enqueue, kickOutbox } from "@/server/email/outbox";
 import { env } from "@/server/env";
+import { safePath } from "@/server/safe-path";
 
-const back = (f: FormData) => { const p = String(f.get("back") ?? "/"); return p.startsWith("/") && !p.startsWith("//") ? p : "/"; };
+const back = (f: FormData) => { const p = String(f.get("back") ?? "/"); return safePath(p, "/"); };
 
 export async function photoShare(f: FormData) {
   const user = await requireOwner();

@@ -3,7 +3,7 @@
 import { db } from "@/server/db";
 import { enqueue, kickOutbox } from "@/server/email/outbox";
 import { env } from "@/server/env";
-import { clientIp, limited, PUBLIC_HEADERS } from "@/server/http";
+import { cappedFormData, clientIp, limited, ONE_FILE_BODY, PUBLIC_HEADERS } from "@/server/http";
 import { MediaError, saveImage } from "@/server/media";
 import { peekToken } from "@/server/tokens";
 
@@ -21,7 +21,9 @@ export async function POST(req: Request, ctx: RouteContext<"/api/public/uploads/
   if (!t.ok || !t.token.requestId) return json(410, { error: "This link has expired. Reply to our email and we'll send a new one." });
   const request = await db.request.findUniqueOrThrow({ where: { id: t.token.requestId } });
 
-  const form = await req.formData();
+  // No sign-in here, so the tightest cap: both booking forms and /u send one photo per request.
+  const form = await cappedFormData(req, ONE_FILE_BODY);
+  if (!form) return json(413, { error: "That upload is too big. Send one photo at a time." });
   const files = form.getAll("file").filter((f): f is File => f instanceof File);
   const already = await db.attachment.count({ where: { requestId: request.id, uploadedByType: "CLIENT", deletedAt: null } });
   if (!files.length || files.length > PER_BATCH) return json(400, { error: `Send 1 to ${PER_BATCH} photos at a time` });

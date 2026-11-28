@@ -11,10 +11,11 @@ import { logCall } from "@/server/ops/calls";
 import { importClients, mergeClients } from "@/server/ops/client-import";
 import { addNote, deleteNote, editNote, pinNote, type NoteTarget } from "@/server/ops/notes";
 import { TransitionError } from "@/server/status/visit";
+import { safePath } from "@/server/safe-path";
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? "");
 /** Same-site relative paths only (where to go back to after an action). */
-const safeBack = (p: string, fallback: string) => (p.startsWith("/") && !p.startsWith("//") ? p : fallback);
+const safeBack = (p: string, fallback: string) => safePath(p, fallback);
 const withError = (path: string, e: unknown) => {
   if (e instanceof TransitionError || e instanceof z.ZodError) {
     const msg = e instanceof z.ZodError ? e.issues[0]?.message ?? "Check the form" : e.message;

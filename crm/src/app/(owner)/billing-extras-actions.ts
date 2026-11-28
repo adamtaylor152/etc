@@ -12,9 +12,10 @@ import { billingEmailFor } from "@/server/ops/invoices";
 import { refundPayment } from "@/server/ops/refunds";
 import { parseStatementRange, statementQuery } from "@/server/statement";
 import { TransitionError } from "@/server/status/visit";
+import { safePath } from "@/server/safe-path";
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
-const back = (f: FormData) => { const p = str(f, "back"); return p.startsWith("/") && !p.startsWith("//") ? p : "/invoices"; };
+const back = (f: FormData) => { const p = str(f, "back"); return safePath(p, "/invoices"); };
 const withQuery = (path: string, q: string) => `${path}${path.includes("?") ? "&" : "?"}${q}`;
 const cents = (v: string) => Math.round(z.coerce.number().positive().max(100_000).parse(v) * 100);
 

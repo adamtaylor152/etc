@@ -1,5 +1,6 @@
 // Owner sends a text or MMS from the Messages composer. multipart/form-data: key (client id or n<digits>), body, file[].
 import { currentOwner } from "@/server/auth";
+import { cappedFormData, ONE_FILE_BODY } from "@/server/http";
 import { MediaError } from "@/server/media";
 import { MAX_MMS_FILES, sendText } from "@/server/ops/texts";
 import { TransitionError } from "@/server/status/visit";
@@ -7,7 +8,9 @@ import { TransitionError } from "@/server/status/visit";
 export async function POST(req: Request) {
   const user = await currentOwner();
   if (!user) return Response.json({ error: "Sign in again" }, { status: 401 });
-  const form = await req.formData();
+  // Up to 5 photos, shrunk by the composer first (an MMS carries about 1 MB each anyway).
+  const form = await cappedFormData(req, 2 * ONE_FILE_BODY);
+  if (!form) return Response.json({ error: "Those photos are too big to text. Send fewer at a time." }, { status: 413 });
   const key = String(form.get("key") ?? "");
   const body = String(form.get("body") ?? "");
   const files = form.getAll("file").filter((f): f is File => f instanceof File && f.size > 0);

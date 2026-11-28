@@ -10,6 +10,7 @@ import { createRecurringJob, setRecurringInvoicing, setRecurringPause, updateRec
 import { setVisitLines } from "@/server/ops/visits";
 import type { Repeat } from "@/server/recurrence";
 import { TransitionError } from "@/server/status/visit";
+import { safePath } from "@/server/safe-path";
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Check the dates");
@@ -54,7 +55,7 @@ async function run(back: string, fn: () => Promise<unknown>, to?: (out: unknown)
   revalidatePath("/", "layout");
   redirect(to ? to(out) : back);
 }
-const back = (f: FormData) => { const p = str(f, "back"); return p.startsWith("/") && !p.startsWith("//") ? p : "/"; };
+const back = (f: FormData) => { const p = str(f, "back"); return safePath(p, "/"); };
 
 export async function recurringCreate(f: FormData) {
   const user = await requireOwner();
