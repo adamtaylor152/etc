@@ -1,4 +1,5 @@
 // Job operations from the back office: new one-off jobs, every-snowfall plans, pause/close.
+import { WALK_PREFIX } from "../billing/charges";
 import { defaultChecklistFor } from "./checklists";
 import { Prisma, type SnowBillingMode } from "@/generated/prisma/client";
 import { maxInstalments, planBillingLocked, seasonalTermsError } from "../billing/instalments";
@@ -276,7 +277,7 @@ export async function renewalCandidates(businessId: string, seasonId: string) {
 export async function renewPlan(businessId: string, clientId: string, actor: { userId?: string; clientId?: string }) {
   const season = await renewalSeason(businessId);
   if (!season) throw new Error("No season set up to renew into");
-  const last = await db.job.findFirst({ where: { businessId, clientId, kind: "SNOW_PLAN" }, orderBy: { createdAt: "desc" } });
+  const last = await db.job.findFirst({ where: { businessId, clientId, kind: "SNOW_PLAN" }, orderBy: { createdAt: "desc" }, include: { lineItems: true } });
   if (!last) throw new Error("No previous plan");
   return db.$transaction(async (tx) => {
     const existing = await tx.job.findFirst({ where: { propertyId: last.propertyId, seasonId: season.id, kind: "SNOW_PLAN", closedAt: null } });
@@ -292,7 +293,10 @@ export async function renewPlan(businessId: string, clientId: string, actor: { u
         businessId, number: await nextNumber(tx, businessId, "JOB"), clientId, propertyId: last.propertyId, seasonId: season.id, kind: "SNOW_PLAN",
         title: "Every snowfall", billingType: "PER_VISIT", invoiceSchedule: last.invoiceSchedule, ...billing,
         triggerCm: last.triggerCm, pricePerPushCents: last.pricePerPushCents, iceMelt: last.iceMelt, instructions: last.instructions,
-        lineItems: { create: [{ name: "Snow shovelling, every snowfall (per push)", unitPriceCents: last.pricePerPushCents ?? 3000, totalCents: last.pricePerPushCents ?? 3000 }] },
+        lineItems: { create: [
+          { name: "Snow shovelling, every snowfall (per push)", unitPriceCents: last.pricePerPushCents ?? 3000, totalCents: last.pricePerPushCents ?? 3000 },
+          ...last.lineItems.filter((l) => l.name.startsWith(WALK_PREFIX)).map((l) => ({ name: l.name, unitPriceCents: l.unitPriceCents, totalCents: l.totalCents, perVisit: true, sortOrder: 2 })), // the extra sidewalk carries over
+        ] },
       },
     });
     await logActivity(tx, { businessId, type: "plan.renewed", entityType: "Job", entityId: job.id, actorType: actor.clientId ? "CLIENT" : "USER", actorUserId: actor.userId, actorClientId: actor.clientId, clientId, jobId: job.id, data: { season: season.name } });
