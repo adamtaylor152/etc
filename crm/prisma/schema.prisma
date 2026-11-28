@@ -344,6 +344,16 @@ model Client {
   smsOptIn         Boolean        @default(false) // client agreed to automatic text updates
   smsOptOutAt      DateTime? // client texted STOP: no texts at all until they text START
   emailBouncedAt   DateTime?
+  // Card on file: Stripe ids and display data only, never a card number.
+  stripeCustomerId     String?
+  cardPaymentMethodId  String?
+  cardBrand            String?
+  cardLast4            String?
+  cardExpMonth         Int?
+  cardExpYear          Int?
+  cardSavedAt          DateTime?
+  autoPayConsentAt     DateTime? // the client chose "charge this card automatically for my invoices"; null = off
+  autoPayConsentSource String? // where they chose it: "hub" or "invoice"
   archivedAt       DateTime?
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
@@ -762,6 +772,48 @@ model Invoice {
   quoteId            String? // deposit invoices: the quote they're for
   appliedToInvoiceId String? // deposit invoices: the job invoice that used this deposit up
   allowPartial       Boolean     @default(false) // client may pay part of the balance online
+  autoPayState       AutoPayState? // set when sent to a client with auto-pay on; null = pay the usual way
+  autoPayOn          DateTime?   @db.Date // next day the saved card is charged (first try or retry)
+  autoPayAttempts    AutoPayAttempt[]
+}
+
+enum AutoPayState {
+  SCHEDULED // will be charged on autoPayOn
+  RETRYING // a charge failed; next try on autoPayOn
+  NEEDS_ACTION // the bank wants the client to approve: they pay from the invoice page
+  FAILED // every try failed: owner told, nothing more is charged
+  PAID
+  STOPPED // auto-pay turned off / card removed before the charge
+}
+
+enum AutoPayAttemptStatus {
+  PENDING // claimed, Stripe's answer not recorded yet
+  SUCCEEDED
+  FAILED
+  REQUIRES_ACTION
+}
+
+/// One off-session charge of a saved card for an invoice. (invoiceId, n) is unique, so an invoice can never have two
+/// "first tries": the row is the claim, and its id + n make the Stripe idempotency key.
+model AutoPayAttempt {
+  id                    String               @id @default(cuid())
+  businessId            String
+  invoiceId             String
+  invoice               Invoice              @relation(fields: [invoiceId], references: [id])
+  clientId              String
+  n                     Int
+  amountCents           Int
+  status                AutoPayAttemptStatus @default(PENDING)
+  stripePaymentMethodId String
+  cardLabel             String // "Visa •••• 4242" as it was when charged
+  stripePaymentIntentId String?
+  failureCode           String?
+  failureMessage        String?
+  createdAt             DateTime             @default(now())
+  finishedAt            DateTime?
+
+  @@unique([invoiceId, n])
+  @@index([status])
 }
 
 model InvoiceLineItem {

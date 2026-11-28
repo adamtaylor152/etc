@@ -46,7 +46,8 @@ export async function saveAutomations(f: FormData) {
   const biz = await db.business.findUniqueOrThrow({ where: { id: user.businessId } });
   // Only the on/off settings live on this form; numbers (review delay, referral amounts) keep their values.
   const toggles = Object.fromEntries(Object.keys(SETTING_LABELS).map((k) => [k, f.get(k) === "on"]));
-  const next = SettingsSchema.parse({ ...(biz.settings as object), ...toggles });
+  const grace = z.coerce.number().int().min(0).max(14).safeParse(s(f, "autoPayGraceDays") || undefined);
+  const next = SettingsSchema.parse({ ...(biz.settings as object), ...toggles, ...(grace.success ? { autoPayGraceDays: grace.data } : {}) });
   await db.business.update({ where: { id: biz.id }, data: { settings: next as Prisma.InputJsonValue } });
   revalidatePath("/", "layout");
   redirect("/settings?saved=automations");

@@ -5,6 +5,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Archive, Banknote, FileText, Hammer, Inbox, ListTodo, Mail, MapPin, MessageSquare, Pencil, Phone, Plus, Receipt, Repeat, Snowflake } from "lucide-react";
 import { clientArchive, clientMerge, propertyArchive } from "../../client-actions";
+import { clientAutoPayOff, clientCardRemove } from "../../card-actions";
+import { cardLabel } from "@/server/billing/autopay";
 import { ConfirmButton } from "@/components/confirm-button";
 import { Flash } from "@/components/flash";
 import { possibleDuplicates } from "@/server/ops/client-import";
@@ -145,6 +147,13 @@ export default async function ClientPage({ params, searchParams }: PageProps<"/c
               <div><dt className="text-xs font-semibold uppercase text-ink-soft">Lead source</dt><dd>{c.leadSource ?? c.source.replaceAll("_", " ").toLowerCase()}</dd></div>
               <div><dt className="text-xs font-semibold uppercase text-ink-soft">Referrals</dt><dd className="text-sm">{referredBy ? <>Referred by <Link className="text-blue" href={`/clients/${referredBy.id}`}>{clientName(referredBy)}</Link>. </> : ""}{referredCount ? `Referred ${referredCount}. ` : ""}{c.referralCode ? <span className="text-ink-soft">Code {c.referralCode}</span> : <span className="text-ink-soft">Share code made on first hub visit</span>}{credit > 0 && <span className="ml-1 font-semibold text-emerald-700">· {money(credit)} credit</span>}</dd></div>
               <div><dt className="text-xs font-semibold uppercase text-ink-soft">Payment</dt><dd>{c.preferredPayment === "ETRANSFER" ? "e-Transfer" : c.preferredPayment ? c.preferredPayment.toLowerCase() : "—"}</dd></div>
+              {c.cardPaymentMethodId && (
+                <div className="sm:col-span-2"><dt className="text-xs font-semibold uppercase text-ink-soft">Card on file</dt><dd className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <span><b>{cardLabel(c)}</b> · exp {c.cardExpMonth}/{String(c.cardExpYear).slice(-2)} · {c.autoPayConsentAt ? `auto-pay on (client chose it ${prettyDateTime(c.autoPayConsentAt)}, ${c.autoPayConsentSource === "invoice" ? "paying an invoice" : "on their page"})` : "auto-pay off"}</span>
+                  {c.autoPayConsentAt && <form action={clientAutoPayOff}><input type="hidden" name="clientId" value={id} /><ConfirmButton message="Turn off auto-pay for this client? Invoices already waiting on the card go back to being paid the usual way. Only the client can turn it back on." className="text-xs font-semibold text-blue">Turn off auto-pay</ConfirmButton></form>}
+                  <form action={clientCardRemove}><input type="hidden" name="clientId" value={id} /><ConfirmButton message="Remove this card? Auto-pay goes off with it. Only the client can save a card again." className="text-xs font-semibold text-red-700">Remove card</ConfirmButton></form>
+                </dd></div>
+              )}
               <div className="sm:col-span-2"><dt className="text-xs font-semibold uppercase text-ink-soft">Messages</dt><dd className="text-ink-soft">
                 {[c.smsOptOutAt ? "Texted STOP" : c.smsOptIn ? "Text updates on" : "No text updates", c.visitReminders ? "visit reminders" : null, c.followUpQuotes ? "quote follow-ups" : null, c.followUpInvoices ? "invoice reminders" : null, c.marketingOptOut ? "no marketing" : null].filter(Boolean).join(" · ")}
               </dd></div>

@@ -17,6 +17,8 @@ export const SettingsSchema = z.object({
   quoteFollowUp: z.boolean().default(true),         // nudge unanswered quotes after 3 days
   visitReminders: z.boolean().default(true),        // day-before reminder for scheduled (non-snow) visits
   smsUpdates: z.boolean().default(true),            // texts (on my way, all done, storm day) to clients who opted in; needs Telnyx keys
+  autoPay: z.boolean().default(false),              // clients may save a card and opt in to automatic charges; needs Stripe keys
+  autoPayGraceDays: z.coerce.number().int().min(0).max(14).default(2), // days between the invoice email and the charge (0 = same day)
 });
 export type Settings = z.infer<typeof SettingsSchema>;
 
@@ -41,4 +43,5 @@ export const SETTING_LABELS: Record<ToggleKey, [string, string]> = {
   quoteFollowUp: ["Quote follow-up", "One reminder 3 days after sending if the client hasn’t answered."],
   visitReminders: ["Visit reminders", "Day-before reminder for scheduled visits (not snow)."],
   smsUpdates: ["Text updates", "Texts “on the way”, “all done” (with photos link) and storm days to clients who said yes to texts. Needs Telnyx keys."],
+  autoPay: ["Saved cards & auto-pay", "Clients can save a card on their page and choose to have invoices charged to it automatically. A failed charge emails them and is retried after 3 and 7 days. Needs Stripe keys."],
 };

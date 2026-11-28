@@ -7,6 +7,7 @@ import { SnowBanner } from "@/components/snow-banner";
 import { addDays, dateOnly, localDayStart, prettyDate, todayLocal, toDbDate } from "@/server/dates";
 import { businessId, db } from "@/server/db";
 import { money } from "@/server/money";
+import { autoPayInTrouble } from "@/server/billing/autopay";
 import { clientName, jobsWithStatus } from "@/server/queries";
 import { dayProgress } from "@/server/runner";
 import { personName, team } from "@/server/schedule";
@@ -89,6 +90,7 @@ export default async function Home({ searchParams }: PageProps<"/">) {
     { n: jcount("UNSCHEDULED") + jcount("ACTION_REQUIRED"), label: "jobs with nothing scheduled", href: "/jobs?status=UNSCHEDULED", icon: <Hammer className="size-4 text-emerald-700" /> },
     { n: jcount("REQUIRES_INVOICING"), label: "jobs to invoice", href: "/billing", icon: <Receipt className="size-4 text-blue" /> },
     { n: cnt(invoices, isPastDue), label: "past-due invoices", href: "/invoices?tab=PAST_DUE", icon: <Receipt className="size-4 text-red-700" /> },
+    { n: cnt(invoices, autoPayInTrouble), label: "failed auto-payments", href: "/billing", icon: <Receipt className="size-4 text-red-700" /> },
     { n: tasksOpen, label: "tasks due", href: "/tasks", icon: <ClipboardList className="size-4 text-navy" /> },
     { n: depositsWaiting, label: "deposits waiting", href: "/invoices?status=AWAITING_PAYMENT", icon: <Banknote className="size-4 text-blue" /> },
     { n: toMatch, label: "payments to match", href: "/payments/unmatched", icon: <Banknote className="size-4 text-amber-700" /> },
