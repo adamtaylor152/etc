@@ -14,6 +14,6 @@ export async function GET(req: Request) {
   const next = `${m === 12 ? y + 1 : y}-${String(m === 12 ? 1 : m + 1).padStart(2, "0")}`;
   const rows = await db.expense.findMany({ where: { businessId: user.businessId, date: { gte: toDbDate(`${month}-01`), lt: toDbDate(`${next}-01`) } }, orderBy: { date: "asc" } });
   const jobs = new Map((await db.job.findMany({ where: { id: { in: rows.map((r) => r.jobId).filter((x): x is string => !!x) } } })).map((j) => [j.id, `#${j.number} ${j.title}`]));
-  const csv = ["date,category,description,amount,job", ...rows.map((r) => [dateOnly(r.date)!, r.category, r.description, (r.amountCents / 100).toFixed(2), r.jobId ? jobs.get(r.jobId) ?? "" : ""].map(cell).join(","))].join("\n");
+  const csv = ["date,category,description,vendor,amount,gst,job", ...rows.map((r) => [dateOnly(r.date)!, r.category, r.description, r.vendor ?? "", (r.amountCents / 100).toFixed(2), (r.gstCents / 100).toFixed(2), r.jobId ? jobs.get(r.jobId) ?? "" : ""].map(cell).join(","))].join("\n");
   return new Response(csv, { headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="etc-expenses-${month}.csv"` } });
 }
