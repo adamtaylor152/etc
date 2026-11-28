@@ -2,6 +2,7 @@
 import type { PaymentMethod, PaymentTerms, Prisma } from "@/generated/prisma/client";
 import { billingEmail, depositCents, depositCredit, draftEditProblem, dueDate, etransferRef, invoiceTotals, isCreditLine, statusAfterPayments } from "../billing/invoice";
 import { instalmentKey, instalmentSchedule } from "../billing/instalments";
+import { periodKey, periodLabel, periodsDue } from "../billing/periods";
 import { dateOnly, todayLocal, toDbDate } from "../dates";
 import { db, type Tx } from "../db";
 import { enqueue, kickOutbox } from "../email/outbox";
@@ -108,6 +109,7 @@ export async function invoiceFixedJob(user: Actor, jobId: string) {
   return db.$transaction(async (tx) => {
     const job = await tx.job.findFirstOrThrow({ where: { id: jobId, businessId: user.businessId }, include: { lineItems: { orderBy: { sortOrder: "asc" } } } });
     if (job.billingType !== "FIXED_PRICE") throw new TransitionError("This job is billed per visit");
+    if (job.kind === "RECURRING") throw new TransitionError("This job's fixed price is invoiced automatically each month");
     if (await tx.invoice.count({ where: { jobId, status: { not: "VOID" } } })) throw new TransitionError("This job already has an invoice");
     return createDraft(tx, user, {
       clientId: job.clientId, propertyId: job.propertyId, jobId, subject: job.title,
@@ -130,6 +132,42 @@ export async function billingRun(user: Actor) {
   let made = 0;
   for (const k of keys.values()) { await invoiceUnbilled(user, k); made++; }
   await invoiceSeasonalInstalments({ businessId: user.businessId }); // sent, not drafts: not part of the count
+  return made + await invoiceRecurringPeriods({ businessId: user.businessId });
+}
+
+/**
+ * Recurring jobs on a fixed price per month: one draft invoice per month that has come due (periodsDue), whatever the
+ * visit count. Same guard as seasonal instalments: each invoice carries a unique instalmentKey ("<jobId>:<YYYY-MM>"),
+ * so the hourly run and the billing run can both call this and never bill a month twice (a voided month is not
+ * re-issued). Closed jobs are skipped; nothing before the job was created is back-billed.
+ */
+export async function invoiceRecurringPeriods(where: { businessId?: string; id?: string } = {}) {
+  const today = todayLocal();
+  const jobs = await db.job.findMany({
+    where: { ...where, kind: "RECURRING", billingType: "FIXED_PRICE", closedAt: null, totalCents: { gt: 0 } },
+    include: { lineItems: { orderBy: { sortOrder: "asc" } } },
+  });
+  let made = 0;
+  for (const job of jobs) {
+    const created = todayLocal(job.createdAt), starts = dateOnly(job.recurrenceStartsOn);
+    const due = periodsDue({
+      startsOn: starts && starts > created ? starts : created, endsOn: dateOnly(job.recurrenceEndsOn), invoiceDay: job.invoiceDay,
+      pausedFrom: dateOnly(job.pausedFrom), pausedUntil: dateOnly(job.pausedUntil),
+    }, today);
+    for (const p of due) {
+      const key = periodKey(job.id, p.period);
+      if (await db.invoice.count({ where: { businessId: job.businessId, instalmentKey: key } })) continue;
+      try {
+        await db.$transaction((tx) => createDraft(tx, { id: null, businessId: job.businessId }, {
+          clientId: job.clientId, propertyId: job.propertyId, jobId: job.id, subject: `${job.title} · ${periodLabel(p.period)}`, instalmentKey: key,
+          lines: job.lineItems.map((l) => ({ name: l.name, quantity: Number(l.quantity), unitPriceCents: l.unitPriceCents, totalCents: l.totalCents, serviceDate: toDbDate(p.dueOn), jobId: job.id })),
+        }));
+        made++;
+      } catch (e) {
+        if ((e as { code?: string }).code !== "P2002") throw e; // unique instalmentKey: another run invoiced it first
+      }
+    }
+  }
   return made;
 }
 

@@ -30,7 +30,7 @@ export function computeJobStatus(job: JobLike, visits: VisitLike[], today: strin
   if (st.includes("LATE")) return "LATE";
   if (st.some((s) => s === "TODAY" || s === "EN_ROUTE" || s === "IN_PROGRESS")) return "TODAY";
   const allDone = visits.length > 0 && visits.every((v) => !isOpen(v));
-  if (job.unbilledCharges > 0 || (job.billingType === "FIXED_PRICE" && allDone && !job.hasInvoice)) return "REQUIRES_INVOICING";
+  if (job.unbilledCharges > 0 || (job.billingType === "FIXED_PRICE" && job.kind !== "RECURRING" && allDone && !job.hasInvoice)) return "REQUIRES_INVOICING";
   if (st.includes("UPCOMING")) return "UPCOMING";
   if (job.kind === "SNOW_PLAN") return job.planPausedAt ? "PAUSED" : "ON_PLAN";
   if (st.includes("UNSCHEDULED") || (!visits.length && !job.asNeeded)) return "UNSCHEDULED";
@@ -48,15 +48,26 @@ export function jobEditLocks(j: JobEditFacts) {
   const lines = j.kind === "SNOW_PLAN" ? "A snow plan is priced per push: change it on the plan card"
     : j.closedAt ? "This job is closed: reopen it to change what it bills"
     : j.sizeHoldAt ? "Waiting on the client to OK a new driveway price"
-    : j.billingType === "FIXED_PRICE" && j.invoiced ? "The fixed price is already invoiced: void the invoice to change it"
+    // A recurring fixed price is billed month by month: a new price applies to the months not invoiced yet.
+    : j.billingType === "FIXED_PRICE" && j.invoiced && j.kind !== "RECURRING" ? "The fixed price is already invoiced: void the invoice to change it"
     : null;
-  const billing = lines ?? (j.kind !== "ONE_OFF" ? "Only one-off jobs can switch billing"
+  const billing = lines ?? (j.kind !== "ONE_OFF" ? "Only one-off jobs can switch billing" // (a recurring job's invoice day can still change)
     : j.invoiced || j.hasCharges ? "Visits are already charged or invoiced, so the billing type is locked"
     : null);
   const property = j.kind === "SNOW_PLAN" ? "A snow plan is priced for its driveway: end it and start a plan at the other address"
     : j.closedAt ? "This job is closed: reopen it to move it"
     : null;
   return { lines, billing, property };
+}
+
+/** Can this one visit be priced differently from its job (Visit.lineOverrides)? null = yes, otherwise why not. */
+export function visitLinesLock(v: { state: VisitState; invoiced: boolean; kind: JobKind; billingType: "FIXED_PRICE" | "PER_VISIT"; closedAt: Date | null }) {
+  return v.kind === "SNOW_PLAN" ? "Snow plan visits are priced by the plan"
+    : v.billingType === "FIXED_PRICE" ? "This job is a fixed price, so its visits aren't charged one by one"
+    : v.closedAt ? "This job is closed"
+    : v.invoiced ? "This visit is already invoiced: void the invoice to change it"
+    : !OPEN.includes(v.state) ? "Reopen the visit to change what it charges"
+    : null;
 }
 
 export const JOB_STATUS_LABEL: Record<JobStatus, string> = {
