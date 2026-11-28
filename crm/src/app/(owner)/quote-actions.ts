@@ -58,6 +58,7 @@ export async function quoteUpdate(f: FormData) {
     title: z.string().min(1).max(150).parse(s(f, "title")), message: s(f, "message").slice(0, 3000),
     validUntil: s(f, "validUntil") || null, discountCents: Math.round(z.coerce.number().min(0).max(100_000).parse(s(f, "discount") || "0") * 100),
     lines: parseLines(f),
+    deposit: { type: s(f, "depositType"), value: s(f, "depositType") === "FIXED" ? Math.round(Number(s(f, "depositValue") || 0) * 100) : Number(s(f, "depositValue") || 0), required: f.get("depositRequired") === "on" },
   }));
   if (f.get("send") === "1") await guard(f, `/quotes/${id}`, () => sendQuote(user, id));
   revalidatePath("/", "layout");

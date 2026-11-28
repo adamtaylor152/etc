@@ -1,5 +1,6 @@
 // Quotes (estimates): build -> send -> client approves / asks for changes -> convert to a job.
 // Photos the client sent with the request stay linked (requestId) and show on the quote and the job.
+import { createDepositInvoice } from "./invoices";
 import { addDays, todayLocal, toDbDate } from "../dates";
 import { db, type Tx } from "../db";
 import { enqueue, kickOutbox } from "../email/outbox";
@@ -33,7 +34,7 @@ export async function createQuote(user: Actor, input: { clientId: string; proper
   });
 }
 
-export async function updateQuote(user: Actor, quoteId: string, input: { title: string; message?: string; validUntil: string | null; discountCents: number; lines: QuoteLineInput[] }) {
+export async function updateQuote(user: Actor, quoteId: string, input: { title: string; message?: string; validUntil: string | null; discountCents: number; lines: QuoteLineInput[]; deposit?: { type: string; value: number; required: boolean } }) {
   await db.$transaction(async (tx) => {
     const q = await tx.quote.findFirstOrThrow({ where: { id: quoteId, businessId: user.businessId } });
     if (!quoteEditable(q.status)) throw new TransitionError("Only draft quotes (or ones the client asked to change) can be edited");
@@ -43,7 +44,10 @@ export async function updateQuote(user: Actor, quoteId: string, input: { title: 
     const subtotal = rows.filter((l) => !l.isOptional || l.isSelected).reduce((a, l) => a + l.totalCents, 0);
     await tx.quote.update({
       where: { id: quoteId },
-      data: { title: input.title, message: input.message || null, validUntil: input.validUntil ? toDbDate(input.validUntil) : null, discountCents: input.discountCents, subtotalCents: subtotal, totalCents: quoteTotal(rows, input.discountCents) },
+      data: {
+        title: input.title, message: input.message || null, validUntil: input.validUntil ? toDbDate(input.validUntil) : null, discountCents: input.discountCents, subtotalCents: subtotal, totalCents: quoteTotal(rows, input.discountCents),
+        ...(input.deposit ? { depositType: ["PERCENT", "FIXED"].includes(input.deposit.type) ? input.deposit.type : "NONE", depositValue: Math.max(0, Math.round(input.deposit.value)), depositRequired: input.deposit.required } : {}),
+      },
     });
   });
 }
@@ -81,6 +85,7 @@ export async function approveQuote(quoteId: string, input: { name: string; selec
     const total = quoteTotal(lines, q.discountCents);
     await tx.quote.update({ where: { id: quoteId }, data: { status: "APPROVED", approvedAt: new Date(), approvedByName: input.name, approvedIp: input.ip, totalCents: total, subtotalCents: total + q.discountCents } });
     await logActivity(tx, { businessId: q.businessId, type: "quote.approved", entityType: "Quote", entityId: quoteId, actorType: "CLIENT", actorClientId: q.clientId, clientId: q.clientId, data: { name: input.name } });
+    await createDepositInvoice(tx, quoteId);
     await notifyOwners(tx, q.businessId, `Quote #${q.number} approved`, `${input.name} approved "${q.title}". Convert it to a job and book a date.`, `/quotes/${quoteId}`, `quote:${quoteId}:approved`);
     await enqueue(tx, {
       businessId: q.businessId, template: "quote.approved", to: q.client.email, replyTo: env.helpEmail, priority: 3, props: { quoteId },
@@ -106,6 +111,7 @@ export async function markQuoteApproved(user: Actor, quoteId: string) {
     const q = await tx.quote.findFirstOrThrow({ where: { id: quoteId, businessId: user.businessId } });
     assertQuoteTransition(q.status, "APPROVED");
     await tx.quote.update({ where: { id: quoteId }, data: { status: "APPROVED", approvedAt: new Date(), approvedByName: "Approved by phone/in person" } });
+    await createDepositInvoice(tx, quoteId);
     await logActivity(tx, { businessId: user.businessId, type: "quote.approved", entityType: "Quote", entityId: quoteId, actorType: "USER", actorUserId: user.id, clientId: q.clientId });
   });
 }

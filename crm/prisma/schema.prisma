@@ -488,6 +488,9 @@ model Quote {
   taxCents             Int         @default(0)
   totalCents           Int         @default(0)
   validUntil           DateTime?   @db.Date
+  depositType          String      @default("NONE") // NONE | PERCENT | FIXED
+  depositValue         Int         @default(0) // percent (0-100) or cents
+  depositRequired      Boolean     @default(false) // shown as required before booking
   sentAt               DateTime?
   firstViewedAt        DateTime?
   approvedAt           DateTime?
@@ -723,6 +726,10 @@ model Invoice {
 
   @@unique([businessId, number])
   @@unique([businessId, etransferRef])
+  kind               InvoiceKind @default(STANDARD)
+  quoteId            String? // deposit invoices: the quote they're for
+  appliedToInvoiceId String? // deposit invoices: the job invoice that used this deposit up
+  allowPartial       Boolean     @default(false) // client may pay part of the balance online
 }
 
 model InvoiceLineItem {
@@ -1139,4 +1146,9 @@ model Signature {
   @@index([quoteId])
   @@index([visitId])
   @@index([invoiceId])
+}
+
+enum InvoiceKind {
+  STANDARD
+  DEPOSIT
 }

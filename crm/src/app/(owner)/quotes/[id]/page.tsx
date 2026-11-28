@@ -1,3 +1,4 @@
+import { depositCents } from "@/server/billing/invoice";
 import { SignatureCard } from "@/components/signatures";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -25,6 +26,7 @@ export default async function QuotePage({ params, searchParams }: PageProps<"/qu
     db.attachment.findMany({ where: { businessId: bid, deletedAt: null, OR: [{ quoteId: id }, ...(q.requestId ? [{ requestId: q.requestId }] : [])] }, orderBy: { createdAt: "asc" } }),
   ]);
   const editable = quoteEditable(q.status);
+  const deposit = await db.invoice.findFirst({ where: { kind: "DEPOSIT", quoteId: q.id } });
   const here = `/quotes/${id}`;
   const hidden = <><input type="hidden" name="id" value={q.id} /><input type="hidden" name="back" value={here} /></>;
   const expired = quoteExpired({ status: q.status, validUntil: dateOnly(q.validUntil) }, todayLocal());
@@ -67,6 +69,13 @@ export default async function QuotePage({ params, searchParams }: PageProps<"/qu
                 <div className="grid gap-3 sm:grid-cols-2">
                   <Field label="Discount ($)"><Input name="discount" type="number" step="0.01" min="0" defaultValue={q.discountCents / 100 || ""} /></Field>
                   <Field label="Good until"><Input name="validUntil" type="date" defaultValue={dateOnly(q.validUntil) ?? ""} /></Field>
+                  <Field label="Deposit">
+                    <span className="flex gap-2">
+                      <select name="depositType" defaultValue={q.depositType} className="min-h-10 rounded-lg border border-line bg-white px-2 text-sm"><option value="NONE">None</option><option value="PERCENT">% of total</option><option value="FIXED">$ amount</option></select>
+                      <Input name="depositValue" type="number" step="0.01" min="0" defaultValue={q.depositType === "FIXED" ? q.depositValue / 100 : q.depositValue || ""} className="w-28" />
+                    </span>
+                  </Field>
+                  <label className="flex items-center gap-2 self-end pb-2 text-sm"><input type="checkbox" name="depositRequired" defaultChecked={q.depositRequired} className="size-4" />Deposit required to book</label>
                 </div>
                 <Field label="Message to the client"><Textarea name="message" rows={3} defaultValue={q.message ?? ""} /></Field>
                 <div className="flex flex-wrap gap-2">
@@ -97,6 +106,8 @@ export default async function QuotePage({ params, searchParams }: PageProps<"/qu
           )}
           {photos.length > 0 && <Card title="Photos"><Gallery photos={photos} back={here} /></Card>}
           <Card title="Details">
+            {deposit && <p className="mb-2 rounded-lg bg-tint p-3 text-sm">Deposit {money(depositCents(q.totalCents, q.depositType, q.depositValue))}{q.depositRequired && " (required)"}: {deposit.status === "PAID" ? <span className="font-semibold text-emerald-700">paid</span> : <><Link href={`/invoices/${deposit.id}`} className="font-semibold text-blue">invoice #{deposit.number}</Link> · <Link href={`/clients/${q.clientId}/collect?invoice=${deposit.id}`} className="font-semibold text-blue">record deposit</Link></>}{deposit.appliedToInvoiceId && " · applied to the job invoice"}</p>}
+            {!deposit && q.depositType !== "NONE" && <p className="mb-2 text-sm text-ink-soft">Deposit {money(depositCents(q.totalCents, q.depositType, q.depositValue))}{q.depositRequired && " (required)"}: invoiced when the client approves.</p>}
             <Dl rows={[["Sent", q.sentAt ? prettyDateTime(q.sentAt) : "Not yet"], ["Good until", prettyDate(dateOnly(q.validUntil))], ["Approved", q.approvedAt ? `${prettyDateTime(q.approvedAt)} by ${q.approvedByName}` : null]]} />
             {q.status !== "CONVERTED" && q.status !== "ARCHIVED" && <form action={quoteArchive} className="mt-3">{hidden}<Button variant="secondary">Archive</Button></form>}
           </Card>

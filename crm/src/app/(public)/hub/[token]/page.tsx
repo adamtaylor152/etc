@@ -31,6 +31,7 @@ export default async function Hub({ params, searchParams }: PageProps<"/hub/[tok
     db.invoice.findMany({ where: { clientId: c.id, status: { in: ["AWAITING_PAYMENT", "PAID"] } }, orderBy: { number: "desc" } }),
     db.job.findMany({ where: { clientId: c.id, kind: "SNOW_PLAN", closedAt: null }, include: { property: true, season: true } }),
   ]);
+  const payments = await db.payment.findMany({ where: { clientId: c.id }, include: { invoice: { select: { number: true } } }, orderBy: { receivedAt: "desc" }, take: 20 });
   // Fresh scoped links for each quote / invoice / visit report.
   const link = async (purpose: "QUOTE" | "INVOICE" | "VISIT_REPORT", ref: Record<string, string>) => mintToken(db, c.businessId, purpose, { clientId: c.id, ...ref });
   const upcoming = visits.filter((v) => v.state !== "COMPLETED" && v.state !== "SKIPPED").reverse();
@@ -50,6 +51,11 @@ export default async function Hub({ params, searchParams }: PageProps<"/hub/[tok
       {sp.error && <p className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">{String(sp.error)}</p>}
       <h1 className="font-display text-3xl font-bold">Hi {c.firstName}!</h1>
       {owing > 0 && <Card className="border-blue/30"><p className="font-semibold">{money(owing)} owing. Pay from an invoice below.</p></Card>}
+      <Card title="Payment history" actions={<a href={`/hub/${token}/statement`} className="text-sm font-semibold text-blue">Statement</a>}>
+        {payments.length ? (
+          <ul className="divide-y divide-line text-sm">{payments.map((p) => <li key={p.id} className="flex justify-between py-2"><span>{p.receivedAt.toLocaleDateString("en-CA", { timeZone: "America/Edmonton", month: "short", day: "numeric", year: "numeric" })} · {p.method === "ETRANSFER" ? "e-Transfer" : p.method.charAt(0) + p.method.slice(1).toLowerCase()} · invoice #{p.invoice.number}</span><span className="font-semibold">{money(p.amountCents - p.refundedCents)}</span></li>)}</ul>
+        ) : <p className="text-sm text-ink-soft">No payments yet.</p>}
+      </Card>
 
       {sp.texts && <p className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 font-medium text-emerald-800">Text updates {sp.texts === "on" ? "turned on" : "turned off"}.</p>}
       {sp.renewed && <p className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 font-medium text-emerald-800">You&apos;re renewed. See you after the next snowfall!</p>}
