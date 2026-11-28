@@ -87,7 +87,7 @@ export async function quoteConvert(f: FormData) {
   let jobId = "";
   await guard(f, `/quotes/${id}`, async () => {
     const date = s(f, "date");
-    const job = await convertQuote(user, id, { date: /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : null, billingType: s(f, "billingType") === "FIXED_PRICE" ? "FIXED_PRICE" : "PER_VISIT" });
+    const job = await convertQuote(user, id, { date: /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : null, billingType: s(f, "billingType") === "FIXED_PRICE" ? "FIXED_PRICE" : "PER_VISIT", skipDeposit: f.get("skipDeposit") === "on" });
     jobId = job.id;
   });
   revalidatePath("/", "layout");
