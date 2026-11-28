@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { saveSignature } from "@/server/ops/signatures";
 import { TransitionError } from "@/server/status/visit";
 import { db } from "@/server/db";
+import { cardsOffered, customerFor } from "@/server/ops/autopay";
 import { checkoutForInvoice, stripeEnabled } from "@/server/stripe";
 import { peekToken } from "@/server/tokens";
 
@@ -24,7 +25,11 @@ export async function payByCard(f: FormData) {
   const back = q?.ok && inv.quoteId && q.token.quoteId === inv.quoteId ? `/q/${qt}` : `/i/${token}`;
   let url: string | null = null;
   try {
-    const s = await checkoutForInvoice({ id: inv.id, businessId: inv.businessId, number: inv.number, balanceCents: balance, email: inv.client.email }, back);
+    // "Save this card" / "charge it automatically" (the client's own tick boxes): Checkout keeps the card on their Stripe Customer.
+    const autoPay = f.get("autopay") === "on";
+    const keep = (autoPay || f.get("save") === "on") && !inv.client.cardPaymentMethodId && (await cardsOffered(inv.businessId));
+    const save = keep ? { customerId: await customerFor(inv.client), clientId: inv.clientId, autoPay } : undefined;
+    const s = await checkoutForInvoice({ id: inv.id, businessId: inv.businessId, number: inv.number, balanceCents: balance, email: inv.client.email }, back, save);
     await db.invoice.update({ where: { id: inv.id }, data: { stripeCheckoutSessionId: s.id } });
     url = s.url;
   } catch (e) {

@@ -50,7 +50,8 @@ export async function saveAutomations(f: FormData) {
   // The on/off settings and the follow-up days live on this form; other numbers (review delay, referral amounts) keep their values.
   const toggles = Object.fromEntries(Object.keys(SETTING_LABELS).map((k) => [k, f.get(k) === "on"]));
   const days = Object.fromEntries(Object.values(SETTING_DAYS).filter((k) => s(f, k)).map((k) => [k, s(f, k)]));
-  const parsed = SettingsSchema.safeParse({ ...(biz.settings as object), ...toggles, ...days });
+  const grace = z.coerce.number().int().min(0).max(14).safeParse(s(f, "autoPayGraceDays") || undefined);
+  const parsed = SettingsSchema.safeParse({ ...(biz.settings as object), ...toggles, ...days, ...(grace.success ? { autoPayGraceDays: grace.data } : {}) });
   if (!parsed.success) redirect(`/settings?error=${encodeURIComponent("Follow-up days must be a whole number from 1 to 60")}`);
   const next = parsed.data;
   await db.business.update({ where: { id: biz.id }, data: { settings: next as Prisma.InputJsonValue } });

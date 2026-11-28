@@ -3,7 +3,8 @@
 import type { ReactElement } from "react";
 import { BookingConfirmation, OwnerNewBooking, type BookingEmailProps } from "@/emails/booking";
 import { OwnerLogin } from "@/emails/login";
-import { InvoiceSent, OwnerPaymentReceived, PaymentReceipt, type InvoiceEmailData } from "@/emails/invoice";
+import { AutoPayFailed, InvoiceSent, OwnerPaymentReceived, PaymentReceipt, type InvoiceEmailData } from "@/emails/invoice";
+import { autoPayPending, cardLabel, declineText } from "../billing/autopay";
 import { HubLink, OwnerNotice, PlanRenewal, PriceChange, QuoteApproved, QuoteSent, type QuoteEmailData } from "@/emails/quote";
 import { DailyDigest, ReviewRequest, VisitScheduled } from "@/emails/schedule";
 import { OnMyWay, OwnerSnowAlert, StormHeadsUp } from "@/emails/snow";
@@ -112,8 +113,20 @@ async function invoiceData(invoiceId: string, businessId: string): Promise<Invoi
     taxNote: biz.taxRegistered ? (t.taxIncluded ? `Includes ${biz.taxName} of ${money(inv.taxCents)}` : `${biz.taxName} ${money(inv.taxCents)} included in total`) + (biz.taxNumber ? ` · ${biz.taxName} #${biz.taxNumber}` : "") : null,
     payUrl: `${env.appUrl}/i/${raw}`, etransferEmail: biz.etransferEmail || env.etransferEmail, etransferRef: inv.etransferRef,
     cardEnabled: stripeEnabled(), site: env.siteUrl, phone: env.phone,
+    autoPay: inv.status === "AWAITING_PAYMENT" && autoPayPending(inv.autoPayState) && inv.autoPayOn && inv.client.cardLast4
+      ? { card: cardLabel(inv.client, " ending ")!, on: prettyDate(dateOnly(inv.autoPayOn)), retry: inv.autoPayState === "RETRYING" } : null,
   };
 }
+
+const autoPayFailed: Template<{ invoiceId: string; card: string; code: string; retryOn: string | null; needsAction: boolean }> = {
+  subject: (p) => (p.needsAction ? "Please approve your etc. payment" : "We couldn't charge your card for your etc. invoice"),
+  async render(p, ctx) {
+    const d = await invoiceData(p.invoiceId, ctx.businessId);
+    const inv = await db.invoice.findUniqueOrThrow({ where: { id: p.invoiceId }, select: { clientId: true } });
+    const hub = await mintToken(db, ctx.businessId, "CLIENT_HUB", { clientId: inv.clientId });
+    return <AutoPayFailed d={d} card={p.card.replace(" •••• ", " ending ")} why={declineText(p.code)} retryOn={p.retryOn ? prettyDate(p.retryOn) : null} needsAction={p.needsAction} hubUrl={`${env.appUrl}/hub/${hub}`} />;
+  },
+};
 
 const invoiceSent: Template<{ invoiceId: string }> = {
   subject: () => "Your invoice from etc.",
@@ -310,6 +323,7 @@ export const templates = {
   "photo_upload.request": photoUploadRequest,
   "invoice.sent": invoiceSent,
   "invoice.reminder": invoiceReminder,
+  "autopay.failed": autoPayFailed,
   "payment.receipt": paymentReceipt,
   "owner.payment_received": ownerPaymentReceived,
   "visit.on_my_way": visitOnMyWay,

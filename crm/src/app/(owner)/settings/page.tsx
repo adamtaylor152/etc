@@ -63,6 +63,9 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
                 </div>
               );
             })}
+            <Field label="Auto-pay: days between the invoice email and the charge" hint={stripeEnabled() ? "Time for the client to object. 0 = charged the same day. Never before the invoice is due." : "Needs card payments (Stripe) turned on."}>
+              <Input name="autoPayGraceDays" type="number" min={0} max={14} defaultValue={settings.autoPayGraceDays} className="max-w-24" />
+            </Field>
             <Button>Save automations</Button>
           </form>
         </Card>

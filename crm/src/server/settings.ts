@@ -31,6 +31,8 @@ export const SettingsSchema = z.object({
     from: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/), to: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
   }).refine((w) => w.from < w.to, "A window has to end after it starts")).min(1).max(6).default(WINDOWS),
   smsUpdates: z.boolean().default(true),            // texts (on my way, all done, storm day) to clients who opted in; needs Telnyx keys
+  autoPay: z.boolean().default(false),              // clients may save a card and opt in to automatic charges; needs Stripe keys
+  autoPayGraceDays: z.coerce.number().int().min(0).max(14).default(2), // days between the invoice email and the charge (0 = same day)
 });
 export type Settings = z.infer<typeof SettingsSchema>;
 
@@ -61,4 +63,5 @@ export const SETTING_LABELS: Record<ToggleKey, [string, string]> = {
   reminderMorningOf: ["Morning-of reminder", "A second reminder at 7 am on the day of the visit."],
   assignmentAlerts: ["Assignment alerts to the team", "Emails the person you assign or move work for (and texts them, if their team record has a phone): what, where, when and a link to their route. Never prices."],
   smsUpdates: ["Text updates", "Texts “on the way”, “all done” (with photos link) and storm days to clients who said yes to texts. Needs Telnyx keys."],
+  autoPay: ["Saved cards & auto-pay", "Clients can save a card on their page and choose to have invoices charged to it automatically. A failed charge emails them and is retried after 3 and 7 days. Needs Stripe keys."],
 };

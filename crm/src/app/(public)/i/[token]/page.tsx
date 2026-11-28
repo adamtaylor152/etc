@@ -1,5 +1,6 @@
 /* eslint-disable @next/next/no-img-element -- private photos/signatures via signed URLs, not optimizable */
 // Client invoice page: view, pay by card (Stripe Checkout), e-Transfer instructions, print / save as PDF.
+import { stripeEnabled } from "@/server/stripe";
 import { InvoicePay } from "@/components/invoice-pay";
 import { Card } from "@/components/ui";
 import { InvoiceBadge } from "@/components/status";
@@ -14,6 +15,8 @@ import { prettyDateTime } from "@/server/dates";
 import { signedMediaPath } from "@/server/media";
 import { SignaturePad } from "@/components/signature-pad";
 import { STATEMENTS } from "@/server/ops/signatures";
+import { autoPayPending, cardLabel } from "@/server/billing/autopay";
+import { parseSettings } from "@/server/settings";
 import { clientSignInvoice } from "./actions";
 
 export const metadata = { title: { absolute: "Your invoice · etc." } };
@@ -32,6 +35,7 @@ export default async function PublicInvoice({ params, searchParams }: PageProps<
   const view = invoiceView({ ...inv, dueOn: dateOnly(inv.dueOn) }, todayLocal());
   const balance = Math.max(0, inv.totalCents - inv.amountPaidCents);
   const etransfer = biz.etransferEmail || env.etransferEmail;
+  const cards = stripeEnabled() && parseSettings(biz.settings).autoPay, card = cardLabel(inv.client);
   const sig = await db.signature.findFirst({ where: { invoiceId: inv.id }, orderBy: { signedAt: "desc" } });
   return (
     <div className="space-y-4">
@@ -68,7 +72,14 @@ export default async function PublicInvoice({ params, searchParams }: PageProps<
         </p>
       </Card>
       {balance > 0 && inv.status === "AWAITING_PAYMENT" ? (
-        <InvoicePay token={token} balanceCents={balance} allowPartial={inv.allowPartial} etransfer={etransfer} etransferRef={inv.etransferRef} />
+        <>
+        <div className="no-print mb-3">
+          {autoPayPending(inv.autoPayState) && inv.autoPayOn && card && (
+            <Card className="border-blue/30"><p className="text-sm"><b>{inv.autoPayState === "RETRYING" ? `The last charge to your ${card} didn't go through. We'll try again on` : `We'll charge your ${card} on`} {prettyDate(dateOnly(inv.autoPayOn))}.</b> {inv.autoPayState === "SCHEDULED" && "There's nothing you need to do. "}If you&apos;d rather pay another way, do it below before then and the card isn&apos;t charged.</p></Card>
+          )}
+        </div>
+        <InvoicePay token={token} balanceCents={balance} allowPartial={inv.allowPartial} etransfer={etransfer} etransferRef={inv.etransferRef} offerSave={!!cards && !card} />
+        </>
       ) : inv.status === "PAID" ? (
         <Card className="border-emerald-200 bg-emerald-50"><p className="font-semibold text-emerald-800">Paid in full. Thank you!</p></Card>
       ) : null}

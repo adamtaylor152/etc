@@ -14,6 +14,8 @@ import { forecast, snowByDay } from "./forecast";
 import { generateRecurringVisits } from "./ops/jobs";
 import { billingEmailFor, invoiceSeasonalInstalments, invoiceUnbilled } from "./ops/invoices";
 import { parseSettings } from "./settings";
+import { autoPayPending } from "./billing/autopay";
+import { runAutoPay } from "./ops/autopay";
 import { followUpDue } from "./status/quote";
 import { plansTriggered } from "./snow/select";
 import { enqueue, enqueueSms, processOutbox } from "./email/outbox";
@@ -56,6 +58,7 @@ async function hourly() {
   for (const b of await db.business.findMany({ select: { id: true } })) await generateRecurringVisits(b.id);
   if (hour === 7) await monthlyInvoices();
   if (hour >= 7 && hour < 20) await invoiceSeasonalInstalments(); // due instalments of seasonal snow plans; emails the client
+  if (hour >= 8 && hour < 20) await runAutoPay().catch((e) => console.error("auto-pay run failed", e)); // saved cards: charge due invoices, retry failed ones
   if (hour >= 6 && hour < 22) await visitReminders(hour);
   if (hour >= 10 && hour < 18) await reviewRequests();
   if (hour === 6) await dailyDigest();
@@ -191,6 +194,7 @@ async function invoiceReminders() {
   for (const inv of due) {
     const n = reminderDue({ status: inv.status, dueOn: dateOnly(inv.dueOn), remindersSent: inv.remindersSent }, today);
     if (!n || inv.client.emailBouncedAt) continue;
+    if (autoPayPending(inv.autoPayState)) continue; // the card will be charged (or retried): its own emails cover this
     await db.$transaction(async (tx) => {
       await enqueue(tx, {
         businessId: inv.businessId, template: "invoice.reminder", to: await billingEmailFor(tx, inv.client), replyTo: env.helpEmail, priority: 6,
