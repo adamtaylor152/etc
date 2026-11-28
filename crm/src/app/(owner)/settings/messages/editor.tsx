@@ -3,6 +3,7 @@
 // same pure functions the server uses when it sends.
 import { useActionState, useState } from "react";
 import { ConfirmButton } from "@/components/confirm-button";
+import { primaryWhenOpen } from "@/components/settings/fields";
 import { Button, Field, Input, Textarea, btn } from "@/components/ui";
 import { allowedVars, fill, SMS_META, unknownVars, VAR_HELP, withRequired, type SmsKey, type Wording } from "@/server/email/wording";
 import { segments } from "@/server/segments";
@@ -54,7 +55,7 @@ export function EmailEditor({ k, saved, defaultSubject, hasClosing, me }: { k: s
         <Vars k={k} />
       </div>
       <div className="flex flex-wrap gap-2">
-        <Button>Save wording</Button>
+        <Button variant="secondary" className={primaryWhenOpen}>Save wording</Button>
         <Button variant="secondary" formAction={previewAction} disabled={busy}>{busy ? "Loading…" : "Preview"}</Button>
         <Button variant="secondary" formAction={sendAction} disabled={sending} title={`Emails this version to ${me}`}>Send me a test</Button>
         {saved && <ConfirmButton formAction={resetWording} message="Go back to the standard wording for this email?" className={btn("danger")}>Reset to default</ConfirmButton>}
@@ -100,7 +101,7 @@ export function SmsEditor({ k, saved }: { k: SmsKey; saved: string | null }) {
         <Vars k={k} />
       </div>
       <div className="flex flex-wrap gap-2">
-        <Button>Save wording</Button>
+        <Button variant="secondary" className={primaryWhenOpen}>Save wording</Button>
         {saved && <ConfirmButton formAction={resetWording} message="Go back to the standard wording for this text?" className={btn("danger")}>Reset to default</ConfirmButton>}
       </div>
     </form>

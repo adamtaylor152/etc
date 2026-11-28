@@ -1,6 +1,7 @@
 // Billing run: everything done but not yet invoiced -> drafts -> review -> send the ticked ones.
 import { requireOwner } from "@/server/auth";
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { TriangleAlert } from "lucide-react";
 import { Amount } from "@/components/billing/money";
 import { StepDot, Steps } from "@/components/billing/steps";
@@ -40,6 +41,15 @@ export default async function Billing({ searchParams }: PageProps<"/billing">) {
   const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
   // The run goes in order: while work is still unbilled, making drafts is the next step; after that, sending is.
   const step1 = waiting ? "now" : "done", step2 = drafts.length ? (waiting ? "later" : "now") : "later";
+  // Long lists show the first rows; the rest sit in a closed <details>, still in the page, so "Create drafts for
+  // everyone" and "Send ticked invoices" keep acting on every row, not only the visible ones.
+  const CAP = 15;
+  const rest = (n: number, label: string, children: ReactNode) => (
+    <details className="group/more mt-3 border-t border-line-soft pt-1">
+      <summary className="inline-flex min-h-9 items-center text-sm font-semibold text-blue hover:text-blue-deep"><span className="group-open/more:hidden">Show all {n} {label}</span><span className="hidden group-open/more:inline">Show fewer</span></summary>
+      {children}
+    </details>
+  );
   const troubleRow = (i: (typeof trouble)[number]) => {
     const stopped = i.autoPayState !== "RETRYING" && i.autoPayState !== "NEEDS_ACTION";
     return (
@@ -57,6 +67,45 @@ export default async function Billing({ searchParams }: PageProps<"/billing">) {
       </li>
     );
   };
+  const clients = [...byClient.entries()];
+  const clientRow = ([clientId, list]: (typeof clients)[number]) => (
+    <li key={clientId} className="flex flex-wrap items-center gap-x-4 gap-y-2 py-3 last:pb-0">
+      <div className="min-w-0 flex-1 basis-64">
+        <div className="flex items-baseline justify-between gap-3">
+          <Link className="font-semibold text-blue hover:text-blue-deep" href={`/clients/${clientId}`}>{clientName(list[0].visit.job.client)}</Link>
+          <Amount cents={list.reduce((a, c) => a + c.totalCents, 0)} className="font-semibold" />
+        </div>
+        <ul className="mt-0.5 space-y-0.5 text-sm text-ink-soft">
+          {list.map((c) => (
+            <li key={c.id} className="flex items-baseline justify-between gap-3">
+              <span className="min-w-0"><span className="tabular-nums">{prettyDate(dateOnly(c.visit.scheduledDate))}</span> · {c.name}{c.visit.snowEvent ? ` (${c.visit.snowEvent.name})` : ""}</span>
+              {list.length > 1 && <Amount cents={c.totalCents} />}
+            </li>
+          ))}
+        </ul>
+      </div>
+      <form action={invoiceCreate}><input type="hidden" name="clientId" value={clientId} /><input type="hidden" name="back" value="/billing" /><Button variant="secondary" className="min-h-9 px-3" aria-label={`Create draft for ${clientName(list[0].visit.job.client)}`}>Create draft</Button></form>
+    </li>
+  );
+  const fixedRow = (j: (typeof fixedDone)[number]) => (
+    <li key={j.id}>
+      <form action={invoiceCreate} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 py-2 text-sm">
+        <input type="hidden" name="jobId" value={j.id} /><input type="hidden" name="fixed" value="1" /><input type="hidden" name="back" value="/billing" />
+        <span className="min-w-0 flex-1 basis-48"><span className="font-medium"><span className="tabular-nums">#{j.number}</span> {j.title}</span><span className="block text-xs text-ink-soft">{clientName(j.client)}</span></span>
+        <Amount cents={j.totalCents ?? 0} className="font-medium" />
+        <Button variant="secondary" className="min-h-9 px-3">Create draft</Button>
+      </form>
+    </li>
+  );
+  const draftRow = (d: (typeof drafts)[number]) => (
+    <li key={d.id} className="flex items-center gap-3">
+      <label className="-my-px flex min-h-11 w-8 shrink-0 items-center justify-center"><input type="checkbox" name="id" value={d.id} defaultChecked aria-label={`Send invoice #${d.number} to ${clientName(d.client)}`} className="size-5" /></label>
+      <Link href={`/invoices/${d.id}`} className="group flex min-w-0 flex-1 items-baseline justify-between gap-3 py-2.5">
+        <span className="min-w-0"><span className="font-semibold group-hover:text-blue-deep"><span className="tabular-nums">#{d.number}</span> {clientName(d.client)}</span>{d.subject && <span className="block truncate text-sm text-ink-soft">{d.subject}</span>}</span>
+        <Amount cents={d.totalCents} className="font-medium" />
+      </Link>
+    </li>
+  );
   return (
     <>
       <Flash error={sp.error} />
@@ -92,44 +141,15 @@ export default async function Billing({ searchParams }: PageProps<"/billing">) {
           {byClient.size ? (
             <>
               <p className="mb-1 flex items-baseline justify-between gap-3 border-b border-line pb-2 text-xs font-medium text-ink-soft"><span>{plural(byClient.size, "client")} with finished work</span><span>Total <Amount cents={unbilled} className="ml-1 text-sm font-semibold text-navy" /></span></p>
-              <ul className="divide-y divide-line-soft">
-                {[...byClient.entries()].map(([clientId, list]) => (
-                  <li key={clientId} className="flex flex-wrap items-center gap-x-4 gap-y-2 py-3 last:pb-0">
-                    <div className="min-w-0 flex-1 basis-64">
-                      <div className="flex items-baseline justify-between gap-3">
-                        <Link className="font-semibold text-blue hover:text-blue-deep" href={`/clients/${clientId}`}>{clientName(list[0].visit.job.client)}</Link>
-                        <Amount cents={list.reduce((a, c) => a + c.totalCents, 0)} className="font-semibold" />
-                      </div>
-                      <ul className="mt-0.5 space-y-0.5 text-sm text-ink-soft">
-                        {list.map((c) => (
-                          <li key={c.id} className="flex items-baseline justify-between gap-3">
-                            <span className="min-w-0"><span className="tabular-nums">{prettyDate(dateOnly(c.visit.scheduledDate))}</span> · {c.name}{c.visit.snowEvent ? ` (${c.visit.snowEvent.name})` : ""}</span>
-                            {list.length > 1 && <Amount cents={c.totalCents} />}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                    <form action={invoiceCreate}><input type="hidden" name="clientId" value={clientId} /><input type="hidden" name="back" value="/billing" /><Button variant="secondary" className="min-h-9 px-3" aria-label={`Create draft for ${clientName(list[0].visit.job.client)}`}>Create draft</Button></form>
-                  </li>
-                ))}
-              </ul>
+              <ul className="divide-y divide-line-soft">{clients.slice(0, CAP).map(clientRow)}</ul>
+              {clients.length > CAP && rest(clients.length, "clients", <ul className="divide-y divide-line-soft">{clients.slice(CAP).map(clientRow)}</ul>)}
             </>
           ) : <Empty action={<ButtonLink href="/schedule">Open the schedule</ButtonLink>}>Nothing waiting. Charges appear here when visits are marked done.</Empty>}
           {fixedDone.length > 0 && (
             <div className="mt-4 border-t border-line pt-3">
               <h3 className="mb-1 text-sm font-semibold">Fixed-price jobs ready to invoice</h3>
-              <ul className="divide-y divide-line-soft">
-                {fixedDone.map((j) => (
-                  <li key={j.id}>
-                    <form action={invoiceCreate} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 py-2 text-sm">
-                      <input type="hidden" name="jobId" value={j.id} /><input type="hidden" name="fixed" value="1" /><input type="hidden" name="back" value="/billing" />
-                      <span className="min-w-0 flex-1 basis-48"><span className="font-medium"><span className="tabular-nums">#{j.number}</span> {j.title}</span><span className="block text-xs text-ink-soft">{clientName(j.client)}</span></span>
-                      <Amount cents={j.totalCents ?? 0} className="font-medium" />
-                      <Button variant="secondary" className="min-h-9 px-3">Create draft</Button>
-                    </form>
-                  </li>
-                ))}
-              </ul>
+              <ul className="divide-y divide-line-soft">{fixedDone.slice(0, CAP).map(fixedRow)}</ul>
+              {fixedDone.length > CAP && rest(fixedDone.length, "fixed-price jobs", <ul className="divide-y divide-line-soft">{fixedDone.slice(CAP).map(fixedRow)}</ul>)}
             </div>
           )}
         </Card>
@@ -142,18 +162,9 @@ export default async function Billing({ searchParams }: PageProps<"/billing">) {
           {drafts.length ? (
             <form id="send-drafts" action={sendDrafts}>
               <input type="hidden" name="back" value="/billing" />
-              <p className="border-b border-line pb-2 text-xs text-ink-soft">Every draft is ticked. Untick any you want to hold back; open a draft to edit it first.</p>
-              <ul className="divide-y divide-line-soft">
-                {drafts.map((d) => (
-                  <li key={d.id} className="flex items-center gap-3">
-                    <label className="-my-px flex min-h-11 w-8 shrink-0 items-center justify-center"><input type="checkbox" name="id" value={d.id} defaultChecked aria-label={`Send invoice #${d.number} to ${clientName(d.client)}`} className="size-5" /></label>
-                    <Link href={`/invoices/${d.id}`} className="group flex min-w-0 flex-1 items-baseline justify-between gap-3 py-2.5">
-                      <span className="min-w-0"><span className="font-semibold group-hover:text-blue-deep"><span className="tabular-nums">#{d.number}</span> {clientName(d.client)}</span>{d.subject && <span className="block truncate text-sm text-ink-soft">{d.subject}</span>}</span>
-                      <Amount cents={d.totalCents} className="font-medium" />
-                    </Link>
-                  </li>
-                ))}
-              </ul>
+              <p className="border-b border-line pb-2 text-xs text-ink-soft">{drafts.length > CAP ? `All ${drafts.length} drafts are ticked, including the ones not shown.` : "Every draft is ticked."} Untick any you want to hold back; open a draft to edit it first.</p>
+              <ul className="divide-y divide-line-soft">{drafts.slice(0, CAP).map(draftRow)}</ul>
+              {drafts.length > CAP && rest(drafts.length, "drafts", <ul className="divide-y divide-line-soft">{drafts.slice(CAP).map(draftRow)}</ul>)}
               <div id="send" className="sticky bottom-16 -mx-4 -mb-4 mt-1 flex scroll-mt-20 flex-wrap items-center justify-between gap-3 rounded-b-xl border-t border-line bg-white px-4 py-3 sm:bottom-0 sm:-mx-5 sm:-mb-5 sm:px-5">
                 <span className="flex items-center gap-2 text-sm"><StepDot n={3} state={step2} /><span><span className="font-display text-[0.95rem] font-semibold">Send</span><span className="block text-xs text-ink-soft">Each ticked draft is emailed to its client.</span></span></span>
                 <Button variant={waiting && byClient.size > 0 ? "secondary" : "primary"}>Send ticked invoices</Button>

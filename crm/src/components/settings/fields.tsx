@@ -30,6 +30,14 @@ export function SwitchRow({ name, value, defaultChecked, disabled, label, descri
   );
 }
 
+/**
+ * For the Save button of an editor that lives in a row's `<details className="group">`: add to a secondary button and
+ * it is filled blue only while that row is open, so a list of collapsed rows doesn't carry a primary button each.
+ */
+export const primaryWhenOpen = "group-open:border-blue group-open:bg-blue group-open:text-white group-open:hover:border-blue-deep group-open:hover:bg-blue-deep";
+/** The quiet "Edit / Close" at the end of such a row. */
+export const rowToggle = "inline-flex shrink-0 items-center gap-1 text-sm font-medium text-ink-soft group-hover:text-navy group-open:text-navy";
+
 /** Inline flow, so a long sentence wraps mid-sentence around its controls instead of dropping whole chunks to new lines. */
 export const inlineRow = "block text-sm [&>input]:mx-1 [&>input]:my-1 [&>input]:align-middle [&>select]:mx-1 [&>select]:my-1 [&>select]:align-middle";
 

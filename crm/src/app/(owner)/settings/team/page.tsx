@@ -6,7 +6,7 @@ import { AddressField } from "@/components/address-field";
 import { ConfirmButton } from "@/components/confirm-button";
 import { DetailHeader } from "@/components/detail-header";
 import { Flash } from "@/components/flash";
-import { Saved } from "@/components/settings/fields";
+import { Saved, SwitchRow } from "@/components/settings/fields";
 import { Badge, Button, Card, Empty, Field, Input, inputCls } from "@/components/ui";
 import { mapsKey } from "@/server/clients";
 import { businessId, db } from "@/server/db";
@@ -66,7 +66,7 @@ export default async function Team({ searchParams }: PageProps<"/settings/team">
       <div className="sm:col-span-2 lg:col-span-3">{swatches(u?.color ?? COLORS[users.length % COLORS.length])}</div>
       <div className="sm:col-span-2 lg:col-span-3">{point("Route starts at", "start", u?.startAddress, u?.startLat)}</div>
       <div className="sm:col-span-2 lg:col-span-3">{point("Route ends at", "end", u?.endAddress, u?.endLat)}</div>
-      {u && <label className="flex min-h-11 items-center gap-2 text-sm font-medium sm:col-span-2 lg:col-span-6"><input type="checkbox" name="active" defaultChecked={u.active} className="size-5 shrink-0" />Active (can sign in and be assigned work)</label>}
+      {u && <div className="sm:col-span-2 lg:col-span-6"><SwitchRow name="active" defaultChecked={u.active} label="Active" description="Can sign in and be assigned work." /></div>}
       <div className="sm:col-span-2 lg:col-span-6"><Button>{u ? `Save ${personName(u)}` : "Add to the team"}</Button></div>
     </form>
   );
