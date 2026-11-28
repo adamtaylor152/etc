@@ -2,7 +2,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireOwner } from "@/server/auth";
-import { addExpense, addTime, deleteExpense, updateExpense, deleteTime, startTimer, stopTimer, updateTime } from "@/server/ops/costing";
+import { addExpense, addTime, approveTime, deleteExpense, deleteTime, startTimer, stopEntry, stopTimer, unapproveTime, updateExpense, updateTime } from "@/server/ops/costing";
 import { TransitionError } from "@/server/status/visit";
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? "");
@@ -27,6 +27,17 @@ export async function timeAdd(f: FormData) {
 }
 export async function timeUpdate(f: FormData) { const user = await requireOwner(); await run(f, () => updateTime(user, str(f, "id"), minutes(str(f, "hours")), str(f, "note"))); }
 export async function timeDelete(f: FormData) { const user = await requireOwner(); await run(f, () => deleteTime(user, str(f, "id"))); }
+export async function timeStop(f: FormData) { const user = await requireOwner(); await run(f, () => stopEntry(user, str(f, "id"))); }
+const day = (f: FormData, k: string) => { const d = str(f, k); if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) throw new TransitionError("Pick a date"); return d; };
+/** Approve one person's week (userId + from + to), or everyone's time up to a cutoff date (just `to`). */
+export async function timeApprove(f: FormData) {
+  const user = await requireOwner();
+  await run(f, async () => approveTime(user, { userId: str(f, "userId") || undefined, from: str(f, "from") ? day(f, "from") : undefined, to: day(f, "to") }));
+}
+export async function timeUnapprove(f: FormData) {
+  const user = await requireOwner();
+  await run(f, async () => unapproveTime(user, { userId: str(f, "userId"), from: day(f, "from"), to: day(f, "to") }));
+}
 export async function expenseAdd(f: FormData) {
   const user = await requireOwner();
   const file = f.get("receipt");

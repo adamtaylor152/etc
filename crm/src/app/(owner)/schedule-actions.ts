@@ -7,7 +7,7 @@ import { requireOwner } from "@/server/auth";
 import { addDays, fromLocalInput } from "@/server/dates";
 import { db } from "@/server/db";
 import { createTask, deleteTask, moveTask, REPEATS, setTaskDone, updateTask, type Repeat, type TaskInput } from "@/server/ops/tasks";
-import { rescheduleVisitTimed, setVisitAssignees } from "@/server/ops/visits";
+import { moveVisit, rescheduleVisitTimed, setVisitAssignees } from "@/server/ops/visits";
 import { TransitionError } from "@/server/status/visit";
 import { conflicts } from "@/server/availability";
 import { loadAvailability } from "@/server/schedule-data";
@@ -51,11 +51,7 @@ export async function assignPeople(f: FormData) {
   const kind = str(f, "kind"), id = str(f, "id");
   const ids = f.getAll("userId").map(String);
   if (kind === "visit") await setVisitAssignees(user, id, ids);
-  else {
-    await db.task.findFirstOrThrow({ where: { id, businessId: user.businessId } });
-    const ok = await db.user.findMany({ where: { id: { in: ids }, businessId: user.businessId }, select: { id: true } });
-    await db.$transaction([db.taskAssignee.deleteMany({ where: { taskId: id } }), db.taskAssignee.createMany({ data: ok.map((u) => ({ taskId: id, userId: u.id })) })]);
-  }
+  else await moveTask(user, id, null, ids);
   revalidatePath("/schedule");
   revalidatePath("/");
   const back = str(f, "back");
@@ -117,14 +113,11 @@ export async function teamMove(kind: "visit" | "task" | "event", id: string, use
   if (kind === "visit") {
     const v = await db.visit.findFirstOrThrow({ where: { id, businessId: user.businessId } });
     const t = hhmm(v.anytime ? null : v.startAt), e = hhmm(v.anytime ? null : v.endAt);
-    await rescheduleVisitTimed(user, id, { date, startAt: t ? fromLocalInput(`${date}T${t}`) : null, endAt: e ? fromLocalInput(`${date}T${e}`) : null });
-    await setVisitAssignees(user, id, ids);
+    await moveVisit(user, id, { date, startAt: t ? fromLocalInput(`${date}T${t}`) : null, endAt: e ? fromLocalInput(`${date}T${e}`) : null }, ids);
   } else {
     const t0 = await db.task.findFirstOrThrow({ where: { id, businessId: user.businessId } });
     const t = hhmm(t0.allDay ? null : t0.startAt), e = hhmm(t0.allDay ? null : t0.endAt);
-    await moveTask(user, id, { date, allDay: !t, startAt: t ? fromLocalInput(`${date}T${t}`) : null, endAt: e ? fromLocalInput(`${date}T${e}`) : null });
-    const ok = await db.user.findMany({ where: { id: { in: ids }, businessId: user.businessId }, select: { id: true } });
-    await db.$transaction([db.taskAssignee.deleteMany({ where: { taskId: id } }), db.taskAssignee.createMany({ data: ok.map((u) => ({ taskId: id, userId: u.id })) })]);
+    await moveTask(user, id, { date, allDay: !t, startAt: t ? fromLocalInput(`${date}T${t}`) : null, endAt: e ? fromLocalInput(`${date}T${e}`) : null }, ids);
   }
   revalidatePath("/schedule", "layout");
   const av = await loadAvailability(user.businessId, date, date);
@@ -139,8 +132,7 @@ export async function bookSlot(f: FormData) {
   const start = Number(str(f, "start")), dur = Number(str(f, "duration")) || 60;
   const t = (m: number) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
   const id = str(f, "visitId");
-  await rescheduleVisitTimed(user, id, { date, startAt: fromLocalInput(`${date}T${t(start)}`), endAt: fromLocalInput(`${date}T${t(start + dur)}`) });
-  await setVisitAssignees(user, id, [str(f, "userId")]);
+  await moveVisit(user, id, { date, startAt: fromLocalInput(`${date}T${t(start)}`), endAt: fromLocalInput(`${date}T${t(start + dur)}`) }, [str(f, "userId")]);
   revalidatePath("/schedule", "layout");
   redirect(`/visits/${id}`);
 }
@@ -151,29 +143,21 @@ export async function bulkSchedule(f: FormData) {
   const items = f.getAll("item").map(String).map((x) => x.split(":") as ["visit" | "task", string]);
   const moveTo = str(f, "moveTo"), shift = Number(str(f, "shift")) || 0, assign = str(f, "assign"), notify = f.get("notify") === "on";
   const target = (d: string) => (moveTo && /^\d{4}-\d{2}-\d{2}$/.test(moveTo) ? moveTo : shift ? addDays(d, shift) : d);
+  const who = assign === "keep" ? null : assign === "none" ? [] : [assign]; // null = leave people as they are
   let n = 0;
   for (const [kind, id] of items) {
     if (kind === "visit") {
       const v = await db.visit.findFirst({ where: { id, businessId: user.businessId, state: "SCHEDULED", snowEventId: null } });
       if (!v || !v.scheduledDate) continue;
       const from = v.scheduledDate.toISOString().slice(0, 10), date = target(from);
-      if (date !== from) {
-        const t = hhmm(v.anytime ? null : v.startAt), e = hhmm(v.anytime ? null : v.endAt);
-        await rescheduleVisitTimed(user, id, { date, startAt: t ? fromLocalInput(`${date}T${t}`) : null, endAt: e ? fromLocalInput(`${date}T${e}`) : null }, { notify });
-      }
-      if (assign !== "keep") await setVisitAssignees(user, id, assign === "none" ? [] : [assign]);
+      const t = hhmm(v.anytime ? null : v.startAt), e = hhmm(v.anytime ? null : v.endAt);
+      await moveVisit(user, id, date !== from ? { date, startAt: t ? fromLocalInput(`${date}T${t}`) : null, endAt: e ? fromLocalInput(`${date}T${e}`) : null } : null, who, { notify });
     } else {
       const t0 = await db.task.findFirst({ where: { id, businessId: user.businessId } });
       if (!t0 || !t0.date) continue;
       const from = t0.date.toISOString().slice(0, 10), date = target(from);
-      if (date !== from) {
-        const t = hhmm(t0.allDay ? null : t0.startAt), e = hhmm(t0.allDay ? null : t0.endAt);
-        await moveTask(user, id, { date, allDay: !t, startAt: t ? fromLocalInput(`${date}T${t}`) : null, endAt: e ? fromLocalInput(`${date}T${e}`) : null });
-      }
-      if (assign !== "keep") {
-        const ok = assign === "none" ? [] : await db.user.findMany({ where: { id: assign, businessId: user.businessId }, select: { id: true } });
-        await db.$transaction([db.taskAssignee.deleteMany({ where: { taskId: id } }), db.taskAssignee.createMany({ data: ok.map((u) => ({ taskId: id, userId: u.id })) })]);
-      }
+      const t = hhmm(t0.allDay ? null : t0.startAt), e = hhmm(t0.allDay ? null : t0.endAt);
+      await moveTask(user, id, date !== from ? { date, allDay: !t, startAt: t ? fromLocalInput(`${date}T${t}`) : null, endAt: e ? fromLocalInput(`${date}T${e}`) : null } : null, who);
     }
     n++;
   }

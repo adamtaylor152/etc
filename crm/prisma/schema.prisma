@@ -1092,7 +1092,8 @@ model TaskAssignee {
   @@index([userId])
 }
 
-/** Time on a visit or job. A running timer has no endedAt. minutes is filled when it stops (or for manual entries). */
+/** Time on a visit or job, or on the day's general clock (no visit/job). A running timer has no endedAt; minutes is
+ * filled when it stops (or for manual entries). Approved entries are locked until an owner un-approves them. */
 model TimeEntry {
   id         String    @id @default(cuid())
   businessId String
@@ -1104,6 +1105,8 @@ model TimeEntry {
   endedAt    DateTime?
   minutes    Int?
   note       String?
+  approvedAt   DateTime?
+  approvedById String?
   createdAt  DateTime  @default(now())
 
   @@index([businessId, startedAt])

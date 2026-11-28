@@ -17,6 +17,7 @@ export const SettingsSchema = z.object({
   dailyDigest: z.boolean().default(false),          // 6am summary email to owners
   quoteFollowUp: z.boolean().default(true),         // nudge unanswered quotes after 3 days
   visitReminders: z.boolean().default(true),        // day-before reminder for scheduled (non-snow) visits
+  assignmentAlerts: z.boolean().default(true),      // tell the assigned person when an owner assigns or moves their work
   reminderDaysBefore: z.coerce.number().int().min(1).max(7).default(1), // first visit reminder: this many days ahead...
   reminderHour: z.coerce.number().int().min(6).max(21).default(17),     // ...at this hour (Calgary time)
   reminderMorningOf: z.boolean().default(false),    // second reminder at 7am on the day
@@ -49,5 +50,6 @@ export const SETTING_LABELS: Record<ToggleKey, [string, string]> = {
   quoteFollowUp: ["Quote follow-up", "One reminder 3 days after sending if the client hasn’t answered."],
   visitReminders: ["Visit reminders", "Reminder before scheduled visits (not snow), by email and text. Clients can confirm with a tap or by replying YES."],
   reminderMorningOf: ["Morning-of reminder", "A second reminder at 7 am on the day of the visit."],
+  assignmentAlerts: ["Assignment alerts to the team", "Emails the person you assign or move work for (and texts them, if their team record has a phone): what, where, when and a link to their route. Never prices."],
   smsUpdates: ["Text updates", "Texts “on the way”, “all done” (with photos link) and storm days to clients who said yes to texts. Needs Telnyx keys."],
 };

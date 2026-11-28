@@ -2,6 +2,7 @@
 import { db } from "../db";
 import { logActivity, nextNumber } from "../records";
 import { TransitionError } from "../status/visit";
+import { alertAssigned } from "./assign-alerts";
 
 type Actor = { id: string; businessId: string };
 
@@ -28,6 +29,7 @@ export async function createRequest(user: Actor, input: { clientId: string; prop
           instructions: `Request #${r.number}: ${r.title}`, assignees: { create: input.assigneeIds.map((userId) => ({ userId })) },
         },
       });
+      await alertAssigned(tx, user.businessId, user.id, input.assigneeIds, date);
     }
     await logActivity(tx, { businessId: user.businessId, type: "request.created", entityType: "Request", entityId: r.id, actorType: "USER", actorUserId: user.id, clientId: client.id });
     return r;

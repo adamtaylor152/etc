@@ -14,6 +14,7 @@ import { stripeEnabled } from "../stripe";
 import { dateOnly, dayWord, prettyDate, todayLocal, toDbDate } from "../dates";
 import { signedMediaPath } from "../media";
 import { clientName } from "../queries";
+import { dayCount, dayLines } from "../runner";
 import { db } from "../db";
 import { CampaignEmail } from "@/emails/campaign";
 import { clickUrl, openPixelUrl, unsubscribeUrl, type Block } from "../ops/campaigns";
@@ -204,6 +205,18 @@ const ownerNotice: Template<{ title: string; body: string; path: string }> = {
   },
 };
 
+// To the person whose day an owner changed (ops/assign-alerts.ts). Built at send time from their day; never prices.
+const crewAssignment: Template<{ userId: string; date: string }> = {
+  subject: (p) => `Your work for ${prettyDate(p.date)} was updated`,
+  async render(p, ctx) {
+    const day = await dayLines(ctx.businessId, p.userId, p.date);
+    const all = [...day.stops, ...day.tasks];
+    const body = all.length ? `On your day now (${dayCount(day)}):\n${all.slice(0, 25).join("\n")}${all.length > 25 ? `\nand ${all.length - 25} more` : ""}` : "Nothing is assigned to you that day now.";
+    const url = `${env.appUrl}/auth/go?t=${await mintToken(db, ctx.businessId, "OWNER_DEEP_LINK", { userId: p.userId, redirectPath: `/run?date=${p.date}` })}`;
+    return <OwnerNotice title={`Your work for ${prettyDate(p.date)} was updated`} body={body} url={url} />;
+  },
+};
+
 const priceChange: Template<{ jobId: string }> = {
   subject: () => "Your snow clearing price (please confirm)",
   async render(p, ctx) {
@@ -306,6 +319,7 @@ export const templates = {
   "quote.follow_up": quoteFollowUp,
   "quote.approved": quoteApproved,
   "owner.notice": ownerNotice,
+  "crew.assignment": crewAssignment,
   "campaign.email": campaignEmail,
   "hub.link": hubLink,
   "price.change": priceChange,

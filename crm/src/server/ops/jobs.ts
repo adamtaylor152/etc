@@ -1,4 +1,5 @@
 // Job operations from the back office: new one-off jobs, every-snowfall plans, pause/close.
+import { alertAssigned } from "./assign-alerts";
 import { WALK_PREFIX } from "../billing/charges";
 import { defaultChecklistFor } from "./checklists";
 import { Prisma, type SnowBillingMode } from "@/generated/prisma/client";
@@ -64,6 +65,7 @@ export async function createOneOffJob(user: Actor, input: {
         },
       });
     }
+    await alertAssigned(tx, user.businessId, user.id, input.assigneeIds ?? [], dates.find((d) => d)); // first visit day only
     if (input.requestId) await tx.request.updateMany({ where: { id: input.requestId, businessId: user.businessId }, data: { status: "CONVERTED", convertedAt: new Date() } });
     await logActivity(tx, { businessId: user.businessId, type: "job.created", entityType: "Job", entityId: job.id, actorType: "USER", actorUserId: user.id, clientId: input.clientId, jobId: job.id });
     return job;

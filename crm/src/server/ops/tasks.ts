@@ -1,8 +1,9 @@
 // Tasks and calendar events (Jobber's "basic tasks"): optional client/job, date + time or all day, repeat, assignees.
-import { addDays } from "../dates";
+import { addDays, dateOnly } from "../dates";
 import { db } from "../db";
 import { TransitionError } from "../status/visit";
 import { toDbDate } from "../dates";
+import { alertAssigned, withAssignAlert, type Assigned } from "./assign-alerts";
 
 type Actor = { id: string; businessId: string };
 export const REPEATS = { DAILY: "Every day", WEEKLY: "Every week", BIWEEKLY: "Every 2 weeks", MONTHLY: "Every month" } as const;
@@ -46,6 +47,12 @@ async function checkLinks(user: Actor, t: TaskInput) {
   if (ok !== t.assigneeIds.length) throw new TransitionError("Pick people from your team");
 }
 
+/** What an assignment alert watches on an open task (ops/assign-alerts.ts). */
+const taskSnap = (user: Actor, id: string) => async (): Promise<Assigned | null> => {
+  const t = await db.task.findFirst({ where: { id, businessId: user.businessId, completedAt: null }, select: { date: true, startAt: true, allDay: true, assignees: { select: { userId: true } } } });
+  return t && { date: dateOnly(t.date), at: t.allDay ? null : t.startAt?.getTime() ?? null, userIds: t.assignees.map((a) => a.userId) };
+};
+
 const shift = (d: Date | null | undefined, days: number) => (d ? new Date(d.getTime() + days * 86_400_000) : null);
 
 export async function createTask(user: Actor, t: TaskInput) {
@@ -66,6 +73,7 @@ export async function createTask(user: Actor, t: TaskInput) {
       },
     }));
   }
+  await alertAssigned(db, user.businessId, user.id, t.assigneeIds, t.date); // a series alerts for its first day only
   return created[0];
 }
 
@@ -75,13 +83,13 @@ export async function updateTask(user: Actor, id: string, t: TaskInput, scope: "
   await checkLinks(user, t);
   const ids = scope === "future" && cur.seriesId
     ? (await db.task.findMany({ where: { seriesId: cur.seriesId, OR: [{ date: { gte: cur.date ?? undefined } }, { id }] }, select: { id: true } })).map((x) => x.id) : [id];
-  await db.$transaction([
+  await withAssignAlert(user, taskSnap(user, id), () => db.$transaction([
     db.task.updateMany({ where: { id: { in: ids } }, data: { kind: t.kind, title: t.title.trim().slice(0, 140), instructions: t.instructions?.trim().slice(0, 4000) || null, clientId: t.clientId || null, jobId: t.jobId || null, allDay: t.allDay } }),
     // Date/time only change on the one being edited (a series keeps its own dates).
     db.task.update({ where: { id }, data: { date: t.date ? toDbDate(t.date) : null, startAt: t.allDay ? null : t.startAt ?? null, endAt: t.allDay ? null : t.endAt ?? null } }),
     db.taskAssignee.deleteMany({ where: { taskId: { in: ids } } }),
     db.taskAssignee.createMany({ data: ids.flatMap((taskId) => t.assigneeIds.map((userId) => ({ taskId, userId }))) }),
-  ]);
+  ]));
 }
 
 export async function setTaskDone(user: Actor, id: string, done: boolean) {
@@ -96,7 +104,17 @@ export async function deleteTask(user: Actor, id: string, scope: "one" | "future
   return cur;
 }
 
-/** Move a task on the calendar (drag). */
-export async function moveTask(user: Actor, id: string, m: { date: string | null; startAt?: Date | null; endAt?: Date | null; allDay: boolean }) {
-  await db.task.updateMany({ where: { id, businessId: user.businessId }, data: { date: m.date ? toDbDate(m.date) : null, allDay: m.allDay, startAt: m.allDay ? null : m.startAt ?? null, endAt: m.allDay ? null : m.endAt ?? null } });
+/**
+ * Move a task on the calendar (drag) and/or set who's on it, as ONE change (null = leave that part alone), so whoever
+ * is on it afterwards gets a single assignment alert.
+ */
+export async function moveTask(user: Actor, id: string, m: { date: string | null; startAt?: Date | null; endAt?: Date | null; allDay: boolean } | null, userIds: string[] | null = null) {
+  await withAssignAlert(user, taskSnap(user, id), async () => {
+    if (m) await db.task.updateMany({ where: { id, businessId: user.businessId }, data: { date: m.date ? toDbDate(m.date) : null, allDay: m.allDay, startAt: m.allDay ? null : m.startAt ?? null, endAt: m.allDay ? null : m.endAt ?? null } });
+    if (userIds) {
+      await db.task.findFirstOrThrow({ where: { id, businessId: user.businessId } });
+      const ok = await db.user.findMany({ where: { id: { in: userIds }, businessId: user.businessId }, select: { id: true } });
+      await db.$transaction([db.taskAssignee.deleteMany({ where: { taskId: id } }), db.taskAssignee.createMany({ data: ok.map((u) => ({ taskId: id, userId: u.id })) })]);
+    }
+  });
 }

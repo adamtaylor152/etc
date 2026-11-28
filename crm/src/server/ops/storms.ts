@@ -12,11 +12,12 @@ import { plansTriggered } from "../snow/select";
 import { seasonFor } from "../booking/create";
 import { TransitionError } from "../status/visit";
 import { invoiceUnbilled } from "./invoices";
+import { alertAssigned } from "./assign-alerts";
 
 type Actor = { id: string; businessId: string };
 
 /** Create visits for push `push` of this storm. Returns how many new visits were created. */
-async function generate(tx: Tx, ev: SnowEvent & { season: { defaultTriggerCm: number } }, cm: number, push: number, day: string) {
+async function generate(tx: Tx, ev: SnowEvent & { season: { defaultTriggerCm: number } }, cm: number, push: number, day: string, actorId: string) {
   const plans = await tx.job.findMany({
     where: { businessId: ev.businessId, kind: "SNOW_PLAN", seasonId: ev.seasonId, closedAt: null, planPausedAt: null, sizeHoldAt: null }, // held = waiting on a new-price OK
     include: { property: { select: { routeSort: true } } },
@@ -32,14 +33,15 @@ async function generate(tx: Tx, ev: SnowEvent & { season: { defaultTriggerCm: nu
   });
   if (push === 1) {
     // One-time shovelling bookings waiting for snow ("as soon as possible", or dated on/before today) ride along.
-    await tx.visit.updateMany({
-      where: {
-        businessId: ev.businessId, snowEventId: null, state: "SCHEDULED",
-        job: { kind: "ONE_OFF", closedAt: null, sizeHoldAt: null, title: { startsWith: "Snow" } },
-        OR: [{ scheduledDate: null }, { scheduledDate: { lte: toDbDate(day) } }],
-      },
-      data: { snowEventId: ev.id, scheduledDate: toDbDate(day) },
-    });
+    const where = {
+      businessId: ev.businessId, snowEventId: null, state: "SCHEDULED" as const,
+      job: { kind: "ONE_OFF" as const, closedAt: null, sizeHoldAt: null, title: { startsWith: "Snow" } },
+      OR: [{ scheduledDate: null }, { scheduledDate: { lte: toDbDate(day) } }],
+    };
+    // Whoever was already on one of those bookings (on another day, or none) now has it today.
+    const riders = await tx.visitAssignee.findMany({ where: { visit: { ...where, OR: [{ scheduledDate: null }, { scheduledDate: { lt: toDbDate(day) } }] } }, select: { userId: true } });
+    await tx.visit.updateMany({ where, data: { snowEventId: ev.id, scheduledDate: toDbDate(day) } });
+    await alertAssigned(tx, ev.businessId, actorId, riders.map((r) => r.userId), day);
   }
   return res.count;
 }
@@ -69,7 +71,7 @@ export async function startStorm(user: Actor, id: string, cm: number) {
     if (ev.status !== "FORECAST" && ev.status !== "ACTIVE") throw new TransitionError("This storm is already finished");
     const day = todayLocal();
     await tx.snowEvent.update({ where: { id }, data: { status: "ACTIVE", measuredCm: cm, activatedAt: ev.activatedAt ?? new Date() } });
-    const created = await generate(tx, ev, cm, 1, day);
+    const created = await generate(tx, ev, cm, 1, day, user.id);
     // Keep what the forecast said, for "you said it would snow" conversations.
     if (periods && !ev.forecastSnapshot) await tx.snowEvent.update({ where: { id }, data: { forecastSnapshot: periods.slice(0, 48) as unknown as Prisma.InputJsonValue } });
     if ((await getSettings(tx, user.businessId)).smsUpdates) {
@@ -100,7 +102,7 @@ export async function setStormDepth(user: Actor, id: string, cm: number) {
     await tx.snowEvent.update({ where: { id }, data: { measuredCm: cm } });
     if (ev.status !== "ACTIVE") return;
     const day = todayLocal();
-    for (let push = 1; push <= ev.pushCount; push++) await generate(tx, ev, cm, push, day);
+    for (let push = 1; push <= ev.pushCount; push++) await generate(tx, ev, cm, push, day, user.id);
     const visits = await tx.visit.findMany({ where: { snowEventId: id, state: "SCHEDULED", job: { kind: "SNOW_PLAN" } }, include: { job: true } });
     const keep = new Set(plansTriggered(visits.map((v) => v.job), cm, ev.season.defaultTriggerCm).map((j) => j.id));
     const drop = visits.filter((v) => !keep.has(v.jobId)).map((v) => v.id);
@@ -121,7 +123,7 @@ export async function addPush(user: Actor, id: string) {
     if (ev.status !== "ACTIVE") throw new TransitionError("Start the storm first");
     const push = ev.pushCount + 1;
     await tx.snowEvent.update({ where: { id }, data: { pushCount: push } });
-    const created = await generate(tx, ev, ev.measuredCm ?? ev.forecastCm ?? 0, push, todayLocal());
+    const created = await generate(tx, ev, ev.measuredCm ?? ev.forecastCm ?? 0, push, todayLocal(), user.id);
     await logActivity(tx, { businessId: user.businessId, type: "storm.push", entityType: "SnowEvent", entityId: id, actorType: "USER", actorUserId: user.id, snowEventId: id, data: { push, created } });
     return created;
   });
