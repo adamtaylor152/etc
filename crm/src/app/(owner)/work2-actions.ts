@@ -8,7 +8,7 @@ import { requireOwner } from "@/server/auth";
 import { fromLocalInput } from "@/server/dates";
 import { db } from "@/server/db";
 import { createCustomInvoice, recordPayment } from "@/server/ops/invoices";
-import { createOneOffJob } from "@/server/ops/jobs";
+import { createOneOffJob, updateJob } from "@/server/ops/jobs";
 import { createRequest } from "@/server/ops/requests";
 import { TransitionError } from "@/server/status/visit";
 
@@ -60,6 +60,25 @@ export async function jobCreateFull(f: FormData) {
       checklistTemplateId: str(f, "checklistTemplateId") === "none" ? null : str(f, "checklistTemplateId") || undefined,
     })).id;
   } catch (e) { fail(back, e); }
+  revalidatePath("/", "layout");
+  redirect(`/jobs/${id}`);
+}
+
+const LINES = z.array(z.object({
+  name: z.string().max(200), description: z.string().max(500).optional(), quantity: z.number().positive().max(10_000), unitPriceCents: z.number().int().min(0).max(10_000_000),
+}), "Check the prices and quantities").max(40);
+
+/** Edit form on /jobs/[id]/edit. Locked sections are not in the form, so they are simply not sent. */
+export async function jobUpdate(f: FormData) {
+  const user = await requireOwner();
+  const id = str(f, "id");
+  try {
+    await updateJob(user, id, {
+      title: z.string().trim().min(1, "Give the job a title").max(120).parse(str(f, "title")), instructions: str(f, "instructions").trim().slice(0, 2000),
+      propertyId: str(f, "propertyId") || undefined, lines: f.has("lineName") ? LINES.parse(linesFrom(f)) : undefined,
+      billingType: f.has("billingType") ? z.enum(["PER_VISIT", "FIXED_PRICE"]).parse(str(f, "billingType")) : undefined,
+    });
+  } catch (e) { fail(`/jobs/${id}/edit`, e); }
   revalidatePath("/", "layout");
   redirect(`/jobs/${id}`);
 }
