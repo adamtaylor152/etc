@@ -1,4 +1,4 @@
-import { BLUE, BODY_FONT, Button, EtcEmail, Eyebrow, FONT, Footer, H1, Header, INK_SOFT, LINE, NAVY, P, Table, TINT, firstName } from "./ui";
+import { Closing, Intro, BLUE, BODY_FONT, Button, EtcEmail, Eyebrow, FONT, Footer, H1, Header, INK_SOFT, LINE, NAVY, P, Table, TINT, firstName } from "./ui";
 
 export type InvoiceEmailData = {
   name: string; number: number; subject: string; issued: string; due: string; lines: { name: string; date: string; amount: string }[];
@@ -6,6 +6,8 @@ export type InvoiceEmailData = {
   cardEnabled: boolean; site: string; phone: string;
   autoPay?: { card: string; on: string; retry: boolean } | null; // set while the saved card is going to be charged: "Visa ending 4242", "Thu, Dec 4"
 };
+
+const invoiceVars = (d: InvoiceEmailData) => ({ first_name: firstName(d.name), invoice_number: String(d.number), invoice_subject: d.subject, total: d.total, balance: d.balance, due_date: d.due });
 
 function Lines({ d }: { d: InvoiceEmailData }) {
   return (
@@ -69,13 +71,13 @@ function HowToPay({ d }: { d: InvoiceEmailData }) {
 export function InvoiceSent({ d, reminder }: { d: InvoiceEmailData; reminder?: 1 | 2 }) {
   const first = firstName(d.name);
   return (
-    <EtcEmail title={`Invoice #${d.number}`} preheader={reminder ? `Friendly reminder: ${d.balance} for invoice #${d.number}` : `${d.subject}: ${d.balance}`}>
+    <EtcEmail title={`Invoice #${d.number}`} preheader={reminder ? `Friendly reminder: ${d.balance} for invoice #${d.number}` : `${d.subject}: ${d.balance}`} vars={invoiceVars(d)}>
       <Header right={<>Invoice #{d.number}</>} />
       <tr>
         <td className="px" style={{ padding: "32px 40px 18px" }}>
           <Eyebrow>{reminder ? "Friendly reminder" : `Issued ${d.issued}`} · due {d.due}</Eyebrow>
           <H1>{reminder ? `Hi ${first}, just a reminder` : `Thanks, ${first}! Here's your invoice`}</H1>
-          <P>{reminder ? `Invoice #${d.number} (${d.subject}) still shows ${d.balance} owing. If you've already paid, thank you, and please ignore this.` : `${d.subject}. Every job helps Silas get to electrician school.`}</P>
+          <Intro><P>{reminder ? `Invoice #${d.number} (${d.subject}) still shows ${d.balance} owing. If you've already paid, thank you, and please ignore this.` : `${d.subject}. Every job helps Silas get to electrician school.`}</P></Intro>
           {!reminder && d.message && <P style={{ whiteSpace: "pre-line", color: NAVY }}>{d.message}</P>}
         </td>
       </tr>
@@ -89,14 +91,14 @@ export function InvoiceSent({ d, reminder }: { d: InvoiceEmailData; reminder?: 1
 /** `how`: "to your card (allow 5 to 10 business days)" or "by e-Transfer". */
 export function RefundReceipt({ d, amount, how, when }: { d: InvoiceEmailData; amount: string; how: string; when: string }) {
   return (
-    <EtcEmail title={`Refund for invoice #${d.number}`} preheader={`We refunded ${amount}.`}>
+    <EtcEmail title={`Refund for invoice #${d.number}`} preheader={`We refunded ${amount}.`} vars={{ ...invoiceVars(d), amount }}>
       <Header right="Refund" />
       <tr>
         <td className="px" style={{ padding: "32px 40px 26px" }}>
           <Eyebrow>Refund · {when}</Eyebrow>
           <H1>Hi {firstName(d.name)}, your refund is on its way</H1>
-          <P>We refunded <b style={{ color: NAVY }}>{amount}</b> {how} for invoice #{d.number} ({d.subject}).</P>
-          <P>Questions? Just reply to this email.</P>
+          <Intro><P>We refunded <b style={{ color: NAVY }}>{amount}</b> {how} for invoice #{d.number} ({d.subject}).</P></Intro>
+          <Closing><P>Questions? Just reply to this email.</P></Closing>
         </td>
       </tr>
       <Footer site={d.site} phone={d.phone} reason="Keep this email as your refund receipt." />
@@ -107,15 +109,15 @@ export function RefundReceipt({ d, amount, how, when }: { d: InvoiceEmailData; a
 /** An automatic charge didn't go through: what failed, how to pay or fix the card, and when (if ever) we try again. */
 export function AutoPayFailed({ d, card, why, retryOn, needsAction, hubUrl }: { d: InvoiceEmailData; card: string; why: string; retryOn: string | null; needsAction: boolean; hubUrl: string }) {
   return (
-    <EtcEmail title={`Invoice #${d.number}: card payment didn't go through`} preheader={needsAction ? `Your bank wants you to approve ${d.balance}` : `We couldn't charge your ${card}`}>
+    <EtcEmail title={`Invoice #${d.number}: card payment didn't go through`} preheader={needsAction ? `Your bank wants you to approve ${d.balance}` : `We couldn't charge your ${card}`} vars={{ ...invoiceVars(d), card, decline_reason: why }}>
       <Header right={<>Invoice #{d.number}</>} />
       <tr>
         <td className="px" style={{ padding: "32px 40px 18px" }}>
           <Eyebrow>Automatic payment</Eyebrow>
           <H1>{needsAction ? `${firstName(d.name)}, your bank wants you to approve this one` : `${firstName(d.name)}, we couldn't charge your card`}</H1>
-          <P>{needsAction
+          <Intro><P>{needsAction
             ? `Your bank needs you to confirm the ${d.balance} payment for invoice #${d.number} (${d.subject}) on your ${card}, and that can't be done automatically. Please pay from the invoice page; it takes a minute.`
-            : `We tried to charge your ${card} ${d.balance} for invoice #${d.number} (${d.subject}), but ${why}.`}</P>
+            : `We tried to charge your ${card} ${d.balance} for invoice #${d.number} (${d.subject}), but ${why}.`}</P></Intro>
           {!needsAction && <P>{retryOn
             ? `We'll try again on ${retryOn}. Nothing has been switched off, and you can pay sooner or change the card below.`
             : "We won't try this invoice again automatically, so please pay it another way. Automatic payments stay on for your next invoices unless you turn them off."}</P>}
@@ -131,13 +133,13 @@ export function AutoPayFailed({ d, card, why, retryOn, needsAction, hubUrl }: { 
 
 export function StatementEmail({ name, balance, owing, period, etransferEmail, site, phone }: { name: string; balance: string; owing: boolean; period: string; etransferEmail: string; site: string; phone: string }) {
   return (
-    <EtcEmail title="Your statement" preheader={owing ? `Your balance is ${balance}` : "Your account statement from etc."}>
+    <EtcEmail title="Your statement" preheader={owing ? `Your balance is ${balance}` : "Your account statement from etc."} vars={{ first_name: firstName(name), balance, period }}>
       <Header right="Statement" />
       <tr>
         <td className="px" style={{ padding: "32px 40px 26px" }}>
           <Eyebrow>{period}</Eyebrow>
           <H1>Hi {firstName(name)}, here&apos;s your statement</H1>
-          <P>Your statement is attached as a PDF: every invoice and payment, with a running balance. {owing ? <>Your balance is <b style={{ color: NAVY }}>{balance}</b>.</> : "You're all paid up. Thank you!"}</P>
+          <Intro><P>Your statement is attached as a PDF: every invoice and payment, with a running balance. {owing ? <>Your balance is <b style={{ color: NAVY }}>{balance}</b>.</> : "You're all paid up. Thank you!"}</P></Intro>
           {owing && etransferEmail && <P>To pay by e-Transfer, send it to <a href={`mailto:${etransferEmail}`} style={{ color: BLUE, fontWeight: 600 }}>{etransferEmail}</a> with your invoice&apos;s ETC- code in the message. Cash to the crew works too.</P>}
         </td>
       </tr>
@@ -148,13 +150,13 @@ export function StatementEmail({ name, balance, owing, period, etransferEmail, s
 
 export function PaymentReceipt({ d, amount, method, when, paidInFull, extra }: { d: InvoiceEmailData; amount: string; method: string; when: string; paidInFull: boolean; extra?: string }) {
   return (
-    <EtcEmail title={`Receipt for invoice #${d.number}`} preheader={`We got your ${amount} payment. Thank you!`}>
+    <EtcEmail title={`Receipt for invoice #${d.number}`} preheader={`We got your ${amount} payment. Thank you!`} vars={{ ...invoiceVars(d), amount, payment_method: method }}>
       <Header right="Receipt" />
       <tr>
         <td className="px" style={{ padding: "32px 40px 18px" }}>
           <Eyebrow>Payment received · {when}</Eyebrow>
           <H1>Thank you, {firstName(d.name)}!</H1>
-          <P>We received <b style={{ color: NAVY }}>{amount}</b> by {method} for invoice #{d.number}. {paidInFull ? "You're all paid up." : `${d.balance} is still owing.`}{extra && ` ${extra}`}</P>
+          <Intro><P>We received <b style={{ color: NAVY }}>{amount}</b> by {method} for invoice #{d.number}. {paidInFull ? "You're all paid up." : `${d.balance} is still owing.`}{extra && ` ${extra}`}</P></Intro>
         </td>
       </tr>
       <tr><td className="px" style={{ padding: "0 40px 26px" }}><Lines d={d} /></td></tr>

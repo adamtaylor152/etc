@@ -1,5 +1,5 @@
 // Booking emails, ported from emails.py (customer_email / owner_email). Same look, plus CRM links.
-import { BLUE, BODY_FONT, Button, EtcEmail, Eyebrow, FONT, Footer, H1, Header, INK_SOFT, LINE, Lines, NAVY, P, SummaryRows, Table, TINT, firstName } from "./ui";
+import { Intro, BLUE, BODY_FONT, Button, EtcEmail, Eyebrow, FONT, Footer, H1, Header, INK_SOFT, LINE, Lines, NAVY, P, SummaryRows, Table, TINT, firstName } from "./ui";
 
 export type BookingEmailProps = {
   number: number;
@@ -29,14 +29,14 @@ export function BookingConfirmation(p: BookingEmailProps) {
   if (p.notes) rows.push(["Your notes", <Lines key="n" text={p.notes} />]);
 
   return (
-    <EtcEmail title="We got your booking" preheader={`Thanks ${first}! Silas will be in touch shortly to lock in a time.`}>
+    <EtcEmail title="We got your booking" preheader={`Thanks ${first}! Silas will be in touch shortly to lock in a time.`} vars={{ first_name: first, booking_number: String(p.number), services: p.services.join(", "), estimate: p.estimate }}>
       <Header right="Snow shovelling & odd jobs" />
       <tr><td style={{ padding: 0 }}><img src={`${p.site}/img/email-hero.jpg`} width={600} alt="" style={{ display: "block", width: "100%", maxWidth: 600, height: "auto", border: 0 }} /></td></tr>
       <tr>
         <td className="px" style={{ padding: "32px 40px 8px" }}>
           <Eyebrow>Booking received · #{p.number}</Eyebrow>
           <H1>Thanks, {first}! Your booking is in.</H1>
-          <P>Silas got your request and will be in touch shortly to lock in a time. Here&apos;s what you booked:</P>
+          <Intro><P>Silas got your request and will be in touch shortly to lock in a time. Here&apos;s what you booked:</P></Intro>
         </td>
       </tr>
       <tr>

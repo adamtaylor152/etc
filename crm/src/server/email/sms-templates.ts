@@ -10,10 +10,13 @@ import { money } from "../money";
 import { dollars } from "../ops/drive-size";
 import { prettyDate } from "../dates";
 import { dayCount, dayLines } from "../runner";
+import { smsMeta, smsText, type SmsKey } from "./wording";
 import { skipNotice } from "../status/visit";
 
 type Ctx = { businessId: string };
 const first = (n: string) => n.trim().split(" ")[0] || "there";
+/** A text the owner can reword (Settings › Messages): the template supplies the values, wording.ts has the built-in words. */
+const worded = (key: SmsKey, vars: Record<string, string>) => ({ key, vars });
 
 /**
  * ", arriving around 9:00-9:30am" for a visit the crew just set off to, or "" when we can't say honestly: only with
@@ -35,24 +38,23 @@ async function arrival(v: { id: string; businessId: string; enRouteAt: Date | nu
 export const smsTemplates = {
   "sms.on_my_way": async (p: { visitId: string }) => {
     const v = await db.visit.findUniqueOrThrow({ where: { id: p.visitId }, include: { job: { include: { client: true } }, property: true, assignees: { select: { userId: true } } } });
-    return `Hi ${first(v.job.client.firstName)}, the etc. crew is on the way to ${v.property.formatted.split(",")[0]}${await arrival(v)}. No need to be home. - etc. (Reply STOP to opt out)`;
+    return worded("sms.on_my_way", { first_name: first(v.job.client.firstName), address: v.property.formatted.split(",")[0], arrival: await arrival(v) });
   },
   "sms.visit_done": async (p: { visitId: string }, ctx: Ctx) => {
     const v = await db.visit.findUniqueOrThrow({ where: { id: p.visitId }, include: { job: { include: { client: true } }, property: true } });
     const raw = await mintToken(db, ctx.businessId, "VISIT_REPORT", { visitId: v.id, clientId: v.job.clientId });
-    return `All done at ${v.property.formatted.split(",")[0]}! Before & after photos: ${env.appUrl}/v/${raw} - etc.`;
+    return worded("sms.visit_done", { first_name: first(v.job.client.firstName), address: v.property.formatted.split(",")[0], link: `${env.appUrl}/v/${raw}` });
   },
   "sms.storm_heads_up": async (p: { visitId: string }) => {
     const v = await db.visit.findUniqueOrThrow({ where: { id: p.visitId }, include: { job: { include: { client: true } }, property: true } });
-    return `Snow day! ${first(v.job.client.firstName)}, you're on our route today for ${v.property.formatted.split(",")[0]}. Away? Just reply. - etc.`;
+    return worded("sms.storm_heads_up", { first_name: first(v.job.client.firstName), address: v.property.formatted.split(",")[0] });
   },
   // Once, when someone ticks "text me" on the booking form (carriers and RCS review expect a confirmation).
   "sms.review_request": async (p: { clientId: string; reviewId: string; followUp?: boolean }, ctx: Ctx) => {
     const c = await db.client.findUniqueOrThrow({ where: { id: p.clientId } });
     const raw = await mintToken(db, ctx.businessId, "REVIEW", { clientId: c.id, redirectPath: p.reviewId });
-    return p.followUp
-      ? `Hi ${first(c.firstName)}, got 30 seconds to tell us how we did? ${env.appUrl}/r/${raw} We won't ask again. - etc.`
-      : `Hi ${first(c.firstName)}, thanks for choosing etc.! How did we do? ${env.appUrl}/r/${raw} - etc.`;
+    if (p.followUp) return `Hi ${first(c.firstName)}, got 30 seconds to tell us how we did? ${env.appUrl}/r/${raw} We won't ask again. - etc.`;
+    return worded("sms.review_request", { first_name: first(c.firstName), link: `${env.appUrl}/r/${raw}` });
   },
   "sms.visit_skipped": async (p: { visitId: string }) => {
     const v = await db.visit.findUniqueOrThrow({ where: { id: p.visitId }, include: { job: { include: { client: true } }, property: true } });
@@ -65,23 +67,21 @@ export const smsTemplates = {
   "sms.visit_reminder": async (p: { visitId: string }, ctx: Ctx) => {
     const v = await db.visit.findUniqueOrThrow({ where: { id: p.visitId }, include: { job: { include: { client: true } }, property: true } });
     const raw = await mintToken(db, ctx.businessId, "VISIT_CONFIRM", { visitId: v.id, clientId: v.job.clientId });
-    return `Hi ${first(v.job.client.firstName)}, etc. is booked for ${v.property.formatted.split(",")[0]} ${dayWord(dateOnly(v.scheduledDate) ?? todayLocal())}. Reply YES to confirm, or change it here: ${env.appUrl}/c/${raw} - etc.`;
+    return worded("sms.visit_reminder", { first_name: first(v.job.client.firstName), address: v.property.formatted.split(",")[0], day: dayWord(dateOnly(v.scheduledDate) ?? todayLocal()), link: `${env.appUrl}/c/${raw}` });
   },
   "sms.price_change": async (p: { jobId: string }, ctx: Ctx) => {
     const job = await db.job.findUniqueOrThrow({ where: { id: p.jobId }, include: { client: true, property: true } });
     const pend = job.pendingPrice as { base: number; walk: number } | null;
     const raw = await mintToken(db, ctx.businessId, "PRICE_CHANGE", { jobId: job.id, clientId: job.clientId });
     const price = pend ? `${dollars(pend.base + pend.walk)}${job.kind === "SNOW_PLAN" ? " per snowfall" : ""}` : "a new price";
-    return `Hi ${first(job.client.firstName)}, we checked ${job.property.formatted.split(",")[0]}: it's bigger than a standard driveway, so it's ${price}. OK it or cancel (no charge): ${env.appUrl}/p/${raw} - etc.`;
+    return worded("sms.price_change", { first_name: first(job.client.firstName), address: job.property.formatted.split(",")[0], price, link: `${env.appUrl}/p/${raw}` });
   },
   // Same tokenized link as the quote email; the title is kept short so the link is never clipped off the end.
   "sms.quote": async (p: { quoteId: string; followUp?: boolean }, ctx: Ctx) => {
     const q = await db.quote.findUniqueOrThrow({ where: { id: p.quoteId }, include: { client: true } });
     const url = `${env.appUrl}/q/${await mintToken(db, ctx.businessId, "QUOTE", { quoteId: q.id, clientId: q.clientId })}`;
     const what = (q.title ?? "your job").slice(0, 60);
-    return p.followUp
-      ? `Hi ${first(q.client.firstName)}, any questions about your etc. quote for ${what}? See or approve it here: ${url} - etc.`
-      : `Hi ${first(q.client.firstName)}, your etc. quote for ${what} (${money(q.totalCents)}) is ready. See and approve it here: ${url} - etc.`;
+    return worded(p.followUp ? "sms.quote_follow_up" : "sms.quote", { first_name: first(q.client.firstName), quote_title: what, total: money(q.totalCents), link: url });
   },
   "sms.campaign": async (p: { campaignId: string; clientId: string }) => {
     const c = await db.campaign.findUniqueOrThrow({ where: { id: p.campaignId } });
@@ -89,7 +89,7 @@ export const smsTemplates = {
   },
   "sms.referral_thanks": async (p: { clientId: string; cents: number }) => {
     const c = await db.client.findUniqueOrThrow({ where: { id: p.clientId } });
-    return `Thanks for sending a neighbour our way, ${first(c.firstName)}! $${(p.cents / 100).toFixed(0)} off your next etc. invoice. - etc.`;
+    return worded("sms.referral_thanks", { first_name: first(c.firstName), amount: `$${(p.cents / 100).toFixed(0)}` });
   },
   // To someone on the team (not a client): their day changed. Built at send time; never prices.
   "sms.crew_assignment": async (p: { userId: string; date: string }, ctx: Ctx) => {
@@ -99,6 +99,18 @@ export const smsTemplates = {
   },
   // eslint-disable-next-line @typescript-eslint/no-unused-vars -- no props, but enqueueSms needs a props type
   "sms.opt_in": async (_p: Record<string, never>) => "You're signed up for etc. booking texts. Reply STOP to stop, HELP for help.",
-} satisfies Record<string, (p: never, ctx: Ctx) => Promise<string>>;
+} satisfies Record<string, (p: never, ctx: Ctx) => Promise<string | ReturnType<typeof worded>>>;
 
 export type SmsTemplateName = keyof typeof smsTemplates;
+
+/** The text to send. Rewordable ones use the owner's wording when there is one, with the parts a text can't go without put back. */
+export async function renderSms(template: SmsTemplateName, props: unknown, ctx: Ctx) {
+  const t = smsTemplates[template] as ((p: unknown, ctx: Ctx) => Promise<string | ReturnType<typeof worded>>) | undefined;
+  if (!t) throw new Error(`unknown sms template ${template}`);
+  const out = await t(props, ctx);
+  if (typeof out === "string") return out;
+  const o = await db.emailTemplateOverride.findFirst({ where: { businessId: ctx.businessId, template: out.key, enabled: true }, select: { body: true } });
+  if (!o?.body?.trim() || !smsMeta(out.key)) return smsText(out.key, null, out.vars);
+  const biz = await db.business.findUniqueOrThrow({ where: { id: ctx.businessId }, select: { name: true, phone: true } });
+  return smsText(out.key, o.body, { ...out.vars, business_name: biz.name, business_phone: biz.phone ?? env.phone });
+}
