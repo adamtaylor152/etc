@@ -1,7 +1,7 @@
 // Quotes (estimates): build -> send -> client approves / asks for changes -> convert to a job.
 // Photos the client sent with the request stay linked (requestId) and show on the quote and the job.
 import { createDepositInvoice } from "./invoices";
-import { addDays, todayLocal, toDbDate } from "../dates";
+import { addDays, dateOnly, todayLocal, toDbDate } from "../dates";
 import { db, type Tx } from "../db";
 import { z } from "zod";
 import { enqueue, enqueueSms, kickOutbox } from "../email/outbox";
@@ -9,7 +9,7 @@ import { env } from "../env";
 import { clientName } from "../queries";
 import { logActivity, nextNumber } from "../records";
 import { smsEnabled } from "../sms";
-import { assertQuoteTransition, optionLines, quoteDiscountCents, quoteEditable, quoteOptions, quoteTotal, quoteTotals, valuedOption, type QuoteDiscount, type QuoteLine, type QuoteOption } from "../status/quote";
+import { assertApprovable, assertQuoteTransition, optionLines, quoteDiscountCents, quoteEditable, quoteOptions, quoteTotal, quoteTotals, valuedOption, type QuoteDiscount, type QuoteLine, type QuoteOption } from "../status/quote";
 import { TransitionError } from "../status/visit";
 
 type Actor = { id: string; businessId: string };
@@ -107,7 +107,7 @@ export async function sendQuote(user: Actor, quoteId: string, via: "EMAIL" | "SM
     await tx.quote.update({ where: { id: quoteId }, data: { status: "AWAITING_RESPONSE", sentAt: q.sentAt ?? new Date(), lastSentAt: new Date(), lastSentVia: via, changesRequestedAt: null } });
     if (via === "SMS") {
       if (!smsEnabled()) throw new TransitionError("Texting isn't set up yet (Telnyx key missing)");
-      const queued = await enqueueSms(tx, { businessId: user.businessId, template: "sms.quote", client: q.client, props: { quoteId }, dedupeKey: `quote:${quoteId}:sent-sms:${Date.now()}`, entityType: "Quote", entityId: quoteId });
+      const queued = await enqueueSms(tx, { businessId: user.businessId, template: "sms.quote", client: q.client, props: { quoteId }, dedupeKey: `quote:${quoteId}:sent-sms:${Math.floor(Date.now() / 60_000)}`, entityType: "Quote", entityId: quoteId });
       if (!queued) throw new TransitionError(`${q.client.firstName} hasn't agreed to texts, texted STOP, or has no mobile number. Send it by email instead.`);
     } else {
       await enqueue(tx, {
@@ -130,7 +130,7 @@ async function notifyOwners(tx: Tx, businessId: string, title: string, body: str
 export async function approveQuote(quoteId: string, input: { name: string; selected: string[]; option?: string; ip: string | null }) {
   await db.$transaction(async (tx) => {
     const q = await tx.quote.findUniqueOrThrow({ where: { id: quoteId }, include: { lineItems: true, client: true } });
-    assertQuoteTransition(q.status, "APPROVED");
+    assertApprovable({ status: q.status, validUntil: dateOnly(q.validUntil) }, todayLocal()); // the public page hides Approve on an expired quote; a saved form must not get past it
     const options = quoteOptions(q.options);
     const option = options.find((o) => o.key === input.option);
     if (options.length && !option) throw new TransitionError("Choose one of the options first");
@@ -217,7 +217,7 @@ export async function convertQuote(user: Actor, quoteId: string, input: { date: 
     const job = await tx.job.create({
       data: {
         businessId: user.businessId, number: await nextNumber(tx, user.businessId, "JOB"), clientId: q.clientId, propertyId, requestId: q.requestId,
-        quoteId: q.id, kind: "ONE_OFF", title: q.title ?? "Job", billingType: input.billingType,
+        quoteId: q.id, kind: "ONE_OFF", title: q.title ?? "Job", billingType: input.billingType, discountCents: q.discountCents, // comes off the job's first invoice
         invoiceSchedule: input.billingType === "PER_VISIT" ? "AFTER_EACH_VISIT" : "ON_COMPLETION",
         totalCents: input.billingType === "FIXED_PRICE" ? quoteTotal(offered, q.discountCents) : null, // pre-tax: the invoice adds GST itself
         lineItems: { create: lines.map((l, i) => ({ name: l.name, description: l.description, quantity: l.quantity, unitPriceCents: l.unitPriceCents, totalCents: l.totalCents, perVisit: input.billingType === "PER_VISIT", sortOrder: i })) },

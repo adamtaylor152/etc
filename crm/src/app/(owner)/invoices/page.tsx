@@ -1,5 +1,6 @@
 import { requireOwner } from "@/server/auth";
-import Link from "next/link";
+import { Amount } from "@/components/billing/money";
+import { ButtonLink } from "@/components/ui";
 import type { Prisma } from "@/generated/prisma/client";
 import { ListPage, listHref, pageOf, sortRows } from "@/components/list-page";
 import { INVOICE_LABEL, InvoiceBadge } from "@/components/status";
@@ -55,7 +56,7 @@ export default async function Invoices({ searchParams }: PageProps<"/invoices">)
   return (
     <ListPage
       title="Invoices" base="/invoices" params={params} at={at} newHref="/invoices/new" newLabel="New invoice" searchPlaceholder="Search invoices, ETC- refs, clients"
-      actions={<Link href="/billing" className="inline-flex min-h-10 items-center rounded-lg border border-line bg-white px-4 text-sm font-semibold hover:bg-tint">Billing run</Link>}
+      actions={<ButtonLink href="/billing">Billing run</ButtonLink>}
       overview={tiles.map((v, n) => ({ label: INVOICE_LABEL[v], count: counts[n], dot: DOT[v], active: view === v, href: listHref("/invoices", params, { status: v }) }))}
       metrics={[
         { label: "Issued", value: money(issuedCents), sub: `${issued._count._all} invoices · past 30 days` },
@@ -67,9 +68,10 @@ export default async function Invoices({ searchParams }: PageProps<"/invoices">)
       rows={rows.map((i) => ({
         id: i.id, href: `/invoices/${i.id}`,
         cells: {
-          client: clientName(i.client), number: <><span className="font-semibold">#{i.number}</span> <span className="text-ink-soft">{i.subject}</span><span className="block text-xs text-ink-soft">{i.etransferRef}</span></>,
-          due: i.dueOn ? prettyDate(dateOnly(i.dueOn)) : <span className="text-ink-soft">not sent</span>, status: <InvoiceBadge s={i.view} />,
-          total: money(i.totalCents), balance: <span className={i.totalCents - i.amountPaidCents > 0 && open(i.view) ? "font-semibold" : "text-ink-soft"}>{money(Math.max(0, i.totalCents - i.amountPaidCents))}</span>,
+          client: clientName(i.client), number: <><span className="font-semibold tabular-nums">#{i.number}</span>{i.subject && <span className="text-ink-soft"> {i.subject}</span>}<span className="block text-xs text-ink-soft">{i.etransferRef}</span></>,
+          due: i.dueOn ? <span className={`whitespace-nowrap tabular-nums ${i.view === "PAST_DUE" ? "font-medium text-red-700" : ""}`}>{prettyDate(dateOnly(i.dueOn))}</span> : <span className="text-ink-soft">Not sent</span>, status: <InvoiceBadge s={i.view} />,
+          total: <Amount cents={i.totalCents} className="text-ink-soft" />,
+          balance: <Amount cents={Math.max(0, i.totalCents - i.amountPaidCents)} className={i.totalCents - i.amountPaidCents > 0 && open(i.view) ? (i.view === "PAST_DUE" ? "font-semibold text-red-700" : "font-semibold") : "text-ink-soft"} />,
         },
       }))}
       empty="No invoices match."

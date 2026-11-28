@@ -1,6 +1,7 @@
 // Email and text campaigns: audiences, Canadian anti-spam (CASL) consent, quiet hours for texts, pacing under the email cap,
 // unsubscribe links and open/click tracking.
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { signingSecret } from "../secret";
 import { z } from "zod";
 import type { Prisma } from "@/generated/prisma/client";
 import { addDays, localDayStart, todayLocal, toDbDate } from "../dates";
@@ -51,19 +52,19 @@ export function nextTextWindow(now = new Date(), from = 9, to = 21) {
 export const paceDay = (i: number, perDay: number) => Math.floor(i / Math.max(1, perDay));
 
 // ---------- signed links (unsubscribe, tracking) ----------
-const secret = () => process.env.MEDIA_SIGNING_SECRET || "dev-only-media-secret-change-me";
-const sig = (v: string) => createHmac("sha256", secret()).update(`campaign:${v}`).digest("base64url").slice(0, 22);
+const sig = (v: string) => createHmac("sha256", signingSecret()).update(`campaign:${v}`).digest("base64url").slice(0, 22);
 export const signed = (v: string) => `${v}.${sig(v)}`;
+const same = (a: string, b: string) => { const x = Buffer.from(a), y = Buffer.from(b); return x.length === y.length && timingSafeEqual(x, y); };
 export function verifySigned(token: string) {
   const i = token.lastIndexOf(".");
   if (i < 1) return null;
-  const v = token.slice(0, i), s = Buffer.from(token.slice(i + 1)), want = Buffer.from(sig(v));
-  return s.length === want.length && timingSafeEqual(s, want) ? v : null;
+  const v = token.slice(0, i);
+  return same(token.slice(i + 1), sig(v)) ? v : null;
 }
 export const unsubscribeUrl = (clientId: string) => `${env.appUrl}/unsubscribe/${signed(clientId)}`;
 export const openPixelUrl = (recipientId: string) => `${env.appUrl}/api/m/o/${signed(recipientId)}`;
 export const clickUrl = (recipientId: string, url: string) => `${env.appUrl}/api/m/c/${signed(recipientId)}?u=${encodeURIComponent(url)}&s=${sig(`${recipientId}|${url}`)}`;
-export const verifyClick = (recipientId: string, url: string, s: string) => s === sig(`${recipientId}|${url}`);
+export const verifyClick = (recipientId: string, url: string, s: string) => same(s, sig(`${recipientId}|${url}`));
 
 // ---------- audiences ----------
 /** When each client's last completed visit was. */

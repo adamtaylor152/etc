@@ -47,12 +47,12 @@ export default async function Requests({ searchParams }: PageProps<"/requests">)
         { label: "Booked online", value: online, sub: "from etccrew.ca · past 30 days" },
       ]}
       filters={[{ name: "status", label: "Status", value: status ?? "", options: [{ value: "", label: "Open" }, ...STATUSES.map((s) => ({ value: s, label: LABEL[s] }))] }]}
-      columns={[{ key: "client", label: "Client", sortable: true }, { key: "number", label: "Request", sortable: true }, { key: "property", label: "Property", className: "hidden md:table-cell" }, { key: "created", label: "Requested", sortable: true, className: "hidden sm:table-cell" }, { key: "status", label: "Status" }]}
+      columns={[{ key: "client", label: "Client", sortable: true }, { key: "number", label: "Request", sortable: true }, { key: "property", label: "Property", className: "hidden md:table-cell" }, { key: "status", label: "Status" }, { key: "created", label: "Requested", sortable: true, align: "right" }]}
       rows={rows.map((r) => ({
         id: r.id, href: `/requests/${r.id}`,
         cells: {
-          client: clientName(r.client), number: <><span className="font-semibold">#{r.number}</span> <span className="text-ink-soft">{r.title}</span>{r.assessmentAt && <span className="block text-xs text-ink-soft">Assessment {prettyDateTime(r.assessmentAt)}</span>}</>,
-          property: r.property?.formatted.split(",")[0] ?? "—", created: prettyDate(dateOnly(r.createdAt)), status: <RequestBadge s={r.status} />,
+          client: clientName(r.client), number: <><span className="font-medium tabular-nums">#{r.number}</span> <span className="text-ink-soft">{r.title}</span>{r.assessmentAt && <span className="block text-xs text-ink-soft">Assessment {prettyDateTime(r.assessmentAt)}</span>}</>,
+          property: r.property?.formatted.split(",")[0] ?? <span className="text-ink-faint">—</span>, created: <span className="text-ink-soft">{prettyDate(dateOnly(r.createdAt))}</span>, status: <RequestBadge s={r.status} />,
         },
       }))}
       empty="No requests match."

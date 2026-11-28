@@ -14,6 +14,12 @@ const NEXT: Record<QuoteStatus, QuoteStatus[]> = {
   DECLINED: ["DRAFT", "ARCHIVED"], // reopen
 };
 
+/** What the client's Approve needs, on the server too (the page only hides the button): an approvable status, not past valid-until. */
+export function assertApprovable(q: { status: QuoteStatus; validUntil: string | null }, today: string) {
+  assertQuoteTransition(q.status, "APPROVED");
+  if (quoteExpired(q, today)) throw new TransitionError("This quote has expired");
+}
+
 export function assertQuoteTransition(from: QuoteStatus, to: QuoteStatus) {
   if (!NEXT[from].includes(to)) throw new TransitionError(`A ${from.toLowerCase().replace("_", " ")} quote can't become ${to.toLowerCase().replace("_", " ")}`);
 }

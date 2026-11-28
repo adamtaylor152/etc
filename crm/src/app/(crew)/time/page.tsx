@@ -1,7 +1,9 @@
 // My time: clock in/out for the day and this person's own week. No costs and nobody else's hours, so crew can open it.
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, Play, Square } from "lucide-react";
+import { ChevronLeft, ChevronRight, Play, Route, Square } from "lucide-react";
+import { RunningClock } from "@/components/field/running-clock";
 import { Flash } from "@/components/flash";
+import { Badge, Card, btn } from "@/components/ui";
 import { requireUser } from "@/server/auth";
 import { addDays, localDayStart, mondayOf, prettyDate, todayLocal, TZ } from "@/server/dates";
 import { db } from "@/server/db";
@@ -30,52 +32,66 @@ export default async function MyTime({ searchParams }: PageProps<"/time">) {
   const now = new Date(); // request time, for the running entry
   const totals = clockTotals(week, now);
   const approved = clockTotals(week.filter((e) => e.approvedAt), now).total;
-  const big = "inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl px-4 text-lg font-bold text-white";
+  const big = btn("primary", "min-h-16! w-full text-lg!");
+  const weekBtn = "inline-flex size-11 items-center justify-center rounded-lg border border-line bg-white text-ink-soft hover:bg-tint hover:text-navy";
   return (
     <div className="mx-auto max-w-lg">
-      <div className="mb-3 flex items-center justify-between">
-        <h1 className="font-display text-2xl font-bold">My time</h1>
-        <Link href="/run" className="text-sm font-semibold text-blue">My route</Link>
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <h1 className="font-display text-[1.7rem] font-semibold leading-tight">My time</h1>
+        <Link href="/run" className="inline-flex min-h-11 items-center gap-1.5 rounded-lg px-2 text-sm font-semibold text-blue hover:text-blue-deep"><Route className="size-4" aria-hidden />My route</Link>
       </div>
       <Flash error={sp.error} />
-      <section className="mb-4 rounded-2xl bg-white p-4 shadow-card">
+      <Card className="mb-5">
         {running ? (
           <form action={clockOutAction}>
-            <p className="mb-3 text-sm text-ink-soft">{isGeneral(running) ? `On the clock since ${clockTime(running.startedAt)}` : `Timing a visit since ${clockTime(running.startedAt)}: your day clock is paused and picks up when the visit timer stops`}</p>
-            <button className={`${big} bg-red-600`}><Square className="size-5" />Clock out</button>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <Badge tone={isGeneral(running) ? "green" : "navy"}>{isGeneral(running) ? "On the clock" : "Timing a visit"}</Badge>
+              <span className="text-sm tabular-nums text-ink-soft">since {clockTime(running.startedAt)}</span>
+            </div>
+            <p className="mt-3 text-center font-display text-[3.25rem] font-semibold leading-none"><RunningClock since={running.startedAt.toISOString()} /></p>
+            {!isGeneral(running) && <p className="mt-3 text-sm text-ink-soft">Your day clock is paused and picks up when the visit timer stops.</p>}
+            <button className={`${big} mt-4`}><Square className="size-5" aria-hidden />Clock out</button>
           </form>
         ) : (
           <form action={clockInAction}>
-            <p className="mb-3 text-sm text-ink-soft">Not on the clock.</p>
-            <button className={`${big} bg-emerald-600`}><Play className="size-5" />Clock in</button>
+            <Badge>Not on the clock</Badge>
+            <p className="mt-3 text-center font-display text-[3.25rem] font-semibold leading-none tabular-nums text-ink-faint" aria-hidden>0:00:00</p>
+            <button className={`${big} mt-4`}><Play className="size-5" aria-hidden />Clock in</button>
           </form>
         )}
-      </section>
-      <section className="rounded-2xl bg-white p-4 shadow-card">
-        <div className="mb-2 flex items-center justify-between gap-2 text-sm font-semibold">
-          <Link href={`/time?week=${addDays(monday, -7)}`} className="rounded-lg border border-line p-2" aria-label="Previous week"><ChevronLeft className="size-4" /></Link>
-          <span>{prettyDate(monday)} – {prettyDate(days[6])}</span>
-          <Link href={`/time?week=${addDays(monday, 7)}`} className="rounded-lg border border-line p-2" aria-label="Next week"><ChevronRight className="size-4" /></Link>
+      </Card>
+      <Card>
+        <div className="mb-4 flex items-center justify-between gap-2">
+          <Link href={`/time?week=${addDays(monday, -7)}`} className={weekBtn} aria-label="Previous week"><ChevronLeft className="size-5" aria-hidden /></Link>
+          <h2 className="font-display text-[0.95rem] font-semibold tabular-nums">{prettyDate(monday)} – {prettyDate(days[6])}</h2>
+          <Link href={`/time?week=${addDays(monday, 7)}`} className={weekBtn} aria-label="Next week"><ChevronRight className="size-5" aria-hidden /></Link>
         </div>
-        <p className="mb-2 text-2xl font-bold">{hm(totals.total)} <span className="text-sm font-normal text-ink-soft">this week{totals.job > 0 && ` (${hm(totals.job)} on visits)`}{approved > 0 && ` · ${hm(approved)} approved`}</span></p>
-        <ul className="divide-y divide-line text-sm">
+        <div className="mb-3 rounded-lg bg-tint px-4 py-3">
+          <div className="text-xs font-medium text-ink-soft">This week</div>
+          <div className="mt-1 font-display text-[1.7rem] font-semibold leading-none tabular-nums">{hm(totals.total)}</div>
+          {(totals.job > 0 || approved > 0) && <div className="mt-1.5 text-xs tabular-nums text-ink-soft">{[totals.job > 0 && `${hm(totals.job)} on visits`, approved > 0 && `${hm(approved)} approved`].filter(Boolean).join(" · ")}</div>}
+        </div>
+        <ul className="divide-y divide-line-soft text-sm">
           {days.map((d) => {
             const list = week.filter((e) => local(e.startedAt) === d);
             return (
-              <li key={d} className="py-2">
-                <div className="flex justify-between font-semibold"><span className={d === today ? "text-blue" : ""}>{prettyDate(d)}</span><span>{list.length ? hm(clockTotals(list, now).total) : <span className="font-normal text-ink-soft">—</span>}</span></div>
+              <li key={d} className="py-3">
+                <div className="flex justify-between gap-3 font-semibold">
+                  <span>{prettyDate(d)}{d === today && <span className="ml-2 text-xs font-medium text-blue-deep">Today</span>}</span>
+                  <span className="tabular-nums">{list.length ? hm(clockTotals(list, now).total) : <span className="font-normal text-ink-soft" aria-label="No time">—</span>}</span>
+                </div>
                 {list.map((e) => (
-                  <div key={e.id} className="mt-1 flex justify-between gap-2 text-ink-soft">
-                    <span className="min-w-0 truncate">{e.jobId ? jobs.get(e.jobId) ?? "Visit" : e.note || "General"}{e.approvedAt && <span className="ml-2 rounded-full bg-emerald-100 px-2 text-xs font-semibold text-emerald-800">approved</span>}</span>
-                    <span className="shrink-0">{e.endedAt ? hm(e.minutes ?? 0) : `${hm(clockTotals([e], now).total)} so far`}</span>
+                  <div key={e.id} className="mt-1.5 flex items-center justify-between gap-3 text-ink-soft">
+                    <span className="flex min-w-0 items-center gap-2"><span className="truncate">{e.jobId ? jobs.get(e.jobId) ?? "Visit" : e.note || "General"}</span>{e.approvedAt && <Badge tone="green">Approved</Badge>}</span>
+                    <span className="shrink-0 tabular-nums">{e.endedAt ? hm(e.minutes ?? 0) : `${hm(clockTotals([e], now).total)} so far`}</span>
                   </div>
                 ))}
               </li>
             );
           })}
         </ul>
-        <p className="mt-3 text-xs text-ink-soft">Something wrong? Tell the office: only they can change time, and approved time is locked.</p>
-      </section>
+        <p className="mt-3 border-t border-line-soft pt-3 text-xs text-ink-soft">Something wrong? Tell the office: only they can change time, and approved time is locked.</p>
+      </Card>
     </div>
   );
 }

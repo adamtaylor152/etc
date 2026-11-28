@@ -30,9 +30,12 @@ export async function referralCodeFor(clientId: string) {
 }
 export const referralLink = (code: string) => `${env.siteUrl}/book.html?ref=${encodeURIComponent(code)}`;
 
-/** A booking came in with ?ref=CODE: link the new client to who sent them (never themselves, only once). */
-export async function recordReferral(businessId: string, refereeId: string, code: string | null | undefined) {
-  if (!code) return null;
+/**
+ * A booking came in with ?ref=CODE: link the new client to who sent them (never themselves, only once). Only when that
+ * booking created the client (`isNewClient`): an existing client typing a code gets no welcome credit and earns nobody a reward.
+ */
+export async function recordReferral(businessId: string, refereeId: string, code: string | null | undefined, isNewClient: boolean) {
+  if (!code || !isNewClient) return null;
   const referrer = await db.client.findFirst({ where: { businessId, referralCode: code.trim().toUpperCase() } });
   if (!referrer || referrer.id === refereeId) return null;
   const referee = await db.client.findUniqueOrThrow({ where: { id: refereeId } });
@@ -121,6 +124,7 @@ export async function sendReviewRequests() {
 
 /** Client tapped a star. Returns where to send them next. */
 export async function rate(reviewId: string, rating: number) {
+  if (!Number.isFinite(rating)) return null; // a hand-made form post: nothing to record
   const r = await db.reviewRequest.update({ where: { id: reviewId }, data: { rating: Math.max(1, Math.min(5, Math.round(rating))), ratedAt: new Date() } });
   await logActivity(db, { businessId: r.businessId, type: "review.rated", entityType: "Client", entityId: r.clientId, actorType: "CLIENT", actorClientId: r.clientId, clientId: r.clientId, data: { rating: r.rating } });
   return reviewRoute(r.rating!);

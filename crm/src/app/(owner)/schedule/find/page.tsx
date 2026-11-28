@@ -1,7 +1,9 @@
 // Find a time: pick a visit, get the best open slots (by person, working hours, time off, and closeness to their other stops).
 import { requireOwner } from "@/server/auth";
 import Link from "next/link";
+import { Flash } from "@/components/flash";
 import { ScheduleTabs } from "@/components/schedule-tabs";
+import { Button, Card, Empty, Field, inputCls } from "@/components/ui";
 import { fmtMin, localParts, suggestSlots } from "@/server/availability";
 import { addDays, dateOnly, todayLocal } from "@/server/dates";
 import { businessId, db } from "@/server/db";
@@ -29,45 +31,52 @@ export default async function FindTime({ searchParams }: PageProps<"/schedule/fi
     where: visit.property.lat != null && visit.property.lng != null ? { lat: visit.property.lat, lng: visit.property.lng } : null,
   }) : [];
   const name = new Map(av?.people.map((p) => [p.id, p]) ?? []);
-  const sel = "min-h-10 rounded-lg border border-line bg-white px-2 text-sm";
   return (
     <>
       <ScheduleTabs active="/schedule/find" />
-      <form className="mb-4 flex flex-wrap items-end gap-2 rounded-lg border border-line bg-white p-3 text-sm shadow-card">
-        <label className="min-w-64 flex-1">Visit to book
-          <select name="visit" defaultValue={visit?.id ?? ""} className={`${sel} mt-1 w-full`}>
-            <option value="">Choose a visit…</option>
-            {candidates.map((v) => <option key={v.id} value={v.id}>{clientName(v.job.client)} · {v.job.title} · {v.scheduledDate ? `now ${dateOnly(v.scheduledDate)}` : "unscheduled"}</option>)}
-          </select>
-        </label>
-        <label>Takes<select name="duration" defaultValue={duration} className={`${sel} mt-1 block`}>{[30, 45, 60, 90, 120, 180, 240].map((m) => <option key={m} value={m}>{m < 60 ? `${m} min` : `${m / 60} h`}</option>)}</select></label>
-        <label>Look ahead<select name="days" defaultValue={days} className={`${sel} mt-1 block`}>{[7, 14, 30].map((d) => <option key={d} value={d}>{d} days</option>)}</select></label>
-        <button className="min-h-10 rounded-lg bg-blue px-4 font-semibold text-white">Find times</button>
-      </form>
-      {typeof sp.error === "string" && <p role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{sp.error}</p>}
-      {visit && (
-        <section className="rounded-lg border border-line bg-white shadow-card">
-          <h2 className="border-b border-line p-3 text-sm font-bold">Best times for {clientName(visit.job.client)} · {visit.property.formatted.split(",")[0]}</h2>
-          <ul className="divide-y divide-line">
-            {sugg.map((s) => {
-              const p = name.get(s.userId);
-              return (
-                <li key={`${s.userId}${s.date}`} className="flex flex-wrap items-center gap-3 px-3 py-2.5 text-sm">
-                  <span className="w-40 font-semibold">{new Date(`${s.date}T12:00:00Z`).toLocaleDateString("en-CA", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" })} · {fmtMin(s.start)}</span>
-                  <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-full" style={{ background: p?.color }} />{p?.name}</span>
-                  <span className="flex-1 text-ink-soft">{s.near ? `${s.nearKm! < 1 ? "<1" : s.nearKm!.toFixed(1)} km from ${s.near}` : "free day"}</span>
-                  <form action={bookSlot}>
-                    <input type="hidden" name="visitId" value={visit.id} /><input type="hidden" name="userId" value={s.userId} /><input type="hidden" name="date" value={s.date} />
-                    <input type="hidden" name="start" value={s.start} /><input type="hidden" name="duration" value={duration} />
-                    <button className="min-h-9 rounded-lg bg-navy px-3 font-semibold text-white">Book</button>
-                  </form>
-                </li>
-              );
-            })}
-            {!sugg.length && <li className="p-6 text-center text-sm text-ink-soft">No open slots in that window. Check working hours in <Link href="/settings/team#hours" className="text-blue">Team settings</Link>.</li>}
-          </ul>
+      <Flash error={sp.error} />
+      <Card className="mb-5">
+        <form className="flex flex-wrap items-end gap-3">
+          <div className="min-w-0 flex-1 basis-64">
+            <Field label="Visit to book">
+              <select name="visit" defaultValue={visit?.id ?? ""} className={inputCls}>
+                <option value="">Choose a visit…</option>
+                {candidates.map((v) => <option key={v.id} value={v.id}>{clientName(v.job.client)} · {v.job.title} · {v.scheduledDate ? `now ${dateOnly(v.scheduledDate)}` : "unscheduled"}</option>)}
+              </select>
+            </Field>
+          </div>
+          <div className="w-28"><Field label="Takes"><select name="duration" defaultValue={duration} className={inputCls}>{[30, 45, 60, 90, 120, 180, 240].map((m) => <option key={m} value={m}>{m < 60 ? `${m} min` : `${m / 60} h`}</option>)}</select></Field></div>
+          <div className="w-28"><Field label="Look ahead"><select name="days" defaultValue={days} className={inputCls}>{[7, 14, 30].map((d) => <option key={d} value={d}>{d} days</option>)}</select></Field></div>
+          <Button>Find times</Button>
+        </form>
+      </Card>
+      {visit ? (
+        <section className="overflow-hidden rounded-xl border border-line bg-white shadow-card">
+          <div className="border-b border-line px-4 py-3 sm:px-5">
+            <h2 className="font-display text-[0.95rem] font-semibold">Best times for {clientName(visit.job.client)} · {visit.property.formatted.split(",")[0]}</h2>
+            <p className="mt-0.5 text-xs text-ink-soft">Ranked by who is free and how close their other stops are that day.</p>
+          </div>
+          {sugg.length ? (
+            <ul className="divide-y divide-line-soft">
+              {sugg.map((s) => {
+                const p = name.get(s.userId);
+                return (
+                  <li key={`${s.userId}${s.date}`} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2.5 text-sm hover:bg-tint/60 sm:px-5">
+                    <span className="w-44 font-semibold tabular-nums"><time dateTime={s.date}>{new Date(`${s.date}T12:00:00Z`).toLocaleDateString("en-CA", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" })}</time> · {fmtMin(s.start)}</span>
+                    <span className="flex w-32 items-center gap-1.5"><span className="size-2.5 shrink-0 rounded-full" style={{ background: p?.color }} aria-hidden /><span className="truncate">{p?.name}</span></span>
+                    <span className="min-w-0 flex-1 basis-40 tabular-nums text-ink-soft">{s.near ? `${s.nearKm! < 1 ? "<1" : s.nearKm!.toFixed(1)} km from ${s.near}` : "Free day"}</span>
+                    <form action={bookSlot} className="ml-auto">
+                      <input type="hidden" name="visitId" value={visit.id} /><input type="hidden" name="userId" value={s.userId} /><input type="hidden" name="date" value={s.date} />
+                      <input type="hidden" name="start" value={s.start} /><input type="hidden" name="duration" value={duration} />
+                      <Button variant="secondary" className="min-h-9 px-3" aria-label={`Book ${p?.name ?? "this slot"}, ${s.date} at ${fmtMin(s.start)}`}>Book</Button>
+                    </form>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : <div className="p-4 sm:p-5"><Empty action={<Link href="/settings/team#hours" className="text-sm font-semibold text-blue hover:text-blue-deep">Check working hours</Link>}>No open slots in that window. Try a longer look-ahead or a shorter visit.</Empty></div>}
         </section>
-      )}
+      ) : <Empty>{candidates.length ? "Choose a visit and you will get the best open times for it: who is free, and how close they already are." : "There are no upcoming or unscheduled visits to book."}</Empty>}
     </>
   );
 }

@@ -1,0 +1,107 @@
+/*
+  FullCalendar (classic theme) brought onto the system. Two hooks, no forked theme:
+  1. the theme's palette variables, re-pointed at our tokens inside .etc-cal;
+  2. our own class names, added through FullCalendar's *Class options in components/calendar.tsx (etc-fc-*).
+  Every rule is scoped under .etc-cal so it outranks the theme's single-class utilities.
+*/
+.etc-cal {
+  --fc-classic-border: var(--color-line);
+  --fc-classic-strong-border: var(--color-line);
+  --fc-classic-background: #fff;
+  --fc-classic-faint: var(--color-tint);
+  --fc-classic-muted: var(--color-line-soft);
+  --fc-classic-strong: var(--color-line);
+  --fc-classic-foreground: var(--color-navy);
+  --fc-classic-muted-foreground: var(--color-ink-soft);
+  --fc-classic-faint-foreground: var(--color-ink-faint);
+  --fc-classic-primary: var(--color-blue);
+  --fc-classic-today: rgba(29, 111, 216, .05);
+  --fc-classic-highlight: rgba(29, 111, 216, .10);
+  --fc-classic-now: #dc2626;
+  --fc-classic-button: #fff;
+  --fc-classic-button-border: var(--color-line);
+  --fc-classic-button-strong: var(--color-tint);
+  --fc-classic-button-strong-border: var(--color-line);
+  --fc-classic-button-foreground: var(--color-navy);
+  --fc-classic-button-outline: var(--color-blue);
+}
+.etc-cal .etc-fc { font-size: 14px; gap: 14px; font-variant-numeric: tabular-nums; }
+
+/* Toolbar: title in the brand face, buttons from the kit (secondary), views as a segmented control. */
+.etc-cal .etc-fc-toolbar { gap: 8px 12px; }
+.etc-cal .etc-fc-title { font-family: var(--font-display); font-size: 1.15rem; line-height: 1.3; font-weight: 600; letter-spacing: -0.015em; }
+.etc-cal .etc-fc-btn {
+  min-height: 2.25rem; padding: 0 .8rem; border: 1px solid var(--color-line); border-radius: var(--radius-lg);
+  background: #fff; color: var(--color-navy); font-size: .875rem; font-weight: 600; justify-content: center;
+  box-shadow: var(--shadow-sm); outline-color: var(--color-blue);
+}
+.etc-cal .etc-fc-btn:hover { background: var(--color-tint); border-color: color-mix(in srgb, var(--color-ink-faint) 60%, transparent); }
+.etc-cal .etc-fc-btn.is-icon { padding: 0 .5rem; }
+.etc-cal .etc-fc-btn.is-off { opacity: .5; box-shadow: none; }
+.etc-cal .etc-fc-btn svg { width: 16px; height: 16px; stroke-width: 1.75; }
+.etc-cal .etc-fc-group { gap: 0; }
+.etc-cal .etc-fc-group .etc-fc-btn:not(:first-child) { margin-inline-start: -1px; border-start-start-radius: 0; border-end-start-radius: 0; }
+.etc-cal .etc-fc-group .etc-fc-btn:not(:last-child) { border-start-end-radius: 0; border-end-end-radius: 0; }
+.etc-cal .etc-fc-group[role="tablist"] { gap: 4px; padding: 4px; border-radius: var(--radius-lg); background: var(--color-tint); }
+.etc-cal .etc-fc-group[role="tablist"] .etc-fc-btn {
+  min-height: 1.75rem; margin: 0; border: 0; border-radius: var(--radius-md); background: transparent; box-shadow: none; color: var(--color-ink-soft);
+}
+.etc-cal .etc-fc-group[role="tablist"] .etc-fc-btn:hover { color: var(--color-navy); }
+.etc-cal .etc-fc-group[role="tablist"] .etc-fc-btn.is-on { background: #fff; color: var(--color-navy); box-shadow: var(--shadow-sm); }
+
+/* Grid: hairlines, quiet labels, today as a faint blue wash with its heading picked out. */
+.etc-cal .etc-fc-view { border-radius: var(--radius-lg); overflow: hidden; }
+.etc-cal .etc-fc-head { padding-block: 4px; font-size: .75rem; font-weight: 500; color: var(--color-ink-soft); }
+.etc-cal .etc-fc-head.is-today { color: var(--color-blue-deep); font-weight: 600; }
+.etc-cal .etc-fc-axis { font-size: .75rem; color: var(--color-ink-soft); white-space: nowrap; }
+.etc-cal .etc-fc-daynum { font-size: .75rem; font-weight: 500; color: var(--color-ink-soft); }
+.etc-cal .etc-fc-daynum.is-today { color: var(--color-blue-deep); font-weight: 600; }
+.etc-cal .etc-fc-daynum.is-other { color: var(--color-ink-faint); }
+
+/* Events: a tinted block with the person's colour down the left edge, navy text on top. */
+.etc-cal .etc-fc-block {
+  border: 0; border-inline-start: 3px solid var(--fc-event-color); border-radius: 5px;
+  background-color: color-mix(in oklab, var(--fc-event-color) 13%, #fff); box-shadow: 0 0 0 1px #fff;
+}
+.etc-cal .etc-fc-block:hover { background-color: color-mix(in oklab, var(--fc-event-color) 20%, #fff); }
+.etc-cal .etc-fc-block-inner { padding: 2px 5px; color: var(--color-navy); font-size: .75rem; line-height: 1.3; }
+.etc-cal .etc-fc-ev-time { font-size: .6875rem; font-weight: 500; color: var(--color-ink-soft); }
+.etc-cal .etc-fc-ev-title { font-weight: 600; }
+.etc-cal .etc-fc-item .etc-fc-ev-title { font-weight: 500; }
+.etc-cal .etc-fc-item { color: var(--color-navy); }
+.etc-cal .etc-fc-more { border: 0; border-radius: 5px; background: var(--color-tint); color: var(--color-ink-soft); font-size: .6875rem; font-weight: 600; box-shadow: 0 0 0 1px #fff; }
+.etc-cal .etc-fc-more:hover { background: var(--color-line-soft); color: var(--color-navy); }
+.etc-cal .etc-fc-popover { border-radius: var(--radius-xl); border-color: var(--color-line); box-shadow: var(--shadow-lift); font-size: 14px; overflow: hidden; }
+
+/* States. The colour edge stays the person's; state is an icon before the title plus a tint. */
+.etc-cal .etc-ev-done.etc-fc-block { background-color: var(--color-tint); }
+.etc-cal .etc-ev-done :is(.etc-fc-ev-title, .etc-fc-ev-time), .etc-cal .etc-ev-done.etc-fc-item { color: var(--color-ink-soft); }
+.etc-cal .etc-ev-late.etc-fc-block { background-color: #fef2f2; }
+.etc-cal .etc-ev-late .etc-fc-ev-title { color: #991b1b; }
+.etc-cal [class*="etc-ev-i-"] .etc-fc-ev-title::before {
+  content: ""; display: inline-block; width: .9em; height: .9em; margin-inline-end: .3em; vertical-align: -.1em;
+  background: currentColor; -webkit-mask: var(--etc-ev-icon) center / contain no-repeat; mask: var(--etc-ev-icon) center / contain no-repeat;
+}
+.etc-ev-i-done { --etc-ev-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E"); }
+.etc-ev-i-warn { --etc-ev-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3'/%3E%3Cpath d='M12 9v4'/%3E%3Cpath d='M12 17h.01'/%3E%3C/svg%3E"); }
+.etc-ev-i-late { --etc-ev-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='M12 6v6l4 2'/%3E%3C/svg%3E"); }
+.etc-ev-i-ask { --etc-ev-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8'/%3E%3Cpath d='M21 3v5h-5'/%3E%3Cpath d='M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16'/%3E%3Cpath d='M8 16H3v5'/%3E%3C/svg%3E"); }
+.etc-ev-i-ok { --etc-ev-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M18 6 7 17l-5-5'/%3E%3Cpath d='m22 10-7.5 7.5L13 16'/%3E%3C/svg%3E"); }
+.etc-cal .etc-ev-i-warn .etc-fc-ev-title::before { color: #b45309; }
+
+/* List view: day bands in tint, rows with room to tap. */
+.etc-cal .etc-fc-listday { background: var(--color-tint); }
+.etc-cal .etc-fc-listday-inner { padding: 8px 12px; font-size: .75rem; font-weight: 600; color: var(--color-ink-soft); }
+.etc-cal .etc-fc-list-item { min-height: 2.75rem; align-items: center; border-color: var(--color-line-soft); }
+.etc-cal .etc-fc-list-item .etc-fc-ev-time { width: 7.5rem; max-width: 40%; font-size: .75rem; }
+.etc-cal .etc-fc-list-item .etc-fc-ev-title { font-size: .875rem; font-weight: 600; white-space: normal; }
+.etc-cal .etc-fc-empty { background: var(--color-tint); color: var(--color-ink-soft); font-size: .875rem; }
+
+/* Phones: title on its own line, controls underneath, each a full 40px. */
+@media (max-width: 639px) {
+  .etc-cal .etc-fc-section:has(.etc-fc-title) { order: -1; width: 100%; }
+  .etc-cal .etc-fc-title { font-size: 1.05rem; }
+  .etc-cal .etc-fc-btn { min-height: 2.5rem; }
+  .etc-cal .etc-fc-group[role="tablist"] .etc-fc-btn { min-height: 2rem; padding: 0 .6rem; }
+  .etc-cal .etc-fc-list-item .etc-fc-ev-time { width: 5.5rem; }
+}

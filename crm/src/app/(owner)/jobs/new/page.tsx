@@ -5,7 +5,8 @@ import { requireOwner } from "@/server/auth";
 import { WindowChips } from "@/components/window-chips";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Button, Card, Field, Input, PageHeader, Textarea, inputCls } from "@/components/ui";
+import { Button, ButtonLink, Card, Field, Input, PageHeader, Tabs, Textarea, inputCls } from "@/components/ui";
+import { Flash } from "@/components/flash";
 import { businessId, db } from "@/server/db";
 import { clientName } from "@/server/queries";
 import { RepeatFields } from "@/components/repeat-fields";
@@ -52,7 +53,7 @@ export default async function NewJob({ searchParams }: PageProps<"/jobs/new">) {
     <Field label="Property">
       {client.properties.length ? (
         <select name="propertyId" className={inputCls} required defaultValue={request?.propertyId ?? from?.propertyId ?? undefined}>{client.properties.map((p) => <option key={p.id} value={p.id}>{p.formatted}</option>)}</select>
-      ) : <p className="text-sm text-ink-soft">No property yet. <Link className="font-semibold text-blue" href={`/clients/${client.id}/properties/new`}>Add one first</Link></p>}
+      ) : <p className="rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-sm font-medium text-amber-950">This client has no property yet. <Link className="font-semibold underline underline-offset-2" href={`/clients/${client.id}/properties/new`}>Add one first</Link></p>}
     </Field>
   );
   // Shared by the one-off and recurring forms.
@@ -63,38 +64,39 @@ export default async function NewJob({ searchParams }: PageProps<"/jobs/new">) {
         : (request?.services ?? []).filter((x) => x !== "Snow shovelling").map((name) => ({ name, price: (() => { const sv = services.find((x) => (x.bookingLabel ?? x.name) === name); return sv?.unitPriceCents != null ? String(sv.unitPriceCents / 100) : ""; })() }))} />
   );
   const assign = people.length > 0 && (
-    <div>
-      <span className="mb-1 block text-sm font-semibold">Assign</span>
-      <div className="flex flex-wrap gap-3">{people.map((p) => <label key={p.id} className="flex items-center gap-1.5 text-sm"><input type="checkbox" name="userId" value={p.id} defaultChecked={from?.defaultAssigneeIds.includes(p.id)} className="size-4" /><span className="size-2.5 rounded-full" style={{ background: p.color }} />{p.name}</label>)}</div>
-    </div>
+    <fieldset>
+      <legend className="text-sm font-semibold">Assign</legend>
+      <div className="flex flex-wrap gap-x-4">{people.map((p) => <label key={p.id} className="flex min-h-10 items-center gap-2 text-sm"><input type="checkbox" name="userId" value={p.id} defaultChecked={from?.defaultAssigneeIds.includes(p.id)} className="size-5" /><span className="size-2.5 rounded-full" style={{ background: p.color }} aria-hidden />{p.name}</label>)}</div>
+    </fieldset>
   );
   const checklistPick = checklists.length > 0 && (
     <Field label="Visit checklist" hint="Automatic = from the services above (if one has a checklist)">
       <select name="checklistTemplateId" className={inputCls} defaultValue={from ? from.checklistTemplateId ?? "none" : ""}><option value="">Automatic</option><option value="none">No checklist</option>{checklists.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
     </Field>
   );
+  // A titled part of the form, set off by a hairline rather than a box inside the card.
+  const part = "space-y-3 border-t border-line-soft pt-5";
+  const partTitle = "font-display text-[0.95rem] font-semibold";
+  const tabs = [["", "One-off"], ["recurring", "Recurring"], ["plan", "Every snowfall"]].map(([k, label]) => ({ href: `/jobs/new?client=${client.id}${k ? `&kind=${k}` : ""}`, label }));
+  const cancel = <ButtonLink href={`/clients/${client.id}`}>Cancel</ButtonLink>;
   return (
     <div className="mx-auto max-w-2xl">
-      <PageHeader title={plan ? "New every-snowfall plan" : recurring ? "New recurring job" : "New job"} sub={<>For <Link className="font-semibold text-blue" href={`/clients/${client.id}`}>{clientName(client)}</Link> · <Link className="text-blue" href={from ? `/jobs/new?from=${from.id}` : "/jobs/new"}>change</Link>{from && <> · same as job #{from.number} ({from.title})</>}</>} />
-      <nav className="mb-4 flex gap-1 border-b border-line">
-        {[["", "One-off"], ["recurring", "Recurring"], ["plan", "Every snowfall"]].map(([k, l]) => (
-          <Link key={k} href={`/jobs/new?client=${client.id}${k ? `&kind=${k}` : ""}`} className={`-mb-px border-b-2 px-3 py-2 text-sm font-semibold ${(k === "plan" ? plan : k === "recurring" ? recurring : !plan && !recurring) ? "border-blue text-navy" : "border-transparent text-ink-soft"}`}>{l}</Link>
-        ))}
-      </nav>
-      {s("error") && <p role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-medium text-red-800">{s("error")}</p>}
+      <PageHeader title={plan ? "New every-snowfall plan" : recurring ? "New recurring job" : "New job"} sub={<>For <Link className="font-semibold text-blue hover:text-blue-deep" href={`/clients/${client.id}`}>{clientName(client)}</Link> · <Link className="font-semibold text-blue hover:text-blue-deep" href={from ? `/jobs/new?from=${from.id}` : "/jobs/new"}>Change client</Link>{from && <> · same as job #{from.number} ({from.title})</>}</>} />
+      <Tabs items={tabs} active={plan ? "Every snowfall" : recurring ? "Recurring" : "One-off"} />
+      <Flash error={s("error") || undefined} />
       {plan ? (
         <Card>
-          <form action={planCreate} className="space-y-4">
+          <form action={planCreate} className="space-y-5">
             <input type="hidden" name="clientId" value={client.id} />
             {propertyPick}
-            <div className="grid gap-3 sm:grid-cols-3">
-              <Field label="Trigger (cm)" hint="Blank = season default"><Input name="triggerCm" type="number" min={0} max={100} /></Field>
-              <Field label="Per push ($)"><Input name="price" type="number" step="0.01" defaultValue={30} /></Field>
-              <label className="flex items-center gap-2 pt-6 text-sm font-semibold"><input type="checkbox" name="iceMelt" className="size-5" /> Ice melt (+$5)</label>
+            <div className="grid items-start gap-3 sm:grid-cols-3">
+              <Field label="Trigger (cm)" hint="Blank = season default"><Input name="triggerCm" type="number" inputMode="numeric" min={0} max={100} /></Field>
+              <Field label="Per push ($)"><Input name="price" type="number" inputMode="decimal" step="0.01" defaultValue={30} /></Field>
+              <label className="flex min-h-10 items-center gap-2 text-sm font-semibold sm:mt-6"><input type="checkbox" name="iceMelt" className="size-5" /> Ice melt (+$5)</label>
             </div>
             <DepthTierFields tiers={settings.depthTiers} />
             <PlanBillingFields firstDueOn={todayLocal()} />
-            <Button>Create plan</Button>
+            <div className="flex flex-wrap gap-2 border-t border-line-soft pt-5"><Button>Create plan</Button>{cancel}</div>
           </form>
         </Card>
       ) : recurring ? (
@@ -105,8 +107,8 @@ export default async function NewJob({ searchParams }: PageProps<"/jobs/new">) {
             <Field label="Job title"><Input name="title" required defaultValue={from?.title ?? ""} placeholder="e.g. Bin cleaning" list="service-names" /></Field>
             <datalist id="service-names">{services.map((sv) => <option key={sv.id} value={sv.name} />)}</datalist>
             <Field label="Instructions for the crew"><Textarea name="instructions" rows={2} defaultValue={from?.instructions ?? ""} /></Field>
-            <fieldset className="space-y-3 rounded-lg border border-line p-3">
-              <legend className="px-1 text-sm font-bold">Schedule</legend>
+            <div role="group" aria-labelledby="new-schedule" className={part}>
+              <h2 id="new-schedule" className={partTitle}>Schedule</h2>
               {/* A copied rule starts again today and keeps going: the old start and end belonged to the other job. */}
               <RepeatFields {...(rule ?? {})} freq={from?.kind === "RECURRING" && from.asNeeded ? "AS_NEEDED" : rule?.freq} startsOn={todayLocal()} endsOn={null} count={null} />
               <div className="grid gap-3 sm:grid-cols-2">
@@ -115,11 +117,14 @@ export default async function NewJob({ searchParams }: PageProps<"/jobs/new">) {
               </div>
               <WindowChips windows={windows} />
               {assign}
-            </fieldset>
-            {lineItems}
-            {checklistPick}
-            <RecurringBillingFields {...(from?.kind === "RECURRING" ? { method: from.billingType, when: from.invoiceSchedule, invoiceDay: from.invoiceDay } : {})} />
-            <Button>Create recurring job</Button>
+            </div>
+            <div role="group" aria-labelledby="new-billing" className={part}>
+              <h2 id="new-billing" className={partTitle}>Work and billing</h2>
+              {lineItems}
+              {checklistPick}
+              <RecurringBillingFields {...(from?.kind === "RECURRING" ? { method: from.billingType, when: from.invoiceSchedule, invoiceDay: from.invoiceDay } : {})} />
+            </div>
+            <div className="flex flex-wrap gap-2 border-t border-line-soft pt-5"><Button>Create recurring job</Button>{cancel}</div>
           </form>
         </Card>
       ) : (
@@ -131,27 +136,30 @@ export default async function NewJob({ searchParams }: PageProps<"/jobs/new">) {
             <Field label="Job title"><Input name="title" required defaultValue={request?.title ?? from?.title ?? ""} placeholder="e.g. Window cleaning" list="service-names" /></Field>
             <datalist id="service-names">{services.map((sv) => <option key={sv.id} value={sv.name} />)}</datalist>
             <Field label="Instructions for the crew"><Textarea name="instructions" rows={2} defaultValue={request?.notes ?? from?.instructions ?? ""} /></Field>
-            <fieldset className="space-y-3 rounded-lg border border-line p-3">
-              <legend className="px-1 text-sm font-bold">Schedule</legend>
+            <div role="group" aria-labelledby="new-schedule" className={part}>
+              <h2 id="new-schedule" className={partTitle}>Schedule</h2>
               <div className="grid gap-3 sm:grid-cols-3">
                 <Field label="Date"><Input name="date" type="date" defaultValue={s("date")} /></Field>
                 <Field label="Start time" hint="Blank = any time"><Input name="startTime" type="time" defaultValue={s("time")} /></Field>
                 <Field label="End time"><Input name="endTime" type="time" /></Field>
               </div>
               <WindowChips windows={windows} />
-              <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="later" className="size-4" />Schedule later (goes to the Unscheduled list)</label>
+              <label className="flex min-h-10 items-center gap-2 text-sm"><input type="checkbox" name="later" className="size-5" />Schedule later (goes to the Unscheduled list)</label>
               <details>
-                <summary className="cursor-pointer text-sm font-semibold text-blue">More visits on other days</summary>
-                <div className="mt-2 grid gap-2 sm:grid-cols-4">{[0, 1, 2, 3].map((i) => <Input key={i} name="moreDate" type="date" aria-label={`Extra visit ${i + 1}`} />)}</div>
+                <summary className="inline-flex min-h-8 items-center text-sm font-semibold text-blue hover:text-blue-deep">More visits on other days</summary>
+                <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">{[0, 1, 2, 3].map((i) => <Input key={i} name="moreDate" type="date" aria-label={`Extra visit ${i + 1}`} />)}</div>
               </details>
               {assign}
-            </fieldset>
-            {lineItems}
-            {checklistPick}
-            <Field label="Billing">
-              <select name="billingType" className={inputCls} defaultValue={from?.kind === "ONE_OFF" ? from.billingType : undefined}><option value="PER_VISIT">Invoice per visit (charges added when each visit is done)</option><option value="FIXED_PRICE">Fixed price for the whole job (invoice when it&apos;s finished)</option></select>
-            </Field>
-            <Button>Create job</Button>
+            </div>
+            <div role="group" aria-labelledby="new-billing" className={part}>
+              <h2 id="new-billing" className={partTitle}>Work and billing</h2>
+              {lineItems}
+              {checklistPick}
+              <Field label="Billing">
+                <select name="billingType" className={inputCls} defaultValue={from?.kind === "ONE_OFF" ? from.billingType : undefined}><option value="PER_VISIT">Invoice per visit (charges added when each visit is done)</option><option value="FIXED_PRICE">Fixed price for the whole job (invoice when it&apos;s finished)</option></select>
+              </Field>
+            </div>
+            <div className="flex flex-wrap gap-2 border-t border-line-soft pt-5"><Button>Create job</Button>{cancel}</div>
           </form>
         </Card>
       )}

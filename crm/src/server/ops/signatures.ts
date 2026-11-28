@@ -24,6 +24,9 @@ export function decodeSignature(dataUrl: string): Buffer {
   return buf;
 }
 
+const MAX_SIG_W = 2000, MAX_SIG_H = 1000;
+const PIXELS = { limitInputPixels: MAX_SIG_W * MAX_SIG_H };
+
 /** How many pixels have ink (dark and not transparent) in raw RGBA data. Pure, unit-tested. */
 export function inkPixels(raw: Uint8Array, channels = 4) {
   let n = 0;
@@ -66,10 +69,14 @@ export async function saveSignature(input: {
   const name = input.signerName.trim().slice(0, 100);
   if (!name) throw new TransitionError("Type your name");
   const png = decodeSignature(input.dataUrl);
-  const { data, info } = await sharp(png).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  // A 300 KB PNG can declare a huge canvas (compresses to nothing, decodes to gigabytes): read the header first.
+  // The pad draws a few hundred pixels across; limitInputPixels makes sharp itself refuse too.
+  const meta = await sharp(png, PIXELS).metadata().catch(() => null);
+  if (!meta?.width || !meta.height || meta.width > MAX_SIG_W || meta.height > MAX_SIG_H) throw new TransitionError("Please sign in the box");
+  const { data, info } = await sharp(png, PIXELS).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
   if (inkPixels(data, info.channels) < 150) throw new TransitionError("That signature is too small. Sign with your finger or mouse in the box.");
   // White background so the signature reads on any page (the stored variants are WebP).
-  const flat = await sharp(png).flatten({ background: "#ffffff" }).png().toBuffer();
+  const flat = await sharp(png, PIXELS).flatten({ background: "#ffffff" }).png().toBuffer();
   const att = await saveImage(input.businessId, { bytes: flat, contentType: "image/png" }, {
     kind: "DOCUMENT", uploadedByType: input.inPerson ? "USER" : "CLIENT", uploadedById: input.actorUserId, clientId: input.clientId,
     quoteId: input.quoteId, visitId: input.visitId, caption: `Signature: ${name}`,

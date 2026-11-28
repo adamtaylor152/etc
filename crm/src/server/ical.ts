@@ -1,6 +1,7 @@
 // A person's schedule as an iCalendar feed (subscribe from Google / Apple / Outlook). One-way: read only.
 // The link is the secret: it carries a signature of the user id, so it can't be guessed and needs no sign-in.
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { configuredSecret } from "./secret";
 
 export type CalEvent = { uid: string; title: string; location?: string | null; notes?: string | null; date: string; start?: Date | null; end?: Date | null };
 
@@ -23,12 +24,12 @@ export function toIcs(name: string, events: CalEvent[], now = new Date()) {
   return [...lines, "END:VCALENDAR"].join("\r\n") + "\r\n";
 }
 
-const sig = (userId: string) => createHmac("sha256", process.env.MEDIA_SIGNING_SECRET ?? "").update(`cal.${userId}`).digest("base64url").slice(0, 32);
+const sig = (userId: string) => createHmac("sha256", configuredSecret() ?? "").update(`cal.${userId}`).digest("base64url").slice(0, 32);
 export const feedPath = (userId: string) => `/api/cal/${userId}.${sig(userId)}`;
 /** The user id a feed key is for, or null if the signature is wrong (or no signing secret is set). */
 export function feedUser(key: string) {
   const [userId, s] = key.replace(/\.ics$/, "").split(".");
-  if (!userId || !s || (process.env.MEDIA_SIGNING_SECRET ?? "").length < 16) return null;
+  if (!userId || !s || !configuredSecret()) return null;
   const want = Buffer.from(sig(userId)), got = Buffer.from(s);
   return want.length === got.length && timingSafeEqual(want, got) ? userId : null;
 }

@@ -7,8 +7,10 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   // Stamped into the client bundle at build time: the service worker's cache version (src/components/sw-register.tsx).
   env: { NEXT_PUBLIC_BUILD_ID: Date.now().toString(36) },
-  // Notes and forms can carry photos (phones shrink them first, but a few full-size ones still pass 1 MB).
-  experimental: { serverActions: { bodySizeLimit: "30mb" } },
+  // Server actions that carry a file: note attachments, expense receipts, the logo (each up to the 25 MB file limit in
+  // src/server/media.ts), the client CSV (1 MB) and signature data URLs (under 0.5 MB). So: one 25 MB file plus the form.
+  // Photo uploads don't come through here; they go to the /api upload routes, which cap what they read themselves (cappedFormData).
+  experimental: { serverActions: { bodySizeLimit: "26mb" } },
   turbopack: {
     rules: {
       "*.css": { loaders: ["@tailwindcss/turbopack"], as: "*.css" },

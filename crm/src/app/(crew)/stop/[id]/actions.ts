@@ -20,6 +20,10 @@ async function myVisit(f: FormData) {
   if (!visit) redirect("/run");
   return { user, visit };
 }
+/** Same rule as the page, which only shows these forms while the visit is open: a finished, skipped or cancelled visit's record is settled. */
+const assertOpen = (state: string) => {
+  if (!["SCHEDULED", "EN_ROUTE", "IN_PROGRESS"].includes(state)) throw new TransitionError("This visit is already finished");
+};
 const fail = (id: string, e: unknown) => {
   if (e instanceof TransitionError) redirect(`/stop/${id}?error=${encodeURIComponent(e.message)}`);
   throw e;
@@ -33,7 +37,7 @@ export async function stopChecklist(f: FormData) {
     const type = str(f, `t_${id}`), v = f.get(`a_${id}`);
     answers[id] = type === "CHECKBOX" ? v === "on" : type === "NUMBER" ? (v === "" || v === null ? null : Number(v)) : v === null ? null : String(v);
   }
-  try { await saveAnswers(user, visit.id, answers); } catch (e) { fail(visit.id, e); }
+  try { assertOpen(visit.state); await saveAnswers(user, visit.id, answers); } catch (e) { fail(visit.id, e); }
   revalidatePath(`/stop/${visit.id}`);
   redirect(`/stop/${visit.id}?saved=1`);
 }
@@ -43,6 +47,7 @@ export async function stopSign(f: FormData) {
   const { user, visit } = await myVisit(f);
   const h = await headers();
   try {
+    assertOpen(visit.state);
     await saveSignature({
       businessId: user.businessId, kind: "VISIT", visitId: visit.id, clientId: visit.job.clientId, dataUrl: str(f, "signature"), signerName: str(f, "name"),
       ip: h.get("cf-connecting-ip"), userAgent: h.get("user-agent"), inPerson: true, actorUserId: user.id,

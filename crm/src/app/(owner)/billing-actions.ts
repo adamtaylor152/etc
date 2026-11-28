@@ -10,9 +10,10 @@ import { recordPaymentKeepingExtra } from "@/server/ops/credits";
 import { billingRun, deletePayment, invoiceFixedJob, invoiceUnbilled, markSent, sendInvoice, setBadDebt, updateDraftInvoice, voidInvoice } from "@/server/ops/invoices";
 import { TransitionError } from "@/server/status/visit";
 import { mintToken } from "@/server/tokens";
+import { safePath } from "@/server/safe-path";
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
-const back = (f: FormData) => { const p = str(f, "back"); return p.startsWith("/") && !p.startsWith("//") ? p : "/invoices"; };
+const back = (f: FormData) => { const p = str(f, "back"); return safePath(p, "/invoices"); };
 
 async function guard<T>(f: FormData, fn: () => Promise<T>): Promise<T> {
   try {

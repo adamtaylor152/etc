@@ -1,9 +1,10 @@
 // "Select or create a client" (Jobber's first step for new work): search, pick, or make a new client.
 import Link from "next/link";
-import { Plus, Search, User } from "lucide-react";
+import { ChevronRight, Plus, Search, User } from "lucide-react";
 import { db } from "@/server/db";
 import { clientName } from "@/server/queries";
 import { DetailHeader } from "./detail-header";
+import { ButtonLink, Empty } from "./ui";
 
 export async function ClientPick({ businessId, base, keep = {}, q, title }: { businessId: string; base: string; keep?: Record<string, string>; q?: string; title: string }) {
   const term = q?.trim();
@@ -15,26 +16,33 @@ export async function ClientPick({ businessId, base, keep = {}, q, title }: { bu
   const qs = (extra: Record<string, string>) => new URLSearchParams({ ...keep, ...extra }).toString();
   return (
     <>
-      <DetailHeader title={title} sub="Who is this for?" />
-      <section className="max-w-2xl rounded-lg border border-line bg-white shadow-card">
-        <form action={base} className="flex gap-2 border-b border-line p-3">
+      <DetailHeader title={title} sub="Who is this for? Pick a client, or add a new one." />
+      <section className="max-w-2xl rounded-xl border border-line bg-white shadow-card">
+        <form action={base} role="search" className="flex flex-wrap gap-2 border-b border-line p-3">
           {Object.entries(keep).map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
-          <label className="flex h-10 flex-1 items-center gap-2 rounded-lg border border-line px-3 focus-within:border-blue">
-            <Search className="size-4 text-ink-soft" aria-hidden /><input name="q" defaultValue={term} autoFocus placeholder="Search clients by name, phone, email or address" aria-label="Search clients" className="flex-1 bg-transparent text-sm outline-none" />
+          <label className="flex min-h-11 min-w-0 flex-1 basis-56 items-center gap-2 rounded-lg border border-line bg-white px-3 hover:border-ink-faint/60 focus-within:border-blue focus-within:ring-2 focus-within:ring-blue/20 sm:min-h-10">
+            <Search className="size-4 shrink-0 text-ink-soft" aria-hidden />
+            <input type="search" name="q" defaultValue={term} autoFocus enterKeyHint="search" placeholder="Name, phone, email or address" aria-label="Search clients by name, phone, email or address" className="min-w-0 flex-1 bg-transparent text-base outline-none focus-visible:outline-none sm:text-sm" />
           </label>
-          <Link href="/clients/new" className="inline-flex h-10 items-center gap-1 rounded-lg bg-blue px-3 text-sm font-semibold text-white"><Plus className="size-4" />New client</Link>
+          <ButtonLink href="/clients/new" className="max-sm:min-h-11"><Plus className="-ml-1 size-4" aria-hidden />New client</ButtonLink>
         </form>
-        <ul className="divide-y divide-line">
+        {clients.length > 0 && <p className="border-b border-line-soft px-4 py-2 text-xs font-medium text-ink-soft">{term ? (clients.length === 30 ? "First 30 matches" : `${clients.length} match${clients.length === 1 ? "" : "es"}`) : "Most recent clients"}</p>}
+        <ul className="divide-y divide-line-soft">
           {clients.map((c) => (
             <li key={c.id}>
-              <Link href={`${base}?${qs({ client: c.id })}`} className="flex items-center gap-3 px-4 py-3 hover:bg-tint">
-                <User className="size-4 text-ink-soft" aria-hidden />
-                <span className="min-w-0"><span className="block font-semibold">{clientName(c)}</span><span className="block truncate text-xs text-ink-soft">{[c.phone, c.properties[0]?.formatted].filter(Boolean).join(" · ")}</span></span>
+              <Link href={`${base}?${qs({ client: c.id })}`} className="flex min-h-14 items-center gap-3 px-4 py-2.5 hover:bg-tint">
+                <span className="grid size-8 shrink-0 place-items-center rounded-full bg-tint text-ink-soft" aria-hidden><User className="size-4" /></span>
+                <span className="min-w-0 flex-1"><span className="block truncate font-semibold">{clientName(c)}</span><span className="block truncate text-xs text-ink-soft">{[c.phone, c.properties[0]?.formatted].filter(Boolean).join(" · ") || "No phone or address yet"}</span></span>
+                <ChevronRight className="size-4 shrink-0 text-ink-faint" aria-hidden />
               </Link>
             </li>
           ))}
-          {!clients.length && <li className="p-6 text-center text-sm text-ink-soft">No clients match. <Link href="/clients/new" className="font-semibold text-blue">Create one</Link></li>}
         </ul>
+        {!clients.length && (
+          <div className="p-4">
+            <Empty action={<ButtonLink href="/clients/new" variant="primary"><Plus className="-ml-1 size-4" aria-hidden />New client</ButtonLink>}>No clients match. Check the spelling, or add them as a new client.</Empty>
+          </div>
+        )}
       </section>
     </>
   );

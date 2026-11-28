@@ -12,9 +12,10 @@ import { billingEmailFor } from "@/server/ops/invoices";
 import { refundPayment } from "@/server/ops/refunds";
 import { parseStatementRange, statementQuery } from "@/server/statement";
 import { TransitionError } from "@/server/status/visit";
+import { safePath } from "@/server/safe-path";
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
-const back = (f: FormData) => { const p = str(f, "back"); return p.startsWith("/") && !p.startsWith("//") ? p : "/invoices"; };
+const back = (f: FormData) => { const p = str(f, "back"); return safePath(p, "/invoices"); };
 const withQuery = (path: string, q: string) => `${path}${path.includes("?") ? "&" : "?"}${q}`;
 const cents = (v: string) => Math.round(z.coerce.number().positive().max(100_000).parse(v) * 100);
 
@@ -63,7 +64,7 @@ export async function statementEmail(f: FormData) {
   if (!to.trim()) redirect(`${page}&error=${encodeURIComponent("This client has no email address")}`);
   await enqueue(db, {
     businessId: user.businessId, template: "client.statement", to, replyTo: env.helpEmail, priority: 3, props: { clientId, ...range },
-    dedupeKey: `statement:${clientId}:${Date.now()}`, clientId, entityType: "Client", entityId: clientId,
+    dedupeKey: `statement:${clientId}:${Math.floor(Date.now() / 60_000)}`, clientId, entityType: "Client", entityId: clientId,
   });
   kickOutbox();
   redirect(`${page}&sent=${encodeURIComponent(to)}`);

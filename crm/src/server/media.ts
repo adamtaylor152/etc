@@ -4,6 +4,7 @@ import { createHash, createHmac, randomUUID, timingSafeEqual } from "node:crypto
 import sharp, { type Metadata, type Sharp } from "sharp";
 import type { AttachmentKind, ActorType } from "@/generated/prisma/client";
 import { db } from "./db";
+import { signingSecret } from "./secret";
 import { getStream, put } from "./storage";
 
 export const VARIANTS = { sm: 320, md: 1280, lg: 2000 } as const;
@@ -99,15 +100,7 @@ export async function logoPng(id: string): Promise<Uint8Array | null> {
 }
 
 // ---------- signed URLs (stateless HMAC; emails embed several images, no DB row per link) ----------
-function secret() {
-  const s = process.env.MEDIA_SIGNING_SECRET;
-  if (!s || s.length < 16) {
-    if (process.env.NODE_ENV === "production") throw new Error("MEDIA_SIGNING_SECRET must be set (32+ random chars)");
-    return "dev-only-media-secret-change-me";
-  }
-  return s;
-}
-const sign = (id: string, variant: string, exp: number) => createHmac("sha256", secret()).update(`${id}.${variant}.${exp}`).digest("base64url");
+const sign = (id: string, variant: string, exp: number) => createHmac("sha256", signingSecret()).update(`${id}.${variant}.${exp}`).digest("base64url");
 
 export function signedMediaPath(id: string, variant: Variant | "mms" | "file" | "logo", ttlDays = 365, now = Date.now()) {
   const exp = Math.floor(now / 1000) + ttlDays * 86_400;

@@ -7,8 +7,9 @@ import { setVisitAssignees } from "@/server/ops/visits";
 import { autoOrderRoute, reorderStops } from "@/server/ops/routes";
 import { routeEtas, routeVisits } from "@/server/routing";
 import { splitRoute } from "@/server/runner";
+import { safePath } from "@/server/safe-path";
 
-const back = (f: FormData) => { const p = String(f.get("back") ?? "/routes"); return p.startsWith("/") && !p.startsWith("//") ? p : "/routes"; };
+const back = (f: FormData) => { const p = String(f.get("back") ?? "/routes"); return safePath(p, "/routes"); };
 
 export async function routeAutoOrder(f: FormData) {
   const user = await requireOwner();

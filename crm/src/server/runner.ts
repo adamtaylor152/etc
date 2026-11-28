@@ -1,5 +1,5 @@
 // Route runner data: one person's stops for a day in route order, plus route splitting between people.
-import { dateOnly, toDbDate } from "./dates";
+import { addDays, dateOnly, todayLocal, toDbDate } from "./dates";
 import { db } from "./db";
 import { clientName } from "./queries";
 import { routeVisits } from "./routing";
@@ -17,15 +17,23 @@ export type RunStop = {
   more: boolean; // this job has a checklist or needs the client's signature: the runner links to the stop page for them
 };
 
-/** Crew work their own stops plus ones nobody is assigned to; owners work any. Spread into a visit `where`. */
-export const visitScope = (u: { id: string; role: string }) =>
-  u.role === "OWNER" ? {} : { OR: [{ assignees: { some: { userId: u.id } } }, { assignees: { none: {} } }] };
+const mineOrOpen = (userId: string, openDates?: { gte: Date; lte: Date }) =>
+  ({ OR: [{ assignees: { some: { userId } } }, { assignees: { none: {} }, ...(openDates ? { scheduledDate: openDates } : {}) }] });
+/**
+ * Crew work their own stops on any date, plus ones nobody is assigned to from yesterday to tomorrow (a route is a
+ * day's work: an unassigned visit weeks away, or long done, is not theirs to read or change). Owners work any.
+ * Spread into a visit `where`; every crew read and action (runner, stop page, uploads) goes through it.
+ */
+export const visitScope = (u: { id: string; role: string }, today = todayLocal()) =>
+  u.role === "OWNER" ? {} : mineOrOpen(u.id, { gte: toDbDate(addDays(today, -1)), lte: toDbDate(addDays(today, 1)) });
 
 export async function runStops(businessId: string, date: string, userId: string | "all") {
+  // An owner's own list ("mine + unassigned") is not date-limited; a crew member's is.
+  const owner = userId !== "all" && (await db.user.findFirst({ where: { id: userId, businessId }, select: { role: true } }))?.role === "OWNER";
   // Same order as the route planner (community order, do-first stops, then the day's or the standing routeSort).
   const { visits } = await routeVisits(businessId, {
     scheduledDate: toDbDate(date), state: { not: "CANCELLED" },
-    ...(userId === "all" ? {} : visitScope({ id: userId, role: "CREW" })),
+    ...(userId === "all" ? {} : owner ? mineOrOpen(userId) : visitScope({ id: userId, role: "CREW" })),
   });
   const extras = await db.visitExtra.findMany({ where: { visitId: { in: visits.map((v) => v.id) } }, orderBy: { createdAt: "asc" }, select: { visitId: true, name: true } });
   const usual = await usualByProperty(businessId, visits.map((v) => v.propertyId));

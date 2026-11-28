@@ -5,6 +5,7 @@ import { saveSignature } from "@/server/ops/signatures";
 import { TransitionError } from "@/server/status/visit";
 import { tipCents } from "@/server/billing/adjustments";
 import { db } from "@/server/db";
+import { limited } from "@/server/http";
 import { getSettings } from "@/server/settings";
 import { cardsOffered, customerFor } from "@/server/ops/autopay";
 import { checkoutForInvoice, stripeEnabled } from "@/server/stripe";
@@ -48,6 +49,8 @@ export async function clientSignInvoice(f: FormData) {
   const t = await peekToken(db, token, ["INVOICE"]);
   if (!t.ok || !t.token.invoiceId) redirect(`/i/${encodeURIComponent(token)}`);
   const inv = await db.invoice.findUniqueOrThrow({ where: { id: t.token.invoiceId } });
+  // Nothing to confirm on an invoice that was never sent or was cancelled; and each signature stores an image.
+  if (inv.status === "DRAFT" || inv.status === "VOID" || await limited(`invoice-sign:${inv.id}`, 5, 3_600_000)) redirect(`/i/${encodeURIComponent(token)}`);
   const h = await headers();
   try {
     await saveSignature({ businessId: inv.businessId, kind: "INVOICE", invoiceId: inv.id, clientId: inv.clientId, dataUrl: String(f.get("signature") ?? ""), signerName: String(f.get("name") ?? ""), ip: h.get("cf-connecting-ip"), userAgent: h.get("user-agent"), inPerson: false });

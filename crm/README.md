@@ -92,7 +92,7 @@ GOOGLE_GEOCODING_KEY=... pnpm import:legacy bookings.json
 | `PUBLIC_SITE_ORIGINS` | `https://etccrew.ca`, the origins allowed to post bookings |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASSWORD` / `SMTP_TLS` / `MAIL_FROM` | Same as the Python site (Brevo) |
 | `HELP_EMAIL`, `ETRANSFER_EMAIL`, `SITE_URL` | Shown in emails |
-| `MEDIA_SIGNING_SECRET` | 32+ random bytes (photo links, M3) |
+| `MEDIA_SIGNING_SECRET` | 32+ random bytes. Signs photo links, campaign unsubscribe and click links, and calendar feeds. In production the app refuses to sign with it unset, under 16 characters, or left at the `.env.example` value |
 | `EMAIL_DAILY_CAP` | Default 300 (Brevo free). Low-priority mail waits once you're within 30 of the cap. |
 | `UPLOAD_DIR` | Default `/data/uploads` (the volume) |
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | Optional: card payments. Stripe account in an adult's name; webhook → `https://app.etccrew.ca/api/stripe/webhook`, event `checkout.session.completed` |
@@ -100,7 +100,7 @@ GOOGLE_GEOCODING_KEY=... pnpm import:legacy bookings.json
 | `TELNYX_FROM` | The business number in E.164: `+14036568200` |
 | `TELNYX_PUBLIC_KEY` | Telnyx portal → Account → Public key (verifies inbound webhooks) |
 | `TELNYX_MESSAGING_PROFILE_ID` | Optional: the messaging profile the number belongs to |
-| `INTERAC_INBOUND_SECRET` | Optional: 32+ random chars, shared with the Cloudflare Email Worker below |
+| `INTERAC_INBOUND_SECRET` | Needed for e-Transfer auto-match and bounce reports: 32+ random chars, the same value as the Cloudflare Email Worker's secret (below). Unset = both inbound routes answer 404 |
 | `WEATHER_USER_AGENT` | Sent to MET Norway, e.g. `etc-crm/1.0 help@etccrew.ca` |
 | `GOOGLE_GEOCODING_KEY` | Optional: only for `import:legacy` |
 | `ROUTING_URL` | Optional: base URL of an OSRM-compatible road-routing server (see Road routing below). Unset = straight-line estimates. |
@@ -120,14 +120,16 @@ Create the Stripe account in Dad's name (Silas is a minor). Use test keys first:
 export default {
   async email(message, env) {
     const raw = await new Response(message.raw).arrayBuffer();
-    await fetch("https://app.etccrew.ca/api/interac/email", { method: "POST", body: raw, headers: { "content-type": "message/rfc822" } });
+    // INTERAC_INBOUND_SECRET: a Worker secret (`wrangler secret put INTERAC_INBOUND_SECRET`), the same value as the CRM's.
+    await fetch("https://app.etccrew.ca/api/interac/email", { method: "POST", body: raw, headers: { "content-type": "message/rfc822", "x-etc-secret": env.INTERAC_INBOUND_SECRET } });
     if (env.FORWARD_TO) await message.forward(env.FORWARD_TO); // optional copy to a verified inbox
   },
 };
 ```
 
-- **No shared secret:** the CRM only trusts emails with a valid DKIM signature from `interac.ca` that matches the From address. Everything else is ignored.
-- **Recording payments:** auto-deposited notices that mention `ETC-<invoice number>` (or match one open invoice by amount and last name) are recorded and the receipt emailed. Anything else goes to the owners: notices that still need depositing, and payments it couldn't match.
+- **Shared secret (required):** set `INTERAC_INBOUND_SECRET` (32+ random characters) on both the CRM and the Worker. Without the `x-etc-secret` header the CRM answers 404 and records nothing, bounce reports included. Update the Worker before (or with) the CRM deploy that requires it.
+- **What it trusts:** on top of the secret, an email only counts with a valid DKIM signature from `interac.ca` that matches the From address, and a To address equal to the e-Transfer email (Settings, or `ETRANSFER_EMAIL`). So a genuine Interac notice that was sent to someone else and forwarded to `pay@` is ignored.
+- **Recording payments:** an auto-deposited notice is recorded (and the receipt emailed) when it carries an Interac reference number and either mentions `ETC-<invoice number>` (written with the hyphen) with an amount that fits that invoice or a sender whose last name is the client's, or matches exactly one open invoice by amount and last name. Anything else goes to the owners: notices that still need depositing, and payments to match by hand in Payments → To match. The same notice delivered twice is recorded once.
 - **Autodeposit:** register `pay@etccrew.ca` for Interac Autodeposit at the bank so payments land without a click.
 
 ### Booking page cutover
