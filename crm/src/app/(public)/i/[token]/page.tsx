@@ -1,13 +1,15 @@
 /* eslint-disable @next/next/no-img-element -- private photos/signatures via signed URLs, not optimizable */
-// Client invoice page: view, pay by card (Stripe Checkout), e-Transfer instructions, print / save as PDF.
+// Client invoice page: view, pay by card (Stripe Checkout), e-Transfer instructions, PDF download.
 import { Button, Card } from "@/components/ui";
 import { InvoiceBadge } from "@/components/status";
+import { TIP_PERCENTS, tipCents } from "@/server/billing/adjustments";
 import { invoiceView } from "@/server/billing/invoice";
 import { dateOnly, prettyDate, todayLocal } from "@/server/dates";
 import { db } from "@/server/db";
 import { env } from "@/server/env";
 import { money } from "@/server/money";
 import { clientName } from "@/server/queries";
+import { parseSettings } from "@/server/settings";
 import { stripeEnabled } from "@/server/stripe";
 import { peekToken } from "@/server/tokens";
 import { prettyDateTime } from "@/server/dates";
@@ -34,6 +36,8 @@ export default async function PublicInvoice({ params, searchParams }: PageProps<
   const balance = Math.max(0, inv.totalCents - inv.amountPaidCents);
   const etransfer = biz.etransferEmail || env.etransferEmail;
   const sig = await db.signature.findFirst({ where: { invoiceId: inv.id }, orderBy: { signedAt: "desc" } });
+  const tips = parseSettings(biz.settings).tipsEnabled;
+  const chip = "cursor-pointer rounded-full border border-line bg-white px-3 py-2 text-sm font-semibold has-[:checked]:border-blue has-[:checked]:bg-blue has-[:checked]:text-white has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-blue";
   return (
     <div className="space-y-4">
       {sp.paid && balance > 0 && <p className="no-print rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-medium text-emerald-800">Thanks! Your payment is processing; a receipt is on its way by email.</p>}
@@ -73,7 +77,17 @@ export default async function PublicInvoice({ params, searchParams }: PageProps<
           {stripeEnabled() && (
             <form action={payByCard} className="space-y-2"><input type="hidden" name="t" value={token} />
               {inv.allowPartial && <label className="flex items-center justify-between gap-2 text-sm font-semibold">Amount to pay<span className="flex items-center gap-1">$<input name="amount" type="number" step="0.01" min="0.50" max={balance / 100} defaultValue={(balance / 100).toFixed(2)} className="min-h-11 w-32 rounded-lg border border-line px-2 text-right" /></span></label>}
-              <Button className="min-h-14 w-full text-base">{inv.allowPartial ? "Pay by card" : `Pay ${money(balance)} by card`}</Button></form>
+              {tips && (
+                <fieldset className="rounded-lg border border-line bg-white p-3">
+                  <legend className="px-1 text-sm font-semibold">Add a tip for the crew? <span className="font-normal text-ink-soft">Optional</span></legend>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <label className={chip}><input type="radio" name="tip" value="" defaultChecked className="sr-only" />No tip</label>
+                    {TIP_PERCENTS.map((p) => <label key={p} className={chip}><input type="radio" name="tip" value={p} className="sr-only" />{p}% · {money(tipCents(inv.totalCents, String(p)))}</label>)}
+                    <label className="flex items-center gap-1 text-sm font-semibold">Other $<input name="tipCustom" type="number" step="0.01" min="0" max="500" inputMode="decimal" className="min-h-10 w-24 rounded-lg border border-line px-2 text-right font-normal" /></label>
+                  </div>
+                </fieldset>
+              )}
+              <Button className="min-h-14 w-full text-base">{inv.allowPartial || tips ? "Pay by card" : `Pay ${money(balance)} by card`}</Button></form>
           )}
           {etransfer && (
             <Card title="Pay by e-Transfer">
@@ -99,7 +113,7 @@ export default async function PublicInvoice({ params, searchParams }: PageProps<
           </form>
         </details>
       )}
-      <p className="no-print text-center"><a href="javascript:print()" className="text-sm font-semibold text-blue">Print or save as PDF</a></p>
+      <p className="no-print text-center"><a href={`/i/${token}/pdf`} className="text-sm font-semibold text-blue">Download PDF</a></p>
     </div>
   );
 }

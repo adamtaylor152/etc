@@ -3,7 +3,9 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { saveSignature } from "@/server/ops/signatures";
 import { TransitionError } from "@/server/status/visit";
+import { tipCents } from "@/server/billing/adjustments";
 import { db } from "@/server/db";
+import { getSettings } from "@/server/settings";
 import { checkoutForInvoice, stripeEnabled } from "@/server/stripe";
 import { peekToken } from "@/server/tokens";
 
@@ -18,9 +20,11 @@ export async function payByCard(f: FormData) {
   const asked = inv.allowPartial && f.get("amount") ? Math.round(Number(f.get("amount")) * 100) : owed;
   const balance = Number.isFinite(asked) ? Math.min(owed, Math.max(50, asked)) : owed;
   if (inv.status !== "AWAITING_PAYMENT" || balance < 50) redirect(`/i/${token}`); // Stripe's minimum is $0.50
+  // Optional tip, only when the business turned tips on: a preset percent, or the amount typed under "Other" when no preset is picked.
+  const tip = (await getSettings(db, inv.businessId)).tipsEnabled ? tipCents(inv.totalCents, String(f.get("tip") || (f.get("tipCustom") ? "custom" : "")), String(f.get("tipCustom") ?? "")) : 0;
   let url: string | null = null;
   try {
-    const s = await checkoutForInvoice({ id: inv.id, businessId: inv.businessId, number: inv.number, balanceCents: balance, email: inv.client.email }, token);
+    const s = await checkoutForInvoice({ id: inv.id, businessId: inv.businessId, number: inv.number, balanceCents: balance, email: inv.client.email, tipCents: tip }, token);
     await db.invoice.update({ where: { id: inv.id }, data: { stripeCheckoutSessionId: s.id } });
     url = s.url;
   } catch (e) {

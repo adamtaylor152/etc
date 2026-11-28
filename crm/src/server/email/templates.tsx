@@ -3,7 +3,7 @@
 import type { ReactElement } from "react";
 import { BookingConfirmation, OwnerNewBooking, type BookingEmailProps } from "@/emails/booking";
 import { OwnerLogin } from "@/emails/login";
-import { InvoiceSent, OwnerPaymentReceived, PaymentReceipt, type InvoiceEmailData } from "@/emails/invoice";
+import { InvoiceSent, OwnerPaymentReceived, PaymentReceipt, RefundReceipt, StatementEmail, type InvoiceEmailData } from "@/emails/invoice";
 import { HubLink, OwnerNotice, PlanRenewal, PriceChange, QuoteApproved, QuoteSent, type QuoteEmailData } from "@/emails/quote";
 import { DailyDigest, ReviewRequest, VisitScheduled } from "@/emails/schedule";
 import { OnMyWay, OwnerSnowAlert, StormHeadsUp } from "@/emails/snow";
@@ -21,9 +21,12 @@ import { clickUrl, openPixelUrl, unsubscribeUrl, type Block } from "../ops/campa
 import { env } from "../env";
 import { mintToken } from "../tokens";
 import { currentCharge, dollars, SIZES, type Pending } from "../ops/drive-size";
+import { invoicePdf, quotePdf, statementPdf, type PdfFile } from "../pdf/documents";
+import { loadStatement, type StatementRange } from "../statement";
 
 type Ctx = { businessId: string; to: string };
-type Template<P> = { subject: (p: P) => string; render: (p: P, ctx: Ctx) => Promise<ReactElement> };
+// attachments: PDFs made at send time, like the body (the outbox row only stores {template, props}).
+type Template<P> = { subject: (p: P) => string; render: (p: P, ctx: Ctx) => Promise<ReactElement>; attachments?: (p: P, ctx: Ctx) => Promise<(PdfFile | null)[]> };
 
 const ownerLogin: Template<{ userId: string; next: string }> = {
   subject: () => "Sign in to etc. CRM",
@@ -118,11 +121,13 @@ async function invoiceData(invoiceId: string, businessId: string): Promise<Invoi
 const invoiceSent: Template<{ invoiceId: string }> = {
   subject: () => "Your invoice from etc.",
   async render(p, ctx) { return <InvoiceSent d={await invoiceData(p.invoiceId, ctx.businessId)} />; },
+  attachments: async (p, ctx) => [await invoicePdf(p.invoiceId, ctx.businessId)],
 };
 
 const invoiceReminder: Template<{ invoiceId: string; n: 1 | 2 }> = {
   subject: (p) => (p.n === 1 ? "Friendly reminder: your etc. invoice" : "Second reminder: your etc. invoice"),
   async render(p, ctx) { return <InvoiceSent d={await invoiceData(p.invoiceId, ctx.businessId)} reminder={p.n} />; },
+  attachments: async (p, ctx) => [await invoicePdf(p.invoiceId, ctx.businessId)],
 };
 
 const METHOD: Record<string, string> = { CASH: "cash", ETRANSFER: "e-Transfer", CARD: "card", CHEQUE: "cheque", OTHER: "payment" };
@@ -130,11 +135,34 @@ const paymentReceipt: Template<{ paymentId: string }> = {
   subject: () => "Receipt from etc. Thank you!",
   async render(p, ctx) {
     const pay = await db.payment.findUniqueOrThrow({ where: { id: p.paymentId }, include: { invoice: true } });
+    // An overpayment's extra sits in account credit; a card tip rides on the payment. The receipt says so.
+    const kept = (await db.clientCredit.aggregate({ where: { paymentId: pay.id }, _sum: { amountCents: true } }))._sum.amountCents ?? 0;
+    const extra = [pay.tipCents ? `Thank you for the ${money(pay.tipCents)} tip!` : "", kept ? `The extra ${money(kept)} you sent is saved as credit toward your next invoice.` : ""].filter(Boolean).join(" ");
     return (
       <PaymentReceipt d={await invoiceData(pay.invoiceId, ctx.businessId)} amount={money(pay.amountCents)} method={METHOD[pay.method]}
-        when={prettyDate(todayLocal(pay.receivedAt))} paidInFull={pay.invoice.amountPaidCents >= pay.invoice.totalCents} />
+        when={prettyDate(todayLocal(pay.receivedAt))} paidInFull={pay.invoice.amountPaidCents >= pay.invoice.totalCents} extra={extra || undefined} />
     );
   },
+};
+
+const paymentRefund: Template<{ paymentId: string; amountCents: number }> = {
+  subject: () => "Your refund from etc.",
+  async render(p, ctx) {
+    const pay = await db.payment.findUniqueOrThrow({ where: { id: p.paymentId } });
+    const how = pay.method === "CARD" ? "to your card (allow 5 to 10 business days for it to show)" : pay.method === "ETRANSFER" ? "by e-Transfer" : pay.method === "CASH" ? "in cash" : "";
+    return <RefundReceipt d={await invoiceData(pay.invoiceId, ctx.businessId)} amount={money(p.amountCents)} how={how} when={prettyDate(todayLocal())} />;
+  },
+};
+
+const clientStatement: Template<{ clientId: string } & StatementRange> = {
+  subject: () => "Your statement from etc.",
+  async render(p, ctx) {
+    const s = await loadStatement(ctx.businessId, p.clientId, p);
+    if (!s) throw new Error("statement: client not found");
+    return <StatementEmail name={clientName(s.client)} balance={money(s.st.balanceCents)} owing={s.st.balanceCents > 0} period={s.since ? `Since ${prettyDate(dateOnly(s.since))}` : "All history"}
+      etransferEmail={s.biz.etransferEmail || env.etransferEmail} site={env.siteUrl} phone={env.phone} />;
+  },
+  attachments: async (p, ctx) => [await statementPdf(p.clientId, ctx.businessId, p)],
 };
 
 const ownerPaymentReceived: Template<{ paymentId: string }> = {
@@ -144,7 +172,7 @@ const ownerPaymentReceived: Template<{ paymentId: string }> = {
     const user = await db.user.findFirst({ where: { businessId: ctx.businessId, email: ctx.to.toLowerCase(), active: true } });
     const path = `/invoices/${pay.invoiceId}`;
     const url = user ? `${env.appUrl}/auth/go?t=${await mintToken(db, ctx.businessId, "OWNER_DEEP_LINK", { userId: user.id, redirectPath: path })}` : `${env.appUrl}${path}`;
-    return <OwnerPaymentReceived name={clientName(pay.client)} amount={money(pay.amountCents)} number={pay.invoice.number} url={url} />;
+    return <OwnerPaymentReceived name={clientName(pay.client)} amount={money(pay.amountCents) + (pay.tipCents ? ` + ${money(pay.tipCents)} tip` : "")} number={pay.invoice.number} url={url} />;
   },
 };
 
@@ -186,10 +214,12 @@ async function quoteData(quoteId: string, businessId: string): Promise<QuoteEmai
 const quoteSent: Template<{ quoteId: string }> = {
   subject: () => "Your quote from etc.",
   async render(p, ctx) { return <QuoteSent d={await quoteData(p.quoteId, ctx.businessId)} />; },
+  attachments: async (p, ctx) => [await quotePdf(p.quoteId, ctx.businessId)],
 };
 const quoteFollowUp: Template<{ quoteId: string }> = {
   subject: () => "Any questions about your etc. quote?",
   async render(p, ctx) { return <QuoteSent d={await quoteData(p.quoteId, ctx.businessId)} followUp />; },
+  attachments: async (p, ctx) => [await quotePdf(p.quoteId, ctx.businessId)],
 };
 const quoteApproved: Template<{ quoteId: string }> = {
   subject: () => "Quote approved. Thanks from etc.!",
@@ -311,6 +341,8 @@ export const templates = {
   "invoice.sent": invoiceSent,
   "invoice.reminder": invoiceReminder,
   "payment.receipt": paymentReceipt,
+  "payment.refund": paymentRefund,
+  "client.statement": clientStatement,
   "owner.payment_received": ownerPaymentReceived,
   "visit.on_my_way": visitOnMyWay,
   "storm.heads_up": stormHeadsUp,

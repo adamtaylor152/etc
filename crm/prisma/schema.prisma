@@ -803,6 +803,7 @@ model Payment {
   amountCents             Int
   feeCents                Int?
   refundedCents           Int           @default(0)
+  tipCents                Int? // card tip on top of amountCents: never part of the invoice balance or GST
   receivedAt              DateTime      @default(now())
   reference               String?
   note                    String?
@@ -1242,6 +1243,7 @@ model ClientCredit {
   amountCents        Int
   reason             String
   referralId         String?
+  paymentId          String? // overpayment: the payment whose excess became this credit
   appliedToInvoiceId String?
   createdAt          DateTime @default(now())
 

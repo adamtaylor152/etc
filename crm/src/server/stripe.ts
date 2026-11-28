@@ -12,13 +12,17 @@ export function stripe(): Stripe {
 }
 
 /** A Checkout Session for an invoice's remaining balance; created when the client clicks Pay, never in advance. */
-export async function checkoutForInvoice(inv: { id: string; businessId: string; number: number; balanceCents: number; email: string }, token: string) {
+export async function checkoutForInvoice(inv: { id: string; businessId: string; number: number; balanceCents: number; email: string; tipCents?: number }, token: string) {
+  const tip = inv.tipCents ?? 0; // its own line; the webhook takes it back off, so the invoice is only credited balanceCents
   return stripe().checkout.sessions.create({
     mode: "payment",
     currency: "cad",
     customer_email: inv.email,
-    line_items: [{ quantity: 1, price_data: { currency: "cad", unit_amount: inv.balanceCents, product_data: { name: `etc. invoice #${inv.number}` } } }],
-    metadata: { invoiceId: inv.id, businessId: inv.businessId },
+    line_items: [
+      { quantity: 1, price_data: { currency: "cad", unit_amount: inv.balanceCents, product_data: { name: `etc. invoice #${inv.number}` } } },
+      ...(tip > 0 ? [{ quantity: 1, price_data: { currency: "cad", unit_amount: tip, product_data: { name: "Tip for the crew" } } }] : []),
+    ],
+    metadata: { invoiceId: inv.id, businessId: inv.businessId, ...(tip > 0 ? { tipCents: String(tip) } : {}) },
     payment_intent_data: { metadata: { invoiceId: inv.id, businessId: inv.businessId }, statement_descriptor_suffix: "ETC CREW" },
     success_url: `${env.appUrl}/i/${token}?paid=1`,
     cancel_url: `${env.appUrl}/i/${token}`,
