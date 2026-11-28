@@ -6,7 +6,7 @@ import { requireOwner } from "@/server/auth";
 import { db } from "@/server/db";
 import { enqueue, kickOutbox } from "@/server/email/outbox";
 import { env } from "@/server/env";
-import { archiveQuote, convertQuote, createQuote, markQuoteApproved, sendQuote, updateQuote, type QuoteLineInput } from "@/server/ops/quotes";
+import { archiveQuote, convertQuote, createQuote, declineQuote, markQuoteApproved, reopenQuote, saveQuoteTemplate, sendQuote, updateQuote, type QuoteLineInput } from "@/server/ops/quotes";
 import { TransitionError } from "@/server/status/visit";
 import { mintToken } from "@/server/tokens";
 
@@ -46,6 +46,7 @@ export async function quoteCreate(f: FormData) {
   const q = await createQuote(user, {
     clientId: s(f, "clientId"), propertyId: s(f, "propertyId") || null, requestId: s(f, "requestId") || null,
     title: z.string().min(1).max(150).parse(s(f, "title")), message: s(f, "message").slice(0, 3000), lines: parseLines(f),
+    from: { templateId: s(f, "templateId") || undefined, quoteId: s(f, "similarId") || undefined },
   });
   revalidatePath("/", "layout");
   redirect(`/quotes/${q.id}`);
@@ -54,23 +55,56 @@ export async function quoteCreate(f: FormData) {
 export async function quoteUpdate(f: FormData) {
   const user = await requireOwner();
   const id = s(f, "id");
+  const percent = s(f, "discountType") === "PERCENT";
+  const via = s(f, "send") === "sms" ? "SMS" : "EMAIL";
   await guard(f, `/quotes/${id}`, () => updateQuote(user, id, {
     title: z.string().min(1).max(150).parse(s(f, "title")), message: s(f, "message").slice(0, 3000),
-    validUntil: s(f, "validUntil") || null, discountCents: Math.round(z.coerce.number().min(0).max(100_000).parse(s(f, "discount") || "0") * 100),
+    validUntil: s(f, "validUntil") || null,
+    // x100 either way: dollars -> cents, percent -> hundredths of a percent
+    discount: { type: percent ? "PERCENT" : "FIXED", value: Math.round(z.coerce.number().min(0).max(percent ? 100 : 100_000).parse(s(f, "discount") || "0") * 100) },
     lines: parseLines(f),
     deposit: { type: s(f, "depositType"), value: s(f, "depositType") === "FIXED" ? Math.round(Number(s(f, "depositValue") || 0) * 100) : Number(s(f, "depositValue") || 0), required: f.get("depositRequired") === "on" },
   }));
-  if (f.get("send") === "1") await guard(f, `/quotes/${id}`, () => sendQuote(user, id));
+  if (f.get("send")) await guard(f, `/quotes/${id}`, () => sendQuote(user, id, via));
   revalidatePath("/", "layout");
-  redirect(`/quotes/${id}${f.get("send") === "1" ? "?sent=1" : "?saved=1"}`);
+  redirect(`/quotes/${id}${f.get("send") ? `?sent=${via === "SMS" ? "text" : "1"}` : "?saved=1"}`);
 }
 
 export async function quoteSend(f: FormData) {
   const user = await requireOwner();
   const id = s(f, "id");
-  await guard(f, `/quotes/${id}`, () => sendQuote(user, id));
+  const via = s(f, "via") === "SMS" ? "SMS" : "EMAIL";
+  await guard(f, `/quotes/${id}`, () => sendQuote(user, id, via));
   revalidatePath("/", "layout");
-  redirect(`/quotes/${id}?sent=1`);
+  redirect(`/quotes/${id}?sent=${via === "SMS" ? "text" : "1"}`);
+}
+
+/** Owner marks a quote declined / lost (the client said no by phone, went elsewhere...). */
+export async function quoteDecline(f: FormData) {
+  const user = await requireOwner();
+  const id = s(f, "id");
+  await guard(f, `/quotes/${id}`, () => declineQuote(id, s(f, "reason").slice(0, 2000), user));
+  revalidatePath("/", "layout");
+  redirect(`/quotes/${id}`);
+}
+
+export async function quoteReopen(f: FormData) {
+  const user = await requireOwner();
+  const id = s(f, "id");
+  await guard(f, `/quotes/${id}`, () => reopenQuote(user, id));
+  revalidatePath("/", "layout");
+  redirect(`/quotes/${id}`);
+}
+
+export async function quoteSaveTemplate(f: FormData) {
+  const user = await requireOwner();
+  const id = s(f, "id");
+  const name = s(f, "name").slice(0, 80);
+  await guard(f, `/quotes/${id}`, async () => {
+    if (!name) throw new TransitionError("Give the template a name");
+    await saveQuoteTemplate(user, id, name);
+  });
+  redirect(`/quotes/${id}?template=1`);
 }
 
 export async function quoteMarkApproved(f: FormData) {

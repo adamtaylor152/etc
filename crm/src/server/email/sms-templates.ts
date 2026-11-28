@@ -2,6 +2,7 @@
 import { db } from "../db";
 import { env } from "../env";
 import { mintToken } from "../tokens";
+import { money } from "../money";
 import { dollars } from "../ops/drive-size";
 
 type Ctx = { businessId: string };
@@ -38,6 +39,15 @@ export const smsTemplates = {
     const raw = await mintToken(db, ctx.businessId, "PRICE_CHANGE", { jobId: job.id, clientId: job.clientId });
     const price = pend ? `${dollars(pend.base + pend.walk)}${job.kind === "SNOW_PLAN" ? " per snowfall" : ""}` : "a new price";
     return `Hi ${first(job.client.firstName)}, we checked ${job.property.formatted.split(",")[0]}: it's bigger than a standard driveway, so it's ${price}. OK it or cancel (no charge): ${env.appUrl}/p/${raw} - etc.`;
+  },
+  // Same tokenized link as the quote email; the title is kept short so the link is never clipped off the end.
+  "sms.quote": async (p: { quoteId: string; followUp?: boolean }, ctx: Ctx) => {
+    const q = await db.quote.findUniqueOrThrow({ where: { id: p.quoteId }, include: { client: true } });
+    const url = `${env.appUrl}/q/${await mintToken(db, ctx.businessId, "QUOTE", { quoteId: q.id, clientId: q.clientId })}`;
+    const what = (q.title ?? "your job").slice(0, 60);
+    return p.followUp
+      ? `Hi ${first(q.client.firstName)}, any questions about your etc. quote for ${what}? See or approve it here: ${url} - etc.`
+      : `Hi ${first(q.client.firstName)}, your etc. quote for ${what} (${money(q.totalCents)}) is ready. See and approve it here: ${url} - etc.`;
   },
   "sms.campaign": async (p: { campaignId: string; clientId: string }) => {
     const c = await db.campaign.findUniqueOrThrow({ where: { id: p.campaignId } });
