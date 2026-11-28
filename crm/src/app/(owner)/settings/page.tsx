@@ -40,6 +40,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
               <Field label="Lng"><Input name="depotLng" defaultValue={biz.depotLng ?? ""} /></Field>
             </div>
             <div className="sm:col-span-2"><Button>Save business</Button></div>
+          <Field label="Mailing address" hint="Shown in marketing emails (Canada's anti-spam law requires it)"><Input name="mailingAddress" defaultValue={biz.mailingAddress ?? ""} placeholder="Street, Calgary AB T2Y ..." /></Field>
           </form>
         </Card>
 

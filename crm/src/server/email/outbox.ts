@@ -5,6 +5,7 @@ import nodemailer, { type Transporter } from "nodemailer";
 import type { EmailMessage, Prisma } from "@/generated/prisma/client";
 import { db, type Db } from "../db";
 import { env } from "../env";
+import { unsubscribeUrl } from "../ops/campaigns";
 import { clip, sendSms, smsEnabled, smsFrom, toE164 } from "../sms";
 import { smsTemplates, type SmsTemplateName } from "./sms-templates";
 import { templates, type PropsOf, type TemplateName } from "./templates";
@@ -18,7 +19,9 @@ export async function enqueue<T extends TemplateName>(tx: Db, m: {
   priority?: number; dedupeKey?: string; clientId?: string; entityType?: string; entityId?: string; sendAfter?: Date;
 }) {
   if (!m.to.trim()) return null; // clients added from a text thread may have no email
-  const subject = (templates[m.template].subject as (p: PropsOf<T>) => string)(m.props);
+  const subject = m.template === "campaign.email"
+    ? ((await tx.campaign.findUnique({ where: { id: (m.props as { campaignId: string }).campaignId } }))?.subject ?? "News from etc.")
+    : (templates[m.template].subject as (p: PropsOf<T>) => string)(m.props);
   const data = {
     businessId: m.businessId, template: m.template, to: m.to, cc: m.cc ?? [], replyTo: m.replyTo, subject,
     props: m.props as Prisma.InputJsonValue, priority: m.priority ?? 5, dedupeKey: m.dedupeKey,
@@ -59,7 +62,10 @@ async function sendOne(m: EmailMessage) {
   }
   try {
     const { html, text } = await renderMessage(m);
-    const info = await tx.sendMail({ from: env.mailFrom, to: m.to, cc: m.cc.length ? m.cc : undefined, replyTo: m.replyTo ?? undefined, subject: m.subject, html, text });
+    // Marketing emails carry one-click unsubscribe headers (Gmail/Yahoo require them; CASL wants an easy opt-out).
+    const cid = m.template === "campaign.email" ? (m.props as { clientId?: string }).clientId : null;
+    const headers = cid ? { "List-Unsubscribe": `<${unsubscribeUrl(cid)}>`, "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" } : undefined;
+    const info = await tx.sendMail({ from: env.mailFrom, to: m.to, cc: m.cc.length ? m.cc : undefined, replyTo: m.replyTo ?? undefined, subject: m.subject, html, text, headers });
     await db.emailMessage.update({ where: { id: m.id }, data: { status: "SENT", sentAt: new Date(), providerMessageId: info.messageId, lastError: null } });
   } catch (e) {
     const failed = m.attempts >= MAX_ATTEMPTS;

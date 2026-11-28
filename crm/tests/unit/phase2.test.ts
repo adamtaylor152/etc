@@ -158,3 +158,33 @@ describe("reviews and referrals", () => {
     expect(makeReferralCode("", Buffer.from([0, 0, 0, 0]))).toBe("ETC2222");
   });
 });
+
+import { emailConsent, nextTextWindow, paceDay, signed, smsConsent, verifySigned } from "@/server/ops/campaigns";
+describe("campaigns", () => {
+  const now = new Date("2026-12-01T18:00:00Z");
+  const base = { email: "a@b.c", marketingOptOut: false, emailBouncedAt: null, emailMarketingConsentAt: null };
+  it("applies CASL consent: express, or a purchase within 2 years / inquiry within 6 months", () => {
+    expect(emailConsent({ ...base, emailMarketingConsentAt: new Date("2020-01-01") }, null, null, now)).toBe("express");
+    expect(emailConsent(base, new Date("2025-06-01"), null, now)).toBe("implied-purchase");
+    expect(emailConsent(base, new Date("2024-06-01"), null, now)).toBeNull();
+    expect(emailConsent(base, null, new Date("2026-09-01"), now)).toBe("implied-inquiry");
+    expect(emailConsent(base, null, new Date("2026-03-01"), now)).toBeNull();
+    expect(emailConsent({ ...base, marketingOptOut: true }, new Date("2026-11-01"), null, now)).toBeNull();
+  });
+  it("only texts people who opted in and haven't replied STOP", () => {
+    expect(smsConsent({ phone: "403-555-0101", smsOptIn: true, smsOptOutAt: null, marketingOptOut: false })).toBe(true);
+    expect(smsConsent({ phone: "403-555-0101", smsOptIn: true, smsOptOutAt: new Date(), marketingOptOut: false })).toBe(false);
+    expect(smsConsent({ phone: null, smsOptIn: true, smsOptOutAt: null, marketingOptOut: false })).toBe(false);
+  });
+  it("holds texts between 9pm and 9am Calgary time", () => {
+    const noon = new Date("2026-12-01T18:00:00Z"); // 11am MST
+    expect(nextTextWindow(noon)).toBe(noon);
+    expect(nextTextWindow(new Date("2026-12-02T05:00:00Z")).toISOString()).toBe("2026-12-02T15:00:00.000Z"); // 10pm -> 9am next day (UTC-6 from Nov 2026)
+    expect(nextTextWindow(new Date("2026-12-02T12:00:00Z")).toISOString()).toBe("2026-12-02T15:00:00.000Z"); // 5am -> 9am same day
+  });
+  it("paces emails per day and signs links", () => {
+    expect([0, 199, 200, 450].map((i) => paceDay(i, 200))).toEqual([0, 0, 1, 2]);
+    expect(verifySigned(signed("client123"))).toBe("client123");
+    expect(verifySigned("client123.forged")).toBeNull();
+  });
+});

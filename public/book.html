@@ -148,6 +148,7 @@
         <input type="tel" name="phone" autocomplete="tel" inputmode="tel">
       </label>
       <label class="consent"><input type="checkbox" name="smsOptIn" value="yes"> <span>Text me about my booking (on our way, done with photos, invoices). Up to a few texts per job; msg &amp; data rates may apply. Reply STOP to stop, HELP for help. <a href="privacy.html">Privacy</a> · <a href="terms.html">Terms</a></span></label>
+      <label class="consent"><input type="checkbox" name="offers" value="yes"> <span>Email me seasonal offers from etc. (a few a year; unsubscribe any time).</span></label>
       <!-- honeypot: hidden from people, bots fill it in -->
       <input type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px">
     </fieldset>
@@ -371,7 +372,7 @@
     const payload = JSON.stringify({
       name: d.name, email: d.email, phone: d.phone, address: d.address, access: d.access,
       services: d.raw, plan: form.plan.value, icemelt: form.icemelt.checked,
-      date: d.date, notes: d.notes, payment: d.payment, website: form.website.value, smsOptIn: !!d.phone && form.smsOptIn.checked, ...(geo || {}),
+      date: d.date, notes: d.notes, payment: d.payment, website: form.website.value, smsOptIn: !!d.phone && form.smsOptIn.checked, offers: form.offers.checked, ...(geo || {}),
       ref: new URLSearchParams(location.search).get("ref") || localStorage.getItem("etcRef") || undefined, // referral code from a friend's link
     });
     const post = url => fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: payload });

@@ -52,6 +52,7 @@ export async function POST(req: Request) {
     await enqueueSms(db, { businessId: client.businessId, template: "sms.opt_in", client, props: {}, dedupeKey: `sms-optin:${client.id}` }); // once per client
     kickOutbox();
   }
+  if (data.offers === true) await db.client.updateMany({ where: { id: res.clientId, emailMarketingConsentAt: null }, data: { emailMarketingConsentAt: new Date(), emailMarketingConsentSource: "booking form" } });
   if (typeof data.ref === "string") await recordReferral(await businessId(), res.clientId, data.ref.slice(0, 20)).catch((e) => console.error("referral", e));
   console.info(`booking ${res.number} saved`);
   return json(req, 201, { ok: true, id: res.number, estimate: booking.estimate, ...(res.uploadUrl ? { uploadUrl: res.uploadUrl } : {}) });

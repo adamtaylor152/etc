@@ -19,7 +19,7 @@ export async function saveBusiness(f: FormData) {
     data: {
       name: z.string().min(1).max(80).parse(s(f, "name")), legalName: opt(s(f, "legalName")), phone: opt(s(f, "phone")),
       helpEmail: opt(s(f, "helpEmail")), etransferEmail: opt(s(f, "etransferEmail")), website: opt(s(f, "website")),
-      googleReviewUrl: opt(s(f, "googleReviewUrl")), depotAddress: opt(s(f, "depotAddress")), depotLat: num("depotLat"), depotLng: num("depotLng"),
+      googleReviewUrl: opt(s(f, "googleReviewUrl")), mailingAddress: opt(s(f, "mailingAddress")), depotAddress: opt(s(f, "depotAddress")), depotLat: num("depotLat"), depotLng: num("depotLng"),
     },
   });
   revalidatePath("/", "layout");
