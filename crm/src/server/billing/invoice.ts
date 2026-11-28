@@ -48,6 +48,10 @@ export function reminderDue(i: { status: InvoiceStatus; dueOn: string | null; re
   return null;
 }
 
+/** Where money emails go: the client's billing contact if one has an email, otherwise the client. Pure, unit-tested. */
+export const billingEmail = (clientEmail: string, contacts: { isBilling: boolean; email: string | null }[]) =>
+  contacts.find((c) => c.isBilling && c.email)?.email ?? clientEmail;
+
 export const etransferRef = (number: number) => `ETC-${number}`;
 
 /** Deposit amount for a quote total. Pure, unit-tested. */
