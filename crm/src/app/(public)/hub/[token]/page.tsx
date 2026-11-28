@@ -10,6 +10,8 @@ import { money } from "@/server/money";
 import { mintToken, peekToken } from "@/server/tokens";
 import { renewalSeason } from "@/server/ops/jobs";
 import { stripeEnabled } from "@/server/stripe";
+import { referralCodeFor, referralLink } from "@/server/ops/marketing";
+import { parseSettings } from "@/server/settings";
 import { hubPausePlan, hubPayAll, hubRenewPlan, hubRequestWork, hubSetTexts } from "./actions";
 
 export const metadata = { title: { absolute: "Your etc. page" } };
@@ -32,6 +34,9 @@ export default async function Hub({ params, searchParams }: PageProps<"/hub/[tok
     db.invoice.findMany({ where: { clientId: c.id, status: { in: ["AWAITING_PAYMENT", "PAID"] } }, orderBy: { number: "desc" } }),
     db.job.findMany({ where: { clientId: c.id, kind: "SNOW_PLAN", closedAt: null }, include: { property: true, season: true } }),
   ]);
+  const refCode = await referralCodeFor(c.id);
+  const refReward = parseSettings((await db.business.findUniqueOrThrow({ where: { id: c.businessId } })).settings).referralRewardCents;
+  const creditLeft = (await db.clientCredit.aggregate({ where: { clientId: c.id, appliedToInvoiceId: null }, _sum: { amountCents: true } }))._sum.amountCents ?? 0;
   const payments = await db.payment.findMany({ where: { clientId: c.id }, include: { invoice: { select: { number: true } } }, orderBy: { receivedAt: "desc" }, take: 20 });
   // Fresh scoped links for each quote / invoice / visit report.
   const link = async (purpose: "QUOTE" | "INVOICE" | "VISIT_REPORT", ref: Record<string, string>) => mintToken(db, c.businessId, purpose, { clientId: c.id, ...ref });
@@ -58,6 +63,11 @@ export default async function Hub({ params, searchParams }: PageProps<"/hub/[tok
           {stripeEnabled() && <form action={hubPayAll} className="mt-2"><input type="hidden" name="t" value={token} /><button className="min-h-12 rounded-full bg-blue px-6 font-semibold text-white">Pay {money(owing)} by card</button></form>}
         </Card>
       )}
+      <Card title="Send a neighbour our way">
+        <p className="text-sm">Share your link. When they book and pay their first invoice, you get {money(refReward)} off your next one.</p>
+        <p className="mt-2 select-all break-all rounded-lg bg-tint p-2 text-sm font-semibold">{referralLink(refCode)}</p>
+        {creditLeft > 0 && <p className="mt-2 text-sm font-semibold text-emerald-700">You have {money(creditLeft)} in credit for your next invoice.</p>}
+      </Card>
       <Card title="Payment history" actions={<a href={`/hub/${token}/statement`} className="text-sm font-semibold text-blue">Statement</a>}>
         {payments.length ? (
           <ul className="divide-y divide-line text-sm">{payments.map((p) => <li key={p.id} className="flex justify-between py-2"><span>{p.receivedAt.toLocaleDateString("en-CA", { timeZone: "America/Edmonton", month: "short", day: "numeric", year: "numeric" })} · {p.method === "ETRANSFER" ? "e-Transfer" : p.method.charAt(0) + p.method.slice(1).toLowerCase()} · invoice #{p.invoice.number}</span><span className="font-semibold">{money(p.amountCents - p.refundedCents)}</span></li>)}</ul>

@@ -360,6 +360,8 @@
 
   let sending = false;
   let geo = null, geoFor = ""; // map pin from Places autocomplete, sent to the CRM for routing by community
+  // Remember a friend's referral code even if they browse around before booking.
+  try { const r = new URLSearchParams(location.search).get("ref"); if (r) localStorage.setItem("etcRef", r.slice(0, 20)); } catch {}
   async function submit() {
     if (sending) return;
     sending = true;
@@ -370,6 +372,7 @@
       name: d.name, email: d.email, phone: d.phone, address: d.address, access: d.access,
       services: d.raw, plan: form.plan.value, icemelt: form.icemelt.checked,
       date: d.date, notes: d.notes, payment: d.payment, website: form.website.value, smsOptIn: !!d.phone && form.smsOptIn.checked, ...(geo || {}),
+      ref: new URLSearchParams(location.search).get("ref") || localStorage.getItem("etcRef") || undefined, // referral code from a friend's link
     });
     const post = url => fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: payload });
     try {

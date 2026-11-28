@@ -61,6 +61,12 @@ export default async function ClientPage({ params, searchParams }: PageProps<"/c
     tab === "files" ? db.attachment.findMany({ where: { businessId: bid, clientId: id, deletedAt: null }, orderBy: { createdAt: "desc" }, take: 120 }) : Promise.resolve([]),
   ]);
   const books = ledger(c.invoices, c.payments);
+  const [referredBy, referredCount, creditAgg] = await Promise.all([
+    c.referredById ? db.client.findUnique({ where: { id: c.referredById } }) : null,
+    db.referral.count({ where: { referrerId: c.id } }),
+    db.clientCredit.aggregate({ where: { clientId: c.id, appliedToInvoiceId: null }, _sum: { amountCents: true } }),
+  ]);
+  const credit = creditAgg._sum.amountCents ?? 0;
   const lifetime = c.payments.reduce((n, p) => n + p.amountCents - p.refundedCents, 0);
   const lead = !jobs.length && !c.invoices.some((i) => i.status !== "DRAFT") && !c.quotes.some((q) => q.status === "APPROVED" || q.status === "CONVERTED");
   const phones = (Array.isArray(c.phones) && c.phones.length ? c.phones : c.phone ? [{ number: c.phone, label: "Mobile", sms: c.smsOptIn }] : []) as { number: string; label: string; sms: boolean }[];
@@ -115,6 +121,7 @@ export default async function ClientPage({ params, searchParams }: PageProps<"/c
               <div><dt className="text-xs font-semibold uppercase text-ink-soft">Phone</dt>{phones.length ? phones.map((p) => <dd key={p.number}><a href={`tel:${p.number}`} className="font-semibold text-blue">{p.number}</a> <span className="text-ink-soft">{p.label}{p.sms ? " · texts" : ""}</span></dd>) : <dd className="text-ink-soft">—</dd>}</div>
               <div><dt className="text-xs font-semibold uppercase text-ink-soft">Email</dt>{emails.length ? emails.map((m) => <dd key={m.address}><a href={`mailto:${m.address}`} className="font-semibold text-blue">{m.address}</a> <span className="text-ink-soft">{m.label}</span></dd>) : <dd className="text-ink-soft">—</dd>}</div>
               <div><dt className="text-xs font-semibold uppercase text-ink-soft">Lead source</dt><dd>{c.leadSource ?? c.source.replaceAll("_", " ").toLowerCase()}</dd></div>
+              <div><dt className="text-xs font-semibold uppercase text-ink-soft">Referrals</dt><dd className="text-sm">{referredBy ? <>Referred by <Link className="text-blue" href={`/clients/${referredBy.id}`}>{clientName(referredBy)}</Link>. </> : ""}{referredCount ? `Referred ${referredCount}. ` : ""}{c.referralCode ? <span className="text-ink-soft">Code {c.referralCode}</span> : <span className="text-ink-soft">Share code made on first hub visit</span>}{credit > 0 && <span className="ml-1 font-semibold text-emerald-700">· {money(credit)} credit</span>}</dd></div>
               <div><dt className="text-xs font-semibold uppercase text-ink-soft">Payment</dt><dd>{c.preferredPayment === "ETRANSFER" ? "e-Transfer" : c.preferredPayment ? c.preferredPayment.toLowerCase() : "—"}</dd></div>
               <div className="sm:col-span-2"><dt className="text-xs font-semibold uppercase text-ink-soft">Messages</dt><dd className="text-ink-soft">
                 {[c.smsOptOutAt ? "Texted STOP" : c.smsOptIn ? "Text updates on" : "No text updates", c.visitReminders ? "visit reminders" : null, c.followUpQuotes ? "quote follow-ups" : null, c.followUpInvoices ? "invoice reminders" : null, c.marketingOptOut ? "no marketing" : null].filter(Boolean).join(" · ")}

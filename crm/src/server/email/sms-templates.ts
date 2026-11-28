@@ -21,6 +21,15 @@ export const smsTemplates = {
     return `Snow day! ${first(v.job.client.firstName)}, you're on our route today for ${v.property.formatted.split(",")[0]}. Away? Just reply. - etc.`;
   },
   // Once, when someone ticks "text me" on the booking form (carriers and RCS review expect a confirmation).
+  "sms.review_request": async (p: { clientId: string; reviewId: string }, ctx: Ctx) => {
+    const c = await db.client.findUniqueOrThrow({ where: { id: p.clientId } });
+    const raw = await mintToken(db, ctx.businessId, "REVIEW", { clientId: c.id, redirectPath: p.reviewId });
+    return `Hi ${first(c.firstName)}, thanks for choosing etc.! How did we do? ${env.appUrl}/r/${raw} - etc.`;
+  },
+  "sms.referral_thanks": async (p: { clientId: string; cents: number }) => {
+    const c = await db.client.findUniqueOrThrow({ where: { id: p.clientId } });
+    return `Thanks for sending a neighbour our way, ${first(c.firstName)}! $${(p.cents / 100).toFixed(0)} off your next etc. invoice. - etc.`;
+  },
   // eslint-disable-next-line @typescript-eslint/no-unused-vars -- no props, but enqueueSms needs a props type
   "sms.opt_in": async (_p: Record<string, never>) => "You're signed up for etc. booking texts. Reply STOP to stop, HELP for help.",
 } satisfies Record<string, (p: never, ctx: Ctx) => Promise<string>>;

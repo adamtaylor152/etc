@@ -1,6 +1,7 @@
 // Public booking endpoint for etccrew.ca/book.html (cross-origin). Same rules as the Python /api/bookings:
 // 16KB cap, honeypot, 5 bookings / 10 min / IP, identical validation and estimate.
 import { createBooking } from "@/server/booking/create";
+import { recordReferral } from "@/server/ops/marketing";
 import { BookingError, validate } from "@/server/booking/validate";
 import { todayLocal } from "@/server/dates";
 import { businessId, db } from "@/server/db";
@@ -51,6 +52,7 @@ export async function POST(req: Request) {
     await enqueueSms(db, { businessId: client.businessId, template: "sms.opt_in", client, props: {}, dedupeKey: `sms-optin:${client.id}` }); // once per client
     kickOutbox();
   }
+  if (typeof data.ref === "string") await recordReferral(await businessId(), res.clientId, data.ref.slice(0, 20)).catch((e) => console.error("referral", e));
   console.info(`booking ${res.number} saved`);
   return json(req, 201, { ok: true, id: res.number, estimate: booking.estimate, ...(res.uploadUrl ? { uploadUrl: res.uploadUrl } : {}) });
 }

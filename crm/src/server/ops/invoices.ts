@@ -8,6 +8,7 @@ import { env } from "../env";
 import { logActivity, nextNumber } from "../records";
 import { TransitionError } from "../status/visit";
 import { parseSettings } from "../settings";
+import { qualifyReferral } from "./marketing";
 
 type Actor = { id: string; businessId: string } | { id: null; businessId: string }; // id null = system (Stripe webhook)
 type LineIn = { name: string; quantity: number; unitPriceCents: number; totalCents: number; serviceDate?: Date | null; jobId?: string | null; visitId?: string | null; chargeId?: string };
@@ -23,6 +24,10 @@ async function createDraft(tx: Tx, user: Actor, input: {
   const deposits = quotes.length ? await tx.invoice.findMany({ where: { kind: "DEPOSIT", quoteId: { in: quotes.map((q) => q.id) }, appliedToInvoiceId: null, amountPaidCents: { gt: 0 } }, orderBy: { number: "asc" } }) : [];
   const credits = depositCredit(input.lines.reduce((n, l) => n + l.totalCents, 0), deposits.map((d) => ({ id: d.id, paidCents: d.amountPaidCents })));
   input = { ...input, lines: [...input.lines, ...credits.map((c) => ({ name: `Less deposit (invoice #${deposits.find((d) => d.id === c.id)!.number})`, quantity: 1, unitPriceCents: -c.cents, totalCents: -c.cents }))] };
+  // Account credits (referral rewards) come off next, each used once.
+  const openCredits = await tx.clientCredit.findMany({ where: { clientId: input.clientId, appliedToInvoiceId: null }, orderBy: { createdAt: "asc" } });
+  const creditUse = depositCredit(input.lines.reduce((n, l) => n + l.totalCents, 0), openCredits.map((c) => ({ id: c.id, paidCents: c.amountCents })));
+  input = { ...input, lines: [...input.lines, ...creditUse.map((c) => ({ name: openCredits.find((x) => x.id === c.id)!.reason, quantity: 1, unitPriceCents: -c.cents, totalCents: -c.cents }))] };
   const number = await nextNumber(tx, user.businessId, "INVOICE");
   const totals = invoiceTotals(input.lines.map((l) => l.totalCents), 0, biz);
   const inv = await tx.invoice.create({
@@ -42,6 +47,11 @@ async function createDraft(tx: Tx, user: Actor, input: {
     }
   }
   if (credits.length) await tx.invoice.updateMany({ where: { id: { in: credits.map((c) => c.id) } }, data: { appliedToInvoiceId: inv.id } });
+  if (creditUse.length) {
+    await tx.clientCredit.updateMany({ where: { id: { in: creditUse.map((c) => c.id) } }, data: { appliedToInvoiceId: inv.id } });
+    const refIds = openCredits.filter((c) => creditUse.some((u) => u.id === c.id) && c.referralId).map((c) => c.referralId!);
+    if (refIds.length) await tx.referral.updateMany({ where: { id: { in: refIds }, status: "QUALIFIED" }, data: { status: "REWARDED" } });
+  }
   await logActivity(tx, { businessId: user.businessId, type: "invoice.created", entityType: "Invoice", entityId: inv.id, actorType: user.id ? "USER" : "SYSTEM", actorUserId: user.id ?? undefined, clientId: input.clientId, jobId: input.jobId ?? undefined });
   return inv;
 }
@@ -178,6 +188,7 @@ export async function recordPayment(user: Actor, input: {
       },
     });
     await recompute(tx, inv.id);
+    await qualifyReferral(tx, inv.clientId);
     const client = await tx.client.findUniqueOrThrow({ where: { id: inv.clientId } });
     await enqueue(tx, {
       businessId: user.businessId, template: "payment.receipt", to: client.email, replyTo: env.helpEmail, priority: 2, props: { paymentId: p.id },

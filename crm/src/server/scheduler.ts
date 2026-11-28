@@ -2,6 +2,7 @@
 // The outbox is already safe across containers (SKIP LOCKED). Automations added later (reminders, snow alerts)
 // run inside `exclusive()`, a transaction-scoped advisory lock, plus per-message dedupe keys.
 import { retryTextMedia } from "./ops/texts";
+import { sendReviewRequests } from "./ops/marketing";
 import { syncTelnyxCalls } from "./ops/calls";
 import { db } from "./db";
 import { env } from "./env";
@@ -90,24 +91,7 @@ async function visitReminders() {
 
 /** Google review ask, 2 days after a client's first completed visit of the season; once per client per season. */
 async function reviewRequests() {
-  const businesses = await db.business.findMany();
-  for (const biz of businesses) {
-    if (!parseSettings(biz.settings).reviewRequests || !biz.googleReviewUrl) continue;
-    const from = new Date(Date.now() - 4 * 86_400_000), to = new Date(Date.now() - 2 * 86_400_000);
-    const done = await db.visit.findMany({
-      where: { businessId: biz.id, state: "COMPLETED", completedAt: { gte: from, lte: to } },
-      include: { job: { include: { client: true } } }, distinct: ["jobId"],
-    });
-    const season = todayLocal().slice(0, 4);
-    for (const v of done) {
-      const c = v.job.client;
-      if (c.marketingOptOut || c.emailBouncedAt) continue;
-      await enqueue(db, {
-        businessId: biz.id, template: "review.request", to: c.email, replyTo: env.helpEmail, priority: 8, props: { clientId: c.id },
-        dedupeKey: `review:${c.id}:${season}`, clientId: c.id,
-      });
-    }
-  }
+  await sendReviewRequests();
 }
 
 /** 6am summary for owners who turned it on. */

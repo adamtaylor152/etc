@@ -146,3 +146,15 @@ describe("stripe pay-all", () => {
     expect(splitRefund([{ id: "a", amountCents: 3500, refundedCents: 1000 }], 1000)).toEqual([]);
   });
 });
+
+import { makeReferralCode, reviewRoute } from "@/server/ops/marketing";
+describe("reviews and referrals", () => {
+  it("sends 4-5 stars to Google and 1-3 to private feedback", () => {
+    expect([1, 2, 3, 4, 5].map(reviewRoute)).toEqual(["feedback", "feedback", "feedback", "google", "google"]);
+  });
+  it("makes readable referral codes from the first name", () => {
+    expect(makeReferralCode("Jane", Buffer.from([0, 1, 2, 3]))).toBe("JANE2345");
+    expect(makeReferralCode("Zoë-Ann", Buffer.from([31, 31, 31, 31]))).toBe("ZOEANNZZZZ");
+    expect(makeReferralCode("", Buffer.from([0, 0, 0, 0]))).toBe("ETC2222");
+  });
+});

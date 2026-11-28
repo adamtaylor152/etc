@@ -6,7 +6,7 @@ import type { Prisma } from "@/generated/prisma/client";
 import { requireOwner } from "@/server/auth";
 import { toDbDate } from "@/server/dates";
 import { db } from "@/server/db";
-import { SettingsSchema } from "@/server/settings";
+import { SETTING_LABELS, SettingsSchema } from "@/server/settings";
 
 const s = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 const opt = (v: string) => v || null;
@@ -44,8 +44,10 @@ export async function saveTax(f: FormData) {
 export async function saveAutomations(f: FormData) {
   const user = await requireOwner();
   const biz = await db.business.findUniqueOrThrow({ where: { id: user.businessId } });
-  const next = SettingsSchema.parse(Object.fromEntries(Object.keys(SettingsSchema.shape).map((k) => [k, f.get(k) === "on"])));
-  await db.business.update({ where: { id: biz.id }, data: { settings: { ...(biz.settings as object), ...next } as Prisma.InputJsonValue } });
+  // Only the on/off settings live on this form; numbers (review delay, referral amounts) keep their values.
+  const toggles = Object.fromEntries(Object.keys(SETTING_LABELS).map((k) => [k, f.get(k) === "on"]));
+  const next = SettingsSchema.parse({ ...(biz.settings as object), ...toggles });
+  await db.business.update({ where: { id: biz.id }, data: { settings: next as Prisma.InputJsonValue } });
   revalidatePath("/", "layout");
   redirect("/settings?saved=automations");
 }
