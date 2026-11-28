@@ -1,15 +1,14 @@
-// Sub-navigation for the schedule pages.
-import Link from "next/link";
+// Page header + sub-navigation shared by the schedule pages.
+import type { ReactNode } from "react";
+import { PageHeader, Tabs } from "./ui";
 
 const TABS = [["/schedule", "Calendar"], ["/schedule/team", "Team & map"], ["/schedule/find", "Find a time"], ["/schedule/bulk", "Bulk changes"]] as const;
 
-export function ScheduleTabs({ active }: { active: (typeof TABS)[number][0] }) {
+export function ScheduleTabs({ active, sub, actions }: { active: (typeof TABS)[number][0]; sub?: ReactNode; actions?: ReactNode }) {
   return (
-    <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-      <h1 className="font-display text-2xl font-bold sm:text-3xl">Schedule</h1>
-      <nav className="flex gap-1 rounded-lg bg-white p-1 shadow-card">
-        {TABS.map(([href, label]) => <Link key={href} href={href} className={`rounded-md px-3 py-1.5 text-sm font-semibold ${active === href ? "bg-navy text-white" : "text-ink-soft hover:text-navy"}`}>{label}</Link>)}
-      </nav>
-    </div>
+    <>
+      <PageHeader title="Schedule" sub={sub} actions={actions} />
+      <Tabs items={TABS.map(([href, label]) => ({ href, label }))} active={TABS.find(([href]) => href === active)![1]} />
+    </>
   );
 }

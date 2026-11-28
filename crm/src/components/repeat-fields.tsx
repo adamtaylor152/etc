@@ -9,32 +9,35 @@ const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const LONG = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 export type RepeatValue = { freq?: string; interval?: number; byDay?: number[]; monthDay?: number | null; nth?: number | null; startsOn: string; endsOn?: string | null; count?: number | null };
 
+// The kit's input, sized to its content instead of the full row.
+const small = inputCls.replace("w-full ", "");
+const label = "mb-1 block text-sm font-semibold";
+
 export function RepeatFields({ freq: freq0 = "WEEKLY", interval = 1, byDay = [], monthDay, nth, startsOn, endsOn, count }: RepeatValue) {
   const [freq, setFreq] = useState(freq0 === "BIWEEKLY" ? "WEEKLY" : freq0);
   const [monthMode, setMonthMode] = useState(freq0 === "MONTHLY" && byDay.length && !monthDay ? "NTH" : "DAY");
   const [endMode, setEndMode] = useState(count ? "AFTER" : endsOn ? "ON" : "NEVER");
-  const small = `${inputCls} w-auto`;
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-end gap-2">
-        {freq !== "AS_NEEDED" && <label className="text-sm font-semibold">Every<Input name="interval" type="number" min={1} max={52} defaultValue={freq0 === "BIWEEKLY" ? 2 : interval} className="mt-1 block w-20" aria-label="Every how many" /></label>}
-        <label className="text-sm font-semibold">Repeats
-          <select name="freq" value={freq} onChange={(e) => setFreq(e.target.value)} className={`${small} mt-1 block`}>
+        {freq !== "AS_NEEDED" && <label className="block"><span className={label}>Every</span><input name="interval" type="number" min={1} max={52} inputMode="numeric" defaultValue={freq0 === "BIWEEKLY" ? 2 : interval} className={`${small} w-20 tabular-nums`} aria-label="Every how many" /></label>}
+        <label className="block"><span className={label}>Repeats</span>
+          <select name="freq" value={freq} onChange={(e) => setFreq(e.target.value)} className={small}>
             <option value="WEEKLY">week(s)</option><option value="MONTHLY">month(s)</option><option value="AS_NEEDED">As needed (no automatic visits)</option>
           </select>
         </label>
       </div>
       {freq === "WEEKLY" && (
         <fieldset>
-          <legend className="mb-1 text-sm font-semibold">On</legend>
-          <div className="flex flex-wrap gap-2">
+          <legend className={label}>On</legend>
+          <div className="flex flex-wrap gap-1.5">
             {DAYS.map((d, i) => (
-              <label key={d} className="flex items-center gap-1.5 rounded-full border border-line bg-white px-3 py-2 text-sm">
-                <input type="checkbox" name="byDay" value={i} defaultChecked={freq0 !== "MONTHLY" && byDay.includes(i)} className="size-4" /> {d}
+              <label key={d} title={LONG[i]} className="inline-flex min-h-10 cursor-pointer items-center gap-1.5 rounded-full border border-line bg-white px-3 text-[13px] font-semibold text-ink-soft hover:border-ink-faint/60 hover:text-navy has-checked:border-blue/30 has-checked:bg-blue/8 has-checked:text-blue-deep has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-blue">
+                <input type="checkbox" name="byDay" value={i} defaultChecked={freq0 !== "MONTHLY" && byDay.includes(i)} className="size-4" />{d}
               </label>
             ))}
           </div>
-          <p className="mt-1 text-xs text-ink-soft">None ticked = the start date&apos;s weekday.</p>
+          <p className="mt-1.5 text-xs text-ink-soft">None ticked = the start date&apos;s weekday.</p>
         </fieldset>
       )}
       {freq === "MONTHLY" && (
@@ -43,7 +46,7 @@ export function RepeatFields({ freq: freq0 = "WEEKLY", interval = 1, byDay = [],
             <option value="DAY">On day</option><option value="NTH">On the</option>
           </select>
           {monthMode === "DAY" ? (
-            <select name="monthDay" defaultValue={monthDay ?? Math.min(28, Number(startsOn.slice(8)) || 1)} className={small} aria-label="Day of the month">
+            <select name="monthDay" defaultValue={monthDay ?? Math.min(28, Number(startsOn.slice(8)) || 1)} className={`${small} tabular-nums`} aria-label="Day of the month">
               {Array.from({ length: 28 }, (_, i) => <option key={i} value={i + 1}>{i + 1}</option>)}<option value={-1}>Last day</option>
             </select>
           ) : (
@@ -66,7 +69,7 @@ export function RepeatFields({ freq: freq0 = "WEEKLY", interval = 1, byDay = [],
             </select>
           </Field>
           {endMode === "ON" && <Field label="Last day"><Input type="date" name="endsOn" defaultValue={endsOn ?? ""} required /></Field>}
-          {endMode === "AFTER" && <Field label="Visits"><Input type="number" name="count" min={1} max={500} defaultValue={count ?? 10} required /></Field>}
+          {endMode === "AFTER" && <Field label="Visits"><Input type="number" name="count" min={1} max={500} inputMode="numeric" defaultValue={count ?? 10} required /></Field>}
         </div>
       )}
       <p className="text-xs text-ink-soft">Visits are created 90 days ahead.</p>
