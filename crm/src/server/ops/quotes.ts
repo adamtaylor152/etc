@@ -120,10 +120,14 @@ export async function markQuoteApproved(user: Actor, quoteId: string) {
 }
 
 /** Approved quote -> one-off job with the chosen lines and a visit to schedule. */
-export async function convertQuote(user: Actor, quoteId: string, input: { date: string | null; billingType: "PER_VISIT" | "FIXED_PRICE" }) {
+export async function convertQuote(user: Actor, quoteId: string, input: { date: string | null; billingType: "PER_VISIT" | "FIXED_PRICE"; skipDeposit?: boolean }) {
   return db.$transaction(async (tx) => {
     const q = await tx.quote.findFirstOrThrow({ where: { id: quoteId, businessId: user.businessId }, include: { lineItems: { orderBy: { sortOrder: "asc" } }, request: true } });
     assertQuoteTransition(q.status, "CONVERTED");
+    if (q.depositRequired && !input.skipDeposit) {
+      const unpaid = await tx.invoice.findFirst({ where: { kind: "DEPOSIT", quoteId: q.id, status: { notIn: ["PAID", "VOID"] } } });
+      if (unpaid) throw new TransitionError(`The deposit (invoice #${unpaid.number}) hasn't been paid yet. Tick "book without the deposit" to go ahead anyway.`);
+    }
     const propertyId = q.propertyId ?? q.request?.propertyId ?? (await tx.property.findFirst({ where: { clientId: q.clientId, archivedAt: null }, orderBy: { isDefault: "desc" } }))?.id;
     if (!propertyId) throw new TransitionError("The client needs an address first");
     const prop = await tx.property.findUniqueOrThrow({ where: { id: propertyId } });

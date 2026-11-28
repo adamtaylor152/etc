@@ -60,6 +60,9 @@ export default async function QuotePage({ params, searchParams }: PageProps<"/qu
                 <Field label="First visit" hint="Blank = schedule later"><Input type="date" name="date" /></Field>
                 <Field label="Billing"><select name="billingType" className={inputCls} defaultValue="FIXED_PRICE"><option value="FIXED_PRICE">Fixed price (the quote)</option><option value="PER_VISIT">Per visit</option></select></Field>
                 <Button>Convert to job</Button>
+                {q.depositRequired && deposit && deposit.status !== "PAID" && deposit.status !== "VOID" && (
+                  <label className="flex items-center gap-2 text-sm text-amber-800 sm:col-span-3"><input type="checkbox" name="skipDeposit" className="size-4" /> The required deposit isn&apos;t paid yet. Book without the deposit.</label>
+                )}
               </form>
             </Card>
           )}

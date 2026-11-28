@@ -26,6 +26,11 @@ export default async function PublicQuote({ params, searchParams }: PageProps<"/
   const canAct = (q.status === "AWAITING_RESPONSE" || q.status === "CHANGES_REQUESTED") && !expired;
   const sig = await db.signature.findFirst({ where: { quoteId: q.id, kind: "QUOTE" }, orderBy: { signedAt: "desc" } });
   const deposit = await db.invoice.findFirst({ where: { kind: "DEPOSIT", quoteId: q.id } });
+  // Photos the client sent with their request, plus any we chose to share with them.
+  const photos = await db.attachment.findMany({
+    where: { businessId: q.businessId, deletedAt: null, mediaType: "IMAGE", AND: [{ OR: [{ quoteId: q.id }, ...(q.requestId ? [{ requestId: q.requestId }] : [])] }, { OR: [{ uploadedByType: "CLIENT" }, { sharedWithClient: true }] }] },
+    orderBy: { createdAt: "asc" }, take: 20,
+  });
   const biz = await db.business.findUniqueOrThrow({ where: { id: q.businessId } });
   const depositLink = deposit && deposit.status !== "PAID" ? `/i/${await mintToken(db, q.businessId, "INVOICE", { invoiceId: deposit.id, clientId: q.clientId })}` : null;
   return (
@@ -39,6 +44,14 @@ export default async function PublicQuote({ params, searchParams }: PageProps<"/
         <p className="mt-1 text-sm text-ink-soft">For {clientName(q.client)}{q.property && ` · ${q.property.formatted}`}</p>
       </div>
       {q.message && <Card><p className="whitespace-pre-line">{q.message}</p></Card>}
+      {photos.length > 0 && (
+        <Card>
+          <p className="mb-2 text-sm font-semibold">Photos of the job</p>
+          <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+            {photos.map((p) => <a key={p.id} href={signedMediaPath(p.id, "md", 30)} target="_blank" rel="noreferrer"><img src={signedMediaPath(p.id, "sm", 30)} alt={p.caption ?? "Job photo"} className="aspect-square w-full rounded-lg object-cover" /></a>)}
+          </div>
+        </Card>
+      )}
       <Card>
         {q.status === "APPROVED" || q.status === "CONVERTED"
           ? <><p className="mb-2 font-semibold text-emerald-700">Approved{q.approvedByName && !q.approvedByName.startsWith("Approved by") ? ` by ${q.approvedByName}` : ""}. Thank you!</p>
