@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { ForgetRoutes } from "@/components/sw-register";
 import { Button, Field, Input, Logo, Notice } from "@/components/ui";
 import { currentUser, safeNext } from "@/server/auth";
 import { requestLogin } from "./actions";
@@ -24,6 +25,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
           <Button className="min-h-12 w-full">Email me a sign-in link</Button>
         </form>
       </div>
+      <ForgetRoutes />
     </main>
   );
 }
