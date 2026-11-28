@@ -6,7 +6,7 @@ import type { WindowKey } from "@/server/windows";
 import { AddressField } from "./address-field";
 import { shrink } from "./photo-uploader";
 
-type Service = { label: string; price: string | null };
+type Service = { label: string; description?: string | null; price: string | null };
 type Slots = { windows: { key: WindowKey; label: string; hint: string }[]; days: { date: string; windows: WindowKey[] }[] };
 const dayName = (d: string) => new Date(`${d}T12:00`).toLocaleDateString("en-CA", { weekday: "short", month: "short", day: "numeric" });
 
@@ -93,7 +93,8 @@ export function BookingForm({ services, phone, mapsKey, refCode }: { services: S
           {services.map((s) => (
             <label key={s.label} className={`flex items-center justify-between gap-2 rounded-xl border p-3 ${picked.includes(s.label) ? "border-blue bg-blue/5" : "border-line"}`}>
               <span className="flex items-center gap-2"><input type="checkbox" checked={picked.includes(s.label)} className="size-5"
-                onChange={(e) => setPicked((p) => (e.target.checked ? [...p, s.label] : p.filter((x) => x !== s.label)))} /> {s.label}</span>
+                onChange={(e) => setPicked((p) => (e.target.checked ? [...p, s.label] : p.filter((x) => x !== s.label)))} />
+                <span>{s.label}{s.description && <span className="block text-sm text-ink-soft">{s.description}</span>}</span></span>
               <span className="text-sm text-ink-soft">{s.price ?? "Quote"}</span>
             </label>
           ))}

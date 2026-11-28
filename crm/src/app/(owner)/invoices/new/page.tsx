@@ -58,7 +58,7 @@ export default async function NewInvoice({ searchParams }: PageProps<"/invoices/
             </Field>
           </div>
           {client.properties.length > 1 && <Field label="Property"><select name="propertyId" className="min-h-10 w-full rounded-lg border border-line bg-white px-3">{client.properties.map((p) => <option key={p.id} value={p.id}>{p.formatted}</option>)}</select></Field>}
-          <LineItems services={services.map((sv) => ({ id: sv.id, name: sv.name, unitPriceCents: sv.unitPriceCents }))} />
+          <LineItems services={services.map((sv) => ({ id: sv.id, name: sv.name, description: sv.description, unitPriceCents: sv.unitPriceCents }))} />
           <p className="text-xs text-ink-soft">Saves as a draft. Send it, text it, or collect payment from the invoice page.</p>
           <button className="inline-flex min-h-10 items-center rounded-lg bg-blue px-5 text-sm font-semibold text-white">Save draft invoice</button>
         </form>

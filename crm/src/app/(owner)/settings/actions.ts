@@ -65,14 +65,3 @@ export async function saveSeason(f: FormData) {
   revalidatePath("/", "layout");
   redirect("/settings?saved=season");
 }
-
-export async function savePrice(f: FormData) {
-  const user = await requireOwner();
-  const dollars = s(f, "price");
-  await db.service.updateMany({
-    where: { id: s(f, "id"), businessId: user.businessId },
-    data: { unitPriceCents: dollars ? Math.round(z.coerce.number().min(0).max(100_000).parse(dollars) * 100) : null, pricingMode: dollars ? "FIXED" : "QUOTE", active: f.get("active") === "on" },
-  });
-  revalidatePath("/settings");
-  redirect("/settings?saved=prices#prices");
-}

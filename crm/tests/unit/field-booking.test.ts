@@ -76,10 +76,10 @@ describe("driveway size", () => {
   });
   it("validate: missing size = standard; bad size rejected; walk dropped for oversized", () => {
     const base = { name: "A B", email: "a@b.co", address: "1 Main St", payment: "Cash", plan: "One-time visit", services: ["Snow shovelling"] };
-    expect(validate(base, "2026-12-01").size).toBe("Standard");
-    expect(() => validate({ ...base, size: "Huge" }, "2026-12-01")).toThrow();
-    expect(validate({ ...base, size: "Oversized", extraWalk: true }, "2026-12-01")).toMatchObject({ extraWalk: false, estimate: "Quote" });
-    expect(validate({ ...base, services: ["Window cleaning"], size: "Large" }, "2026-12-01").size).toBe("");
+    expect(validate(base, "2026-12-01", ["Snow shovelling", "Window cleaning"]).size).toBe("Standard");
+    expect(() => validate({ ...base, size: "Huge" }, "2026-12-01", ["Snow shovelling", "Window cleaning"])).toThrow();
+    expect(validate({ ...base, size: "Oversized", extraWalk: true }, "2026-12-01", ["Snow shovelling", "Window cleaning"])).toMatchObject({ extraWalk: false, estimate: "Quote" });
+    expect(validate({ ...base, services: ["Window cleaning"], size: "Large" }, "2026-12-01", ["Snow shovelling", "Window cleaning"]).size).toBe("");
   });
   it("reads the current charge off job lines", () => {
     expect(currentCharge([{ name: "Snow shovelling (one-time)", unitPriceCents: 3500 }, { name: "Ice melt", unitPriceCents: 500 }, { name: "Extra sidewalk (corner lot / long walk)", unitPriceCents: 1000 }])).toEqual({ base: 3500, walk: 1000 });

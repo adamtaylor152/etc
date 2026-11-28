@@ -1,10 +1,10 @@
 "use client";
-// Line items with a price-book picker: pick a service to fill the name + price, or type your own. Live totals.
+// Line items with a price-book picker: pick a service to fill the name, description + price, or type your own. Live totals.
 // Posts lineName[] / lineDesc[] / lineQty[] / linePrice[] (dollars).
 import { useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 
-export type Service = { id: string; name: string; unitPriceCents: number | null };
+export type Service = { id: string; name: string; description?: string | null; unitPriceCents: number | null };
 type Row = { name: string; desc: string; qty: string; price: string };
 const blank: Row = { name: "", desc: "", qty: "1", price: "" };
 const inp = "min-h-10 w-full rounded-lg border border-line bg-white px-3 text-sm outline-none focus:border-blue";
@@ -23,7 +23,7 @@ export function LineItems({ services, initial = [], label = "Line items" }: { se
           <div key={i} className="grid grid-cols-[1fr_4.5rem_6.5rem] gap-2 rounded-lg border border-line p-2 sm:grid-cols-[1fr_4.5rem_6.5rem_6rem_2rem] sm:border-0 sm:p-0">
             <div className="space-y-1">
               <div className="flex gap-1">
-                <select aria-label="Pick from price book" value="" onChange={(e) => { const s = services.find((x) => x.id === e.target.value); if (s) set(i, { name: s.name, price: s.unitPriceCents != null ? String(s.unitPriceCents / 100) : r.price }); }}
+                <select aria-label="Pick from price book" value="" onChange={(e) => { const s = services.find((x) => x.id === e.target.value); if (s) set(i, { name: s.name, desc: s.description ?? r.desc, price: s.unitPriceCents != null ? String(s.unitPriceCents / 100) : r.price }); }}
                   className="min-h-10 w-10 shrink-0 rounded-lg border border-line bg-tint px-1 text-xs" title="Price book">
                   <option value="">📋</option>{services.map((s) => <option key={s.id} value={s.id}>{s.name}{s.unitPriceCents != null ? ` · ${fmt(s.unitPriceCents)}` : ""}</option>)}
                 </select>
