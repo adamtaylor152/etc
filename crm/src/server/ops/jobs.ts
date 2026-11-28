@@ -10,6 +10,7 @@ import { lastRecurrenceDate, outsidePause, recurrenceDates, toRRule, type Repeat
 import { db, type Tx } from "../db";
 import { logActivity, nextNumber } from "../records";
 import { seasonFor } from "../booking/create";
+import { currentCharge, setWalkLine, snowPrices } from "./drive-size";
 import { jobEditLocks } from "../status/job";
 import { TransitionError } from "../status/visit";
 
@@ -92,12 +93,20 @@ export async function createSnowPlan(user: Actor, input: { clientId: string; pro
   });
 }
 
-/** billing omitted = leave the billing mode alone. Changing mode, season price or instalment plan is refused once the plan is locked. */
-export async function updatePlan(user: Actor, jobId: string, input: { triggerCm: number | null; pricePerPushCents: number; iceMelt: boolean; billing?: PlanBilling }) {
-  const job = await db.job.findFirstOrThrow({ where: { id: jobId, businessId: user.businessId, kind: "SNOW_PLAN" }, include: { season: true } });
-  const { billing, ...rest } = input;
+/** Change a plan. The owner (a user) may change anything; a client (from their hub) only the add-ons of their own open plan
+ *  that isn't waiting on a price OK. Nothing already charged moves: ice melt and extra sidewalk are read when a visit is completed.
+ *  billing omitted = leave the billing mode alone. Changing mode, season price or instalment plan is refused once the plan is locked. */
+export async function updatePlan(by: Actor | { businessId: string; clientId: string }, jobId: string,
+                                 input: { triggerCm?: number | null; pricePerPushCents?: number; iceMelt?: boolean; extraWalk?: boolean; billing?: PlanBilling }) {
+  const client = "clientId" in by ? by.clientId : null;
+  const job = await db.job.findFirstOrThrow({
+    where: { id: jobId, businessId: by.businessId, kind: "SNOW_PLAN", ...(client ? { clientId: client, closedAt: null, sizeHoldAt: null } : {}) },
+    include: { lineItems: true, season: true },
+  });
+  if (client && job.snowBillingMode === "SEASONAL") throw new TransitionError("Add-ons on a season-price plan are set by the office"); // nothing is charged per visit
+  const { billing, extraWalk, ...rest } = input;
   let cols: Prisma.JobUncheckedUpdateInput = {};
-  if (billing) {
+  if (billing && !client) {
     if (!job.season) throw new TransitionError("This plan has no season");
     const next = billingColumns({ ...billing, firstDueOn: billing.firstDueOn || dateOnly(job.seasonalFirstDueOn) }, job.season);
     const changed = next.snowBillingMode !== (job.snowBillingMode ?? "PER_PUSH") || next.seasonalPriceCents !== job.seasonalPriceCents
@@ -106,10 +115,19 @@ export async function updatePlan(user: Actor, jobId: string, input: { triggerCm:
     // A flat season price replaces any per-push price the client was still being asked to OK.
     cols = !changed ? { addonsIncluded: next.addonsIncluded } : next.snowBillingMode === "SEASONAL" ? { ...next, sizeHoldAt: null, pendingPrice: Prisma.DbNull } : next;
   }
+  const walkChanged = extraWalk != null && extraWalk !== currentCharge(job.lineItems).walk > 0;
   await db.$transaction(async (tx) => {
     await tx.job.update({ where: { id: job.id }, data: { ...rest, ...cols } });
-    await logActivity(tx, { businessId: user.businessId, type: "plan.updated", entityType: "Job", entityId: job.id, actorType: "USER", actorUserId: user.id, clientId: job.clientId, jobId: job.id, data: { ...rest, ...(billing ?? {}) } });
+    if (walkChanged) {
+      await setWalkLine(tx, job.id, extraWalk ? (await snowPrices(tx, by.businessId)).walk : 0);
+      await tx.property.update({ where: { id: job.propertyId }, data: { extraWalk } }); // what the size check and the next booking start from
+    }
+    await logActivity(tx, {
+      businessId: by.businessId, type: "plan.updated", entityType: "Job", entityId: job.id, clientId: job.clientId, jobId: job.id, data: { ...rest, ...(extraWalk != null ? { extraWalk } : {}), ...(billing ?? {}) },
+      ...(client ? { actorType: "CLIENT" as const, actorClientId: client } : { actorType: "USER" as const, actorUserId: (by as Actor).id }),
+    });
   });
+  return job;
 }
 
 export async function setPlanPaused(user: Actor, jobId: string, paused: boolean) {

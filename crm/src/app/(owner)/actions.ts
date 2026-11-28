@@ -15,7 +15,7 @@ export async function setRequestArchived(form: FormData) {
   if (!archive && r.status !== "ARCHIVED") return;
   await db.$transaction(async (tx) => {
     await tx.request.update({
-      where: { id }, data: archive ? { status: "ARCHIVED", archivedAt: new Date() } : { status: r.convertedAt ? "CONVERTED" : "NEW", archivedAt: null },
+      where: { id }, data: archive ? { status: "ARCHIVED", archivedAt: new Date(), lostReason: String(form.get("reason") ?? "").trim().slice(0, 200) || null } : { status: r.convertedAt ? "CONVERTED" : "NEW", archivedAt: null, lostReason: null },
     });
     await logActivity(tx, { businessId: user.businessId, type: archive ? "request.archived" : "request.unarchived", entityType: "Request", entityId: id, actorType: "USER", actorUserId: user.id, clientId: r.clientId });
   });

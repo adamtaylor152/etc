@@ -1,4 +1,6 @@
 // Team: everyone who can sign in (by email link), with their schedule colour and cost rate.
+import { env } from "@/server/env";
+import { feedPath } from "@/server/ical";
 import { requireOwner } from "@/server/auth";
 import { AddressField } from "@/components/address-field";
 import { DetailHeader } from "@/components/detail-header";
@@ -49,6 +51,7 @@ export default async function Team({ searchParams }: PageProps<"/settings/team">
         {point("Route starts at", "start", u?.startAddress, u?.startLat)}
         {point("Route ends at", "end", u?.endAddress, u?.endLat)}
       </div>
+      {u && <p className="text-xs text-ink-soft sm:col-span-full">Calendar feed (add to Google, Apple or Outlook as a subscribed calendar; anyone with this link can see {personName(u)}&apos;s schedule): <span className="select-all break-all font-mono">{env.appUrl}{feedPath(u.id)}.ics</span></p>}
     </form>
   );
   return (

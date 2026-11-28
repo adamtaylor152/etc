@@ -102,6 +102,7 @@ enum QuoteStatus {
   APPROVED
   CONVERTED
   ARCHIVED
+  DECLINED
 }
 
 enum JobKind {
@@ -351,6 +352,17 @@ model Client {
   smsOptIn         Boolean        @default(false) // client agreed to automatic text updates
   smsOptOutAt      DateTime? // client texted STOP: no texts at all until they text START
   emailBouncedAt   DateTime?
+  doNotService     Boolean        @default(false) // flagged: shows a warning wherever work is booked for them
+  // Card on file: Stripe ids and display data only, never a card number.
+  stripeCustomerId     String?
+  cardPaymentMethodId  String?
+  cardBrand            String?
+  cardLast4            String?
+  cardExpMonth         Int?
+  cardExpYear          Int?
+  cardSavedAt          DateTime?
+  autoPayConsentAt     DateTime? // the client chose "charge this card automatically for my invoices"; null = off
+  autoPayConsentSource String? // where they chose it: "hub" or "invoice"
   archivedAt       DateTime?
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
@@ -383,6 +395,9 @@ model Property {
   city          String        @default("Calgary")
   province      String        @default("AB")
   placeId       String?
+  steps         Int? // site facts the crew and quotes care about
+  sidewalkM     Int? // metres of sidewalk to clear
+  lawnSqM       Int? // lawn area, square metres
   lat           Float?
   lng           Float?
   geocodeSource GeocodeSource @default(NONE)
@@ -489,6 +504,7 @@ model Request {
   assessmentAt     DateTime?
   convertedAt      DateTime?
   archivedAt       DateTime?
+  lostReason       String? // why it didn't go ahead (asked when archiving)
   createdAt        DateTime        @default(now())
 
   jobs        Job[]
@@ -514,7 +530,9 @@ model Quote {
   title                String?
   message              String?
   subtotalCents        Int         @default(0)
-  discountCents        Int         @default(0)
+  discountCents        Int         @default(0) // computed dollars off (what every reader uses)
+  discountType         String      @default("FIXED") // FIXED | PERCENT
+  discountValue        Int         @default(0) // cents, or percent x100 (1250 = 12.5%)
   taxCents             Int         @default(0)
   totalCents           Int         @default(0)
   validUntil           DateTime?   @db.Date
@@ -528,6 +546,10 @@ model Quote {
   approvedIp           String?
   changesRequestedAt   DateTime?
   changeRequestMessage String?
+  declinedAt           DateTime?
+  declineReason        String?
+  lastSentAt           DateTime? // follow-ups count from the latest send
+  lastSentVia          String      @default("EMAIL") // EMAIL | SMS: follow-ups use the same channel
   convertedAt          DateTime?
   archivedAt           DateTime?
   jobId                String?     @unique
@@ -537,6 +559,24 @@ model Quote {
   attachments Attachment[]
 
   @@unique([businessId, number])
+}
+
+// A reusable quote: title, message, lines (JSON, same shape as QuoteLineInput), discount and deposit settings.
+model QuoteTemplate {
+  id              String   @id @default(cuid())
+  businessId      String
+  name            String
+  title           String?
+  message         String?
+  lines           Json     @default("[]")
+  discountType    String   @default("FIXED")
+  discountValue   Int      @default(0)
+  depositType     String   @default("NONE")
+  depositValue    Int      @default(0)
+  depositRequired Boolean  @default(false)
+  createdAt       DateTime @default(now())
+
+  @@unique([businessId, name])
 }
 
 model QuoteLineItem {
@@ -706,6 +746,7 @@ model Visit {
   createdAt              DateTime    @default(now())
 
   charges      VisitCharge[]
+  extras       VisitExtra[]
   attachments  Attachment[]
   invoiceLines InvoiceLineItem[]
 
@@ -715,6 +756,22 @@ model Visit {
 }
 
 // Created when a visit completes; "unbilled" = invoiceLineItemId IS NULL.
+// A one-off add-on for a single visit (e.g. ice melt this time), ordered from the client hub. Becomes a VisitCharge
+// when the visit is completed, so it is billed once like any other charge.
+model VisitExtra {
+  id              String   @id @default(cuid())
+  businessId      String
+  visitId         String
+  visit           Visit    @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  serviceKey      String // price-book key (keys never change)
+  name            String
+  unitPriceCents  Int // the price the client saw when they added it
+  addedByClientId String?
+  createdAt       DateTime @default(now())
+
+  @@unique([visitId, serviceKey])
+}
+
 model VisitCharge {
   id                String           @id @default(cuid())
   businessId        String
@@ -775,6 +832,48 @@ model Invoice {
   quoteId            String? // deposit invoices: the quote they're for
   appliedToInvoiceId String? // deposit invoices: the job invoice that used this deposit up
   allowPartial       Boolean     @default(false) // client may pay part of the balance online
+  autoPayState       AutoPayState? // set when sent to a client with auto-pay on; null = pay the usual way
+  autoPayOn          DateTime?   @db.Date // next day the saved card is charged (first try or retry)
+  autoPayAttempts    AutoPayAttempt[]
+}
+
+enum AutoPayState {
+  SCHEDULED // will be charged on autoPayOn
+  RETRYING // a charge failed; next try on autoPayOn
+  NEEDS_ACTION // the bank wants the client to approve: they pay from the invoice page
+  FAILED // every try failed: owner told, nothing more is charged
+  PAID
+  STOPPED // auto-pay turned off / card removed before the charge
+}
+
+enum AutoPayAttemptStatus {
+  PENDING // claimed, Stripe's answer not recorded yet
+  SUCCEEDED
+  FAILED
+  REQUIRES_ACTION
+}
+
+/// One off-session charge of a saved card for an invoice. (invoiceId, n) is unique, so an invoice can never have two
+/// "first tries": the row is the claim, and its id + n make the Stripe idempotency key.
+model AutoPayAttempt {
+  id                    String               @id @default(cuid())
+  businessId            String
+  invoiceId             String
+  invoice               Invoice              @relation(fields: [invoiceId], references: [id])
+  clientId              String
+  n                     Int
+  amountCents           Int
+  status                AutoPayAttemptStatus @default(PENDING)
+  stripePaymentMethodId String
+  cardLabel             String // "Visa •••• 4242" as it was when charged
+  stripePaymentIntentId String?
+  failureCode           String?
+  failureMessage        String?
+  createdAt             DateTime             @default(now())
+  finishedAt            DateTime?
+
+  @@unique([invoiceId, n])
+  @@index([status])
 }
 
 model InvoiceLineItem {

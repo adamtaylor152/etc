@@ -10,11 +10,11 @@ type Email = { address: string; label: string };
 type Contact = { id?: string; role: string; firstName: string; lastName: string; phone: string; email: string; isBilling: boolean; receivesTexts: boolean };
 export type ClientFormValues = {
   title: string; firstName: string; lastName: string; companyName: string; phones: Phone[]; emails: Email[]; leadSource: string; tags: string; notes: string;
-  followUpQuotes: boolean; followUpInvoices: boolean; visitReminders: boolean; marketingOptOut: boolean; smsOptIn: boolean; contacts: Contact[];
+  followUpQuotes: boolean; followUpInvoices: boolean; visitReminders: boolean; marketingOptOut: boolean; smsOptIn: boolean; doNotService: boolean; contacts: Contact[];
 };
 export const emptyClient: ClientFormValues = {
   title: "", firstName: "", lastName: "", companyName: "", phones: [{ number: "", label: "Mobile", sms: true }], emails: [{ address: "", label: "Main" }],
-  leadSource: "", tags: "", notes: "", followUpQuotes: true, followUpInvoices: true, visitReminders: true, marketingOptOut: false, smsOptIn: true, contacts: [],
+  leadSource: "", tags: "", notes: "", followUpQuotes: true, followUpInvoices: true, visitReminders: true, marketingOptOut: false, smsOptIn: true, doNotService: false, contacts: [],
 };
 
 const inp = "min-h-10 w-full rounded-lg border border-line bg-white px-3 py-2 text-base outline-none focus:border-blue focus:ring-2 focus:ring-blue/20";
@@ -125,6 +125,7 @@ export function ClientForm({ action, id, initial = emptyClient, isNew, mapsKey, 
             <Toggle checked={v.followUpQuotes} onChange={(x) => set("followUpQuotes", x)} label="Quote follow-ups" hint="A nudge 3 days after a quote goes unanswered" />
             <Toggle checked={v.followUpInvoices} onChange={(x) => set("followUpInvoices", x)} label="Overdue invoice reminders" hint="At 3 and 10 days past due" />
             <Toggle checked={!v.marketingOptOut} onChange={(x) => set("marketingOptOut", !x)} label="Review requests & plan renewals" />
+            <Toggle checked={v.doNotService} onChange={(x) => set("doNotService", x)} label="Do not service" hint="Shows a red warning on this client and their requests. Say why in the notes." />
           </Section>
           <Section title="Additional contacts" hint="Spouse, tenant, property manager…">
             {showContacts ? (

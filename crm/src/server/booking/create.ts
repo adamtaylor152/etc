@@ -9,11 +9,17 @@ import { enqueue, kickOutbox } from "../email/outbox";
 import { logActivity, nextNumber } from "../records";
 import { mintToken } from "../tokens";
 import { BASE_NAME, snowCharge, snowPrices, sizeFromLabel, WALK_NAME } from "../ops/drive-size";
-import { serviceLines, whenText, type Booking } from "./validate";
+import { bookAssessment, claimSlot, slotText } from "./slots";
+import { money } from "../money";
+import { OTHER, serviceLines, whenText, type Booking } from "./validate";
 
 export type BookingMeta = {
   businessId: string; source: ClientSource; ip?: string; userAgent?: string; raw?: unknown;
   legacyBookingId?: number; createdAt?: Date; sendEmails?: boolean; number?: number; when?: string;
+  /** Client hub: the signed-in client (never matched by email) and, when they picked one, their property. */
+  clientId?: string; propertyId?: string;
+  /** Where a brand-new client came from (booking link's utm_source). Never changes an existing client. */
+  leadSource?: string | null;
 };
 
 const PAYMENT: Record<string, PaymentMethod> = { Cash: "CASH", "e-Transfer": "ETRANSFER" };
@@ -44,13 +50,15 @@ export async function createBooking(b: Booking, meta: BookingMeta) {
   const result = await db.$transaction(async (tx) => {
     // 1. Client: match on email. Never overwrite an existing name from a public form.
     const email = b.email.toLowerCase();
-    let client = await tx.client.findFirst({ where: { businessId, email }, orderBy: { createdAt: "asc" } });
+    let client = meta.clientId
+      ? await tx.client.findFirstOrThrow({ where: { id: meta.clientId, businessId } })
+      : await tx.client.findFirst({ where: { businessId, email }, orderBy: { createdAt: "asc" } });
     const [first, ...rest] = b.name.split(" ");
     if (!client) {
       client = await tx.client.create({
         data: {
           businessId, firstName: first, lastName: rest.join(" "), email, phone: b.phone || null,
-          preferredPayment: PAYMENT[b.payment], source: meta.source, tags: meta.source === "IMPORT" ? ["imported"] : [],
+          preferredPayment: PAYMENT[b.payment], source: meta.source, leadSource: meta.leadSource || null, tags: meta.source === "IMPORT" ? ["imported"] : [],
           createdAt: meta.createdAt,
         },
       });
@@ -60,9 +68,9 @@ export async function createBooking(b: Booking, meta: BookingMeta) {
 
     // 2. Property: this client's address, matched by placeId or normalized text.
     const normalized = normalizeAddress(b.address);
-    let property = await tx.property.findFirst({
-      where: { businessId, clientId: client.id, OR: [{ normalized }, ...(b.placeId ? [{ placeId: b.placeId }] : [])] },
-    });
+    let property = meta.propertyId
+      ? await tx.property.findFirstOrThrow({ where: { id: meta.propertyId, businessId, clientId: client.id } })
+      : await tx.property.findFirst({ where: { businessId, clientId: client.id, OR: [{ normalized }, ...(b.placeId ? [{ placeId: b.placeId }] : [])] } });
     if (!property) {
       const isFirst = (await tx.property.count({ where: { clientId: client.id } })) === 0;
       property = await tx.property.create({
@@ -151,6 +159,7 @@ export async function createBooking(b: Booking, meta: BookingMeta) {
     await logActivity(tx, {
       businessId, type: meta.source === "IMPORT" ? "booking.imported" : "booking.received", entityType: "Request", entityId: request.id,
       clientId: client.id, jobId: jobId ?? undefined, data: { estimate: b.estimate, services: b.services },
+      ...(meta.clientId ? { actorType: "CLIENT" as const, actorClientId: client.id } : {}),
     });
 
     // 5. Emails (not for imports).
@@ -182,4 +191,29 @@ export async function createBooking(b: Booking, meta: BookingMeta) {
 
   if (meta.sendEmails !== false) kickOutbox();
   return result;
+}
+
+/** What /book and the client hub offer: the active + bookable price book, one row per booking label, plus the catch-all. */
+export async function bookingMenu(businessId: string) {
+  const services = await db.service.findMany({ where: { businessId, active: true, bookable: true }, orderBy: { sortOrder: "asc" } });
+  // Several price-book rows can share one label (e.g. the snow variants); the first in price-book order wins.
+  const byLabel = new Map<string, (typeof services)[number]>();
+  for (const s of services) if (!byLabel.has(s.bookingLabel || s.name)) byLabel.set(s.bookingLabel || s.name, s);
+  const list = [...byLabel].map(([label, s]) => ({
+    label, description: s.description, price: label === "Snow shovelling" ? "from $30" : s.unitPriceCents != null ? money(s.unitPriceCents) : null,
+  }));
+  if (!byLabel.has(OTHER)) list.push({ label: OTHER, description: null, price: null }); // the API always takes the catch-all
+  return { services, list };
+}
+
+/** A validated booking plus the assessment time they picked, if any: what the public form and the client hub both do.
+ *  Returns null when that time has just been taken (nothing is saved). */
+export async function placeBooking(b: Booking, pickedSlot: unknown, meta: BookingMeta) {
+  // A picked time books the on-site assessment for quote services (snow shovelling is "anytime" and needs none).
+  const quoted = b.services.some((s) => s !== "Snow shovelling");
+  const slot = quoted && pickedSlot ? await claimSlot(meta.businessId, pickedSlot) : null;
+  if (quoted && pickedSlot && !slot) return null;
+  const res = await createBooking(b, { ...meta, when: slot ? `Assessment visit ${slotText(slot)}` : undefined });
+  if (slot) await bookAssessment(meta.businessId, res.requestId, slot).catch((e) => console.error("assessment", e)); // booking is saved either way
+  return { ...res, slot };
 }

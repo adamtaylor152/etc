@@ -105,7 +105,7 @@ export async function planUpdate(f: FormData) {
   const user = await requireOwner();
   await run(f, () => updatePlan(user, str(f, "id"), {
     triggerCm: str(f, "triggerCm") ? cm.parse(str(f, "triggerCm")) : null,
-    pricePerPushCents: dollars.parse(str(f, "price")), iceMelt: f.get("iceMelt") === "on", billing: planBilling(f),
+    pricePerPushCents: dollars.parse(str(f, "price")), iceMelt: f.get("iceMelt") === "on", extraWalk: f.get("extraWalk") === "on", billing: planBilling(f),
   }));
 }
 

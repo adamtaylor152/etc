@@ -1,6 +1,6 @@
 // Sidebar + Create menu entries. Add items here as pages land.
 import {
-  Activity, Clock, Megaphone, ListTodo, Wallet, Phone, UserPlus, Banknote, CalendarDays, FileText, Hammer, Home, Inbox, LineChart, MapPinned, MessageSquare, Navigation, Receipt, Settings, Snowflake, Users,
+  Activity, Clock, Columns3, Megaphone, ListTodo, Wallet, Phone, UserPlus, Banknote, CalendarDays, FileText, Hammer, Home, Inbox, LineChart, MapPinned, MessageSquare, Navigation, Receipt, Settings, Snowflake, Users,
   type LucideIcon,
 } from "lucide-react";
 
@@ -14,6 +14,7 @@ export const NAV: NavItem[][] = [
     { href: "/clients", label: "Clients", icon: Users },
   ],
   [
+    { href: "/pipeline", label: "Pipeline", icon: Columns3 },
     { href: "/requests", label: "Requests", icon: Inbox },
     { href: "/quotes", label: "Quotes", icon: FileText },
     { href: "/jobs", label: "Jobs", icon: Hammer },

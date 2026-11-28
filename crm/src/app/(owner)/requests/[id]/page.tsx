@@ -29,14 +29,16 @@ export default async function RequestPage({ params, searchParams }: PageProps<"/
     <>
       <PageHeader
         title={<>Request #{r.number} <RequestBadge s={r.status} /></>}
-        sub={<>From <Link className="font-semibold text-blue" href={`/clients/${r.clientId}`}>{clientName(r.client)}</Link> · {prettyDateTime(r.createdAt)}</>}
+        sub={<>{archived && r.lostReason && <span className="mr-2 font-semibold text-ink">Archived: {r.lostReason}.</span>}From <Link className="font-semibold text-blue" href={`/clients/${r.clientId}`}>{clientName(r.client)}</Link> · {prettyDateTime(r.createdAt)}</>}
         actions={
-          <form action={setRequestArchived}>
+          <form action={setRequestArchived} className="flex items-center gap-2">
             <input type="hidden" name="id" value={r.id} /><input type="hidden" name="archive" value={archived ? "0" : "1"} />
+            {!archived && <input name="reason" maxLength={200} placeholder="Why? (optional)" aria-label="Reason it didn't go ahead" className="min-h-10 w-44 rounded-lg border border-line bg-white px-3 text-sm" />}
             <Button variant="secondary">{archived ? "Unarchive" : "Archive"}</Button>
           </form>
         }
       />
+      {r.client.doNotService && <p role="alert" className="mb-5 rounded-lg border border-red-300 bg-red-50 p-3 text-sm font-semibold text-red-800">This client is marked “do not service”. Check their notes before quoting or booking.</p>}
       <div className="grid gap-5 lg:grid-cols-3">
         <div className="space-y-5 lg:col-span-2">
           <Card title="What they asked for">

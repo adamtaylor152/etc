@@ -11,6 +11,8 @@ import { logActivity, nextNumber } from "../records";
 import { TransitionError } from "../status/visit";
 import { parseSettings } from "../settings";
 import { qualifyReferral } from "./marketing";
+import { autoPayChargeOn, autoPayReady } from "../billing/autopay";
+import { stripeEnabled } from "../stripe";
 
 /** Address for invoices, receipts and reminders (see billingEmail). */
 export const billingEmailFor = async (tx: Tx, client: { id: string; email: string }) =>
@@ -213,6 +215,11 @@ export async function sendInvoice(user: Actor, invoiceId: string, tx?: Tx) {
     const today = todayLocal();
     if (inv.status === "DRAFT") {
       await t.invoice.update({ where: { id: inv.id }, data: { status: "AWAITING_PAYMENT", issuedOn: toDbDate(today), dueOn: toDbDate(dueDate(today, inv.paymentTerms)), sentAt: new Date() } });
+      // Client opted in to auto-pay: stamp the day their card is charged. The email says so, and the scheduler does the charging.
+      // (Not when their email bounces: they couldn't be told first.)
+      const s = stripeEnabled() && inv.client.autoPayConsentAt && !inv.client.emailBouncedAt ? parseSettings((await t.business.findUniqueOrThrow({ where: { id: user.businessId } })).settings) : null;
+      const chargeOn = s && autoPayChargeOn({ kind: inv.kind, issuedOn: today, dueOn: dueDate(today, inv.paymentTerms) }, autoPayReady(inv.client, s, true), s.autoPayGraceDays);
+      if (chargeOn) await t.invoice.update({ where: { id: inv.id }, data: { autoPayState: "SCHEDULED", autoPayOn: toDbDate(chargeOn) } });
     }
     await enqueue(t, {
       businessId: user.businessId, template: "invoice.sent", to: await billingEmailFor(t, inv.client), replyTo: env.helpEmail, priority: 3, props: { invoiceId: inv.id },

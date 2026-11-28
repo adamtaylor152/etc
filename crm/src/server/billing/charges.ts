@@ -18,7 +18,23 @@ export const WALK_PREFIX = "Extra sidewalk"; // the job line booking and the siz
 const line = (name: string, unitPriceCents: number, quantity = 1): ChargeLine =>
   ({ name, quantity, unitPriceCents, totalCents: Math.round(quantity * unitPriceCents) });
 
-export function chargesForVisit(job: JobForCharges, visit: VisitForCharges, iceMeltCents: number): ChargeLine[] {
+/** A one-off add-on the client put on this visit (VisitExtra). */
+export type ExtraForCharges = { serviceKey: string; name: string; unitPriceCents: number };
+const ICE_MELT = "ice_melt";
+
+export function chargesForVisit(job: JobForCharges, visit: VisitForCharges, iceMeltCents: number, extras: ExtraForCharges[] = []): ChargeLine[] {
+  const out = jobCharges(job, visit, iceMeltCents);
+  // Extras are billed with the visit they were added to, on top of whatever the job charges. Never twice: one the job
+  // already charged on this visit is dropped, and ice melt the crew said they didn't put down isn't billed at all.
+  for (const e of extras) {
+    const iceMelt = e.serviceKey === ICE_MELT;
+    if (out.some((l) => l.name === e.name || (iceMelt && l.name === "Ice melt")) || (iceMelt && visit.iceMeltApplied === false)) continue;
+    out.push(line(e.name, e.unitPriceCents));
+  }
+  return out;
+}
+
+function jobCharges(job: JobForCharges, visit: VisitForCharges, iceMeltCents: number): ChargeLine[] {
   if (job.kind === "SNOW_PLAN") {
     const mode = job.snowBillingMode ?? "PER_PUSH";
     const melt = (visit.iceMeltApplied ?? job.iceMelt) ? [line("Ice melt", iceMeltCents)] : [];
@@ -41,4 +57,13 @@ export function parseOverrides(json: unknown): OverrideLine[] | null {
   if (!Array.isArray(json) || !json.length) return null;
   const ok = json.every((l) => !!l && typeof l.name === "string" && Number.isFinite(l.quantity) && Number.isInteger(l.unitPriceCents));
   return ok ? (json as OverrideLine[]) : null;
+}
+
+/** Add-ons a client may still put on a visit: ones the job doesn't already charge and the visit doesn't already have. */
+export function extrasOffered<T extends { key: string; name: string }>(
+  addOns: T[], job: { billingType: "FIXED_PRICE" | "PER_VISIT"; iceMelt: boolean; lineItems: { name: string }[] }, has: { serviceKey: string }[],
+): T[] {
+  if (job.billingType !== "PER_VISIT") return []; // a fixed-price job is invoiced from its total, so an extra would never be billed
+  const charged = (name: string) => job.lineItems.some((l) => l.name === name);
+  return addOns.filter((a) => !has.some((h) => h.serviceKey === a.key) && !charged(a.name) && !(a.key === ICE_MELT && (job.iceMelt || charged("Ice melt"))));
 }

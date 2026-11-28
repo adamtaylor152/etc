@@ -15,14 +15,16 @@ export type FeedItem = {
 const EVENT_TITLE: Record<string, string> = {
   "booking.received": "Booked online", "request.created": "Request created", "booking.imported": "Imported booking", "client.created": "Client added",
   "request.archived": "Request archived", "request.unarchived": "Request reopened",
-  "quote.created": "Quote created", "quote.sent": "Quote sent", "quote.approved": "Quote approved", "quote.changes_requested": "Client asked for changes to a quote",
+  "quote.created": "Quote created", "quote.sent": "Quote sent", "quote.approved": "Quote approved", "quote.changes_requested": "Client asked for changes to a quote", "quote.declined": "Quote declined", "quote.reopened": "Quote reopened",
   "quote.converted": "Quote converted to a job", "quote.signed": "Quote signed", "review.rated": "Rated us", "referral.rewarded": "Earned a referral credit", "invoice.signed": "Invoice signed", "visit.signed": "Client signed off the visit", "visit.confirmed": "Client confirmed the visit", "visit.reschedule_requested": "Client asked to reschedule",
   "job.created": "Job created", "job.closed": "Job closed", "job.reopened": "Job reopened", "job.updated": "Job edited", "job.schedule_changed": "Repeat schedule changed", "job.paused": "Recurring job paused", "job.resumed": "Recurring job resumed", "job.invoicing_changed": "Invoice schedule changed", "visit.lines_changed": "Visit price changed",
   "plan.created": "Snow plan started", "plan.updated": "Snow plan changed", "plan.paused": "Snow plan paused", "plan.resumed": "Snow plan resumed", "plan.renewed": "Snow plan renewed",
   "visit.en_route": "On the way", "visit.in_progress": "Arrived", "visit.completed": "Visit completed", "visit.checklist_done": "Checklist completed", "visit.skipped": "Visit skipped",
+  "visit.extra_added": "Client added an extra to a visit", "visit.extra_removed": "Client removed an extra from a visit",
   "visit.scheduled": "Visit reopened", "visit.cancelled": "Visit cancelled", "visit.scheduled_for": "Visit rescheduled",
   "invoice.created": "Invoice created", "invoice.sent": "Invoice sent", "invoice.edited": "Invoice edited", "invoice.voided": "Invoice voided",
   "payment.received": "Payment received", "payment.matched": "Payment matched", "payment.deleted": "Payment removed",
+  "card.saved": "Card saved", "card.removed": "Card removed", "autopay.on": "Auto-pay turned on", "autopay.off": "Auto-pay turned off", "autopay.failed": "Automatic payment failed",
 };
 const OBJECT_OF: Record<string, FeedItem["object"]> = { Request: "request", Quote: "quote", Job: "job", Visit: "visit", Invoice: "invoice", Payment: "payment", Client: "client", SnowEvent: "storm" };
 const HREF: Partial<Record<FeedItem["object"], (id: string) => string>> = {
