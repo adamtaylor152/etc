@@ -1,14 +1,14 @@
-import { BODY_FONT, Button, EtcEmail, Eyebrow, FONT, Footer, H1, Header, INK_SOFT, LINE, NAVY, P, Table, firstName } from "./ui";
+import { Closing, Intro, BODY_FONT, Button, EtcEmail, Eyebrow, FONT, Footer, H1, Header, INK_SOFT, LINE, NAVY, P, Table, firstName } from "./ui";
 
 export function VisitScheduled({ name, what, date, address, reminder, when = "tomorrow", site, phone, confirmUrl }: { name: string; what: string; date: string; address: string; reminder?: boolean; when?: string; site: string; phone: string; confirmUrl?: string }) {
   return (
-    <EtcEmail title={reminder ? `See you ${when}` : "You're booked"} preheader={`${what} on ${date}`}>
+    <EtcEmail title={reminder ? `See you ${when}` : "You're booked"} preheader={`${what} on ${date}`} vars={{ first_name: firstName(name), service: what, visit_date: date, address, day: when }}>
       <Header right={reminder ? "Reminder" : "Booked"} />
       <tr>
         <td className="px" style={{ padding: "32px 40px 26px" }}>
           <Eyebrow>{date}</Eyebrow>
           <H1>{reminder ? `See you ${when}, ${firstName(name)}!` : `You're booked, ${firstName(name)}!`}</H1>
-          <P>{what} at {address} is set for <b style={{ color: NAVY }}>{date}</b>. No need to be home. If anything changes, just reply to this email.</P>
+          <Intro><P>{what} at {address} is set for <b style={{ color: NAVY }}>{date}</b>. No need to be home. If anything changes, just reply to this email.</P></Intro>
           {confirmUrl && <Button href={confirmUrl} label="Confirm or change the time" />}
         </td>
       </tr>
@@ -19,15 +19,15 @@ export function VisitScheduled({ name, what, date, address, reminder, when = "to
 
 export function ReviewRequest({ name, url, site, phone, followUp }: { name: string; url: string; site: string; phone: string; followUp?: boolean }) {
   return (
-    <EtcEmail title="How did we do?" preheader="A quick Google review helps Silas a ton">
+    <EtcEmail title="How did we do?" preheader="A quick Google review helps Silas a ton" vars={{ first_name: firstName(name) }}>
       <Header right="Thank you" />
       <tr>
         <td className="px" style={{ padding: "32px 40px 26px" }}>
           <Eyebrow>{followUp ? "One last ask" : "30 seconds"}</Eyebrow>
           <H1>{followUp ? <>Got 30 seconds, {firstName(name)}?</> : <>Thanks for choosing etc., {firstName(name)}!</>}</H1>
-          <P>If you were happy with the job, a quick Google review helps neighbours find us, and every job helps Silas get to electrician school.</P>
+          <Intro><P>If you were happy with the job, a quick Google review helps neighbours find us, and every job helps Silas get to electrician school.</P></Intro>
           <Button href={url} label="Leave a review" />
-          <p style={{ margin: "18px 0 0", fontFamily: BODY_FONT, fontSize: 13, color: INK_SOFT }}>Something not right? Just reply. We&apos;ll make it right.</p>
+          <Closing style={{ margin: "18px 0 0", fontSize: 13, lineHeight: "normal" }}><p style={{ margin: "18px 0 0", fontFamily: BODY_FONT, fontSize: 13, color: INK_SOFT }}>Something not right? Just reply. We&apos;ll make it right.</p></Closing>
         </td>
       </tr>
       <Footer site={site} phone={phone} reason="You're getting this because etc. did a job for you. Reply 'no thanks' and we won't ask again." />

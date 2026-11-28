@@ -53,9 +53,10 @@ self.addEventListener("fetch", (e) => {
     return;
   }
 
-  if (req.mode !== "navigate") return;
-  // Back at the login page (signed out, or the session ended): this phone no longer shows the saved route.
+  // Back at the login page (signed out, or the session ended): this phone no longer shows the saved route. Signing out
+  // gets there by a client-side transition (a data request, not a navigation), so this is checked for every request.
   if (url.pathname === "/login") { e.waitUntil(caches.delete(PAGES)); return; }
+  if (req.mode !== "navigate") return;
   // "/" is where the home-screen icon opens; signed-in crew are sent on to /run.
   if (url.pathname !== "/run" && url.pathname !== "/") return;
   e.respondWith((async () => {

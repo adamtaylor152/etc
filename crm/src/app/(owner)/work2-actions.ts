@@ -94,7 +94,7 @@ export async function invoiceCustom(f: FormData) {
   redirect(`/invoices/${id}`);
 }
 
-const METHODS: PaymentMethod[] = ["CASH", "ETRANSFER", "CHEQUE", "CARD", "OTHER"];
+const METHODS: PaymentMethod[] = ["CASH", "ETRANSFER", "CHEQUE", "OTHER"]; // card payments come from Stripe, which is what lets them be refunded
 
 /** Collect payment: one amount per open invoice (Jobber's collect-payment table). */
 export async function collectPayments(f: FormData) {

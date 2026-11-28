@@ -5,6 +5,7 @@
 import "@fullcalendar/react/skeleton.css";
 import "@fullcalendar/react/themes/classic/theme.css";
 import "@fullcalendar/react/themes/classic/palette.css";
+import "./schedule/calendar.css";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/react/daygrid";
 import interactionPlugin, { Draggable } from "@fullcalendar/react/interaction";
@@ -13,14 +14,22 @@ import timeGridPlugin from "@fullcalendar/react/timegrid";
 import classicThemePlugin from "@fullcalendar/react/themes/classic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
-import { CalendarClock, Check, ClipboardList, Hammer, Inbox, PanelRightOpen, X } from "lucide-react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { CalendarClock, Check, CheckCheck, ClipboardList, Clock, GripVertical, Hammer, Inbox, PanelRightClose, PanelRightOpen, RefreshCw, TriangleAlert, X } from "lucide-react";
 import { assignPeople, calendarMove, taskDone } from "@/app/(owner)/schedule-actions";
 import type { CalItem, Person } from "@/server/schedule";
+import { btn, Card } from "./ui";
 
 type Kind = CalItem["kind"];
 const KIND_LABEL: Record<Kind, string> = { visit: "Visits", task: "Tasks", event: "Events", assessment: "Assessments" };
 type Pop = { x: number; y: number } & ({ type: "slot"; date: string; time?: string } | { type: "item"; item: CalItem });
+
+const small = "min-h-9 px-3 text-[13px]";
+const selCls = "min-h-9 rounded-lg border border-line bg-white px-2.5 py-1 text-base outline-none hover:border-ink-faint/60 focus:border-blue focus:ring-2 focus:ring-blue/20 sm:text-[13px]";
+const menuRow = "flex min-h-10 items-center gap-2.5 rounded-lg px-2 font-medium hover:bg-tint";
+const ico = { className: "size-4 shrink-0", strokeWidth: 1.75, "aria-hidden": true } as const;
+/** The icon drawn before an event's title (calendar.css), in the order one state outranks another. */
+const stateOf = (i: CalItem) => (i.done ? "done" : i.warnings?.length ? "warn" : i.late ? "late" : i.rescheduleAsked ? "ask" : i.confirmed ? "ok" : "");
 
 export function ScheduleCalendar({ items, unscheduled, team, initialDate }: { items: CalItem[]; unscheduled: CalItem[]; team: Person[]; initialDate: string }) {
   const router = useRouter();
@@ -31,6 +40,9 @@ export function ScheduleCalendar({ items, unscheduled, team, initialDate }: { it
   const [pop, setPop] = useState<Pop | null>(null);
   const [showDrawer, setShowDrawer] = useState(unscheduled.length > 0);
   const [msg, setMsg] = useState("");
+  // The calendar draws in the browser only: times are formatted in the viewer's zone and the first view depends on the
+  // screen width, so a server-rendered copy would not match. Until then a skeleton holds its place.
+  const mounted = useSyncExternalStore(() => () => {}, () => true, () => false);
 
   useEffect(() => {
     if (!drawer.current) return;
@@ -54,43 +66,67 @@ export function ScheduleCalendar({ items, unscheduled, team, initialDate }: { it
   }
   const toggleKind = (k: Kind) => setKinds((cur) => (cur.includes(k) ? cur.filter((x) => x !== k) : [...cur, k]));
   const timeOf = (iso: string) => new Date(iso).toLocaleTimeString("en-CA", { hour: "numeric", minute: "2-digit" });
+  const msgCls = msg.startsWith("Saved, but") ? "border-amber-200 bg-amber-50 text-amber-950" : msg.startsWith("Couldn't") ? "border-red-200 bg-red-50 text-red-900" : "border-line bg-tint text-ink-soft";
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-line bg-white p-2 shadow-card">
-        {(Object.keys(KIND_LABEL) as Kind[]).map((k) => (
-          <button key={k} type="button" onClick={() => toggleKind(k)} aria-pressed={kinds.includes(k)}
-            className={`rounded-full px-3 py-1 text-xs font-semibold ${kinds.includes(k) ? "bg-navy text-white" : "bg-tint text-ink-soft"}`}>{KIND_LABEL[k]}</button>
-        ))}
-        <select value={person} onChange={(e) => setPerson(e.target.value)} aria-label="Person" className="h-8 rounded-lg border border-line bg-white px-2 text-xs">
-          <option value="">Everyone</option>{team.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}<option value="none">Unassigned</option>
-        </select>
-        <select value={status} onChange={(e) => setStatus(e.target.value as typeof status)} aria-label="Status" className="h-8 rounded-lg border border-line bg-white px-2 text-xs">
-          <option value="">Any status</option><option value="open">Not done</option><option value="late">Overdue</option><option value="done">Completed</option>
-        </select>
-        <span className="ml-auto flex flex-wrap items-center gap-2 text-xs text-ink-soft">
-          {team.map((p) => <span key={p.id} className="flex items-center gap-1"><span className="size-2.5 rounded-full" style={{ background: p.color }} />{p.name}</span>)}
-          <button type="button" onClick={() => setShowDrawer(!showDrawer)} className="inline-flex items-center gap-1 rounded-lg border border-line px-2 py-1 font-semibold text-navy">
-            <PanelRightOpen className="size-3.5" />Unscheduled {unscheduled.length}
-          </button>
-        </span>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <div className="flex flex-wrap gap-1.5" role="group" aria-label="Show">
+          {(Object.keys(KIND_LABEL) as Kind[]).map((k) => {
+            const on = kinds.includes(k);
+            return (
+              <button key={k} type="button" onClick={() => toggleKind(k)} aria-pressed={on}
+                className={`inline-flex min-h-9 items-center gap-1.5 rounded-full border px-3 text-[13px] font-semibold ${on ? "border-blue/30 bg-blue/8 text-blue-deep hover:bg-blue/12" : "border-line bg-white text-ink-soft hover:border-ink-faint/60 hover:text-navy"}`}>
+                {on && <Check className="size-3.5" strokeWidth={2.25} aria-hidden />}{KIND_LABEL[k]}
+              </button>
+            );
+          })}
+        </div>
+        <div className="flex gap-2">
+          <select value={person} onChange={(e) => setPerson(e.target.value)} aria-label="Person" className={selCls}>
+            <option value="">Everyone</option>{team.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}<option value="none">Unassigned</option>
+          </select>
+          <select value={status} onChange={(e) => setStatus(e.target.value as typeof status)} aria-label="Status" className={selCls}>
+            <option value="">Any status</option><option value="open">Not done</option><option value="late">Overdue</option><option value="done">Completed</option>
+          </select>
+        </div>
+        <button type="button" onClick={() => setShowDrawer(!showDrawer)} aria-expanded={showDrawer} aria-controls="unscheduled-drawer" className={btn("secondary", `${small} ml-auto`)}>
+          {showDrawer ? <PanelRightClose {...ico} /> : <PanelRightOpen {...ico} />}Unscheduled
+          <span className={`rounded-full px-1.5 text-xs tabular-nums ${unscheduled.length ? "bg-amber-100 text-amber-900" : "bg-tint text-ink-soft"}`}>{unscheduled.length}</span>
+        </button>
       </div>
 
-      <div className={`grid gap-3 ${showDrawer ? "lg:grid-cols-[1fr_16rem]" : ""}`}>
-        <div className="rounded-lg border border-line bg-white p-2 shadow-card sm:p-3">
-          <FullCalendar
+      <div className={`grid items-start gap-4 ${showDrawer ? "lg:grid-cols-[minmax(0,1fr)_17rem]" : ""}`}>
+        <Card className="etc-cal min-w-0 p-3! sm:p-4!">
+          {!mounted ? <div className="skeleton h-[32rem]" role="status" aria-label="Loading the calendar" /> : <FullCalendar
             plugins={[classicThemePlugin, dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin]}
-            initialView={typeof window !== "undefined" && window.innerWidth < 640 ? "listWeek" : "timeGridWeek"}
+            initialView={window.innerWidth < 640 ? "listWeek" : "timeGridWeek"}
             initialDate={initialDate}
-            headerToolbar={{ left: "prev,next today", center: "title", right: "dayGridMonth,timeGridWeek,timeGridDay,listWeek" }}
+            headerToolbar={{ left: "today prev,next", center: "title", right: "dayGridMonth,timeGridWeek,timeGridDay,listWeek" }}
             firstDay={1} height="auto" slotMinTime="06:00:00" slotMaxTime="21:00:00" nowIndicator allDayText="Any time"
             editable droppable eventResizableFromStart={false}
-            events={shown.map((i) => ({
-              id: `${i.kind}:${i.id}`, title: `${i.done ? "✓ " : i.warnings?.length ? "⚠ " : i.rescheduleAsked ? "↻ " : i.confirmed ? "👍 " : ""}${i.title}`, start: i.start, end: i.end, allDay: i.allDay,
-              // FullCalendar v7 takes color + contrastColor (no separate background/border/text colours).
-              color: i.done ? "#cbd5e1" : i.late ? "#dc2626" : i.color, contrastColor: i.done ? "#334155" : "#ffffff",
-              editable: i.editable, extendedProps: { item: i }, className: i.done ? "line-through" : "",
-            }))}
+            // A busy day stays readable: a few blocks, then "+N more" (which opens the full list for that day or slot).
+            dayMaxEvents={4} eventMaxStack={3}
+            // Our class hooks, styled in schedule/calendar.css.
+            className="etc-fc" viewClass="etc-fc-view" toolbarClass="etc-fc-toolbar" toolbarSectionClass="etc-fc-section" toolbarTitleClass="etc-fc-title" buttonGroupClass="etc-fc-group"
+            buttonClass={(b) => `etc-fc-btn${b.isSelected ? " is-on" : ""}${b.isIconOnly ? " is-icon" : ""}${b.isDisabled ? " is-off" : ""}`}
+            dayHeaderInnerClass={(d) => `etc-fc-head${d.isToday ? " is-today" : ""}`} slotHeaderInnerClass="etc-fc-axis" allDayHeaderInnerClass="etc-fc-axis"
+            dayCellTopInnerClass={(d) => `etc-fc-daynum${d.isToday ? " is-today" : ""}${d.isOther ? " is-other" : ""}`}
+            blockEventClass="etc-fc-block" blockEventInnerClass="etc-fc-block-inner" blockEventTimeClass="etc-fc-ev-time" blockEventTitleClass="etc-fc-ev-title"
+            listItemEventClass="etc-fc-item" listItemEventTimeClass="etc-fc-ev-time" listItemEventTitleClass="etc-fc-ev-title"
+            columnMoreLinkClass="etc-fc-more" rowMoreLinkClass="etc-fc-more" popoverClass="etc-fc-popover"
+            listDayHeaderClass="etc-fc-listday" listDayHeaderInnerClass="etc-fc-listday-inner"
+            views={{ list: { listItemEventClass: "etc-fc-item etc-fc-list-item", noEventsClass: "etc-fc-empty" } }}
+            events={shown.map((i) => {
+              const state = stateOf(i);
+              return {
+                id: `${i.kind}:${i.id}`, title: i.title, start: i.start, end: i.end, allDay: i.allDay,
+                // The colour is the person's (or the object type's when nobody is assigned): it becomes the block's edge and tint.
+                color: i.color, contrastColor: "#14213d",
+                editable: i.editable, extendedProps: { item: i },
+                className: [i.done && "etc-ev-done", i.late && !i.done && "etc-ev-late", state && `etc-ev-i-${state}`].filter(Boolean).join(" "),
+              };
+            })}
             dateClick={(info) => {
               const s = info.dateStr;
               setPop({ type: "slot", date: s.slice(0, 10), time: info.allDay ? undefined : s.slice(11, 16), x: info.jsEvent.clientX, y: info.jsEvent.clientY });
@@ -99,66 +135,87 @@ export function ScheduleCalendar({ items, unscheduled, team, initialDate }: { it
             eventDrop={(info) => { void move(info.event.id, info.event.startStr, info.event.endStr || null, info.event.allDay, info.revert); }}
             eventResize={(info) => { void move(info.event.id, info.event.startStr, info.event.endStr || null, info.event.allDay, info.revert); }}
             eventReceive={(info) => { const id = info.event.id, s = info.event.startStr, e = info.event.endStr || null, a = info.event.allDay; info.event.remove(); void move(id, s, e, a); }}
-          />
-          {msg && <p className="mt-2 text-sm text-ink-soft" aria-live="polite">{msg}</p>}
-        </div>
+          />}
+          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-line-soft pt-3 text-xs text-ink-soft">
+            {team.map((p) => <span key={p.id} className="inline-flex items-center gap-1.5"><span className="h-3 w-1 rounded-full" style={{ background: p.color }} aria-hidden />{p.name}</span>)}
+            <span className="inline-flex items-center gap-1"><Check className="size-3.5" strokeWidth={2} aria-hidden />Done</span>
+            <span className="inline-flex items-center gap-1"><TriangleAlert className="size-3.5 text-amber-700" strokeWidth={1.75} aria-hidden />Conflict</span>
+            <span className="inline-flex items-center gap-1"><Clock className="size-3.5 text-red-700" strokeWidth={1.75} aria-hidden />Overdue</span>
+            <span className="inline-flex items-center gap-1"><RefreshCw className="size-3.5" strokeWidth={1.75} aria-hidden />Asked to reschedule</span>
+            <span className="inline-flex items-center gap-1"><CheckCheck className="size-3.5" strokeWidth={1.75} aria-hidden />Client confirmed</span>
+          </div>
+          {msg && <p className={`mt-3 rounded-lg border px-3.5 py-2.5 text-sm font-medium ${msgCls}`} role="status" aria-live="polite">{msg}</p>}
+        </Card>
         {showDrawer && (
-          <aside className="rounded-lg border border-line bg-white p-3 shadow-card">
-            <h2 className="mb-2 text-sm font-bold">Unscheduled</h2>
-            <div ref={drawer} className="space-y-2">
+          <Card className="p-4!" title="Unscheduled" actions={<span className="text-xs font-medium tabular-nums text-ink-soft">{unscheduled.length}</span>}>
+            <div ref={drawer} id="unscheduled-drawer" className="space-y-2">
               {unscheduled.length ? unscheduled.map((u) => (
-                <div key={u.kind + u.id} data-item={u.id} data-kind={u.kind} data-title={u.title} className="cursor-grab rounded-lg border border-line border-l-4 bg-white p-2.5 text-sm active:cursor-grabbing" style={{ borderLeftColor: u.color }}>
-                  <Link href={u.href} className="font-semibold">{u.title}</Link><div className="text-xs text-ink-soft">{u.sub}</div>
+                <div key={u.kind + u.id} data-item={u.id} data-kind={u.kind} data-title={u.title}
+                  className="flex cursor-grab items-start gap-1.5 rounded-md border-l-[3px] bg-tint py-2 pl-2 pr-2.5 text-sm hover:bg-line-soft active:cursor-grabbing" style={{ borderLeftColor: u.color }}>
+                  <GripVertical className="mt-0.5 size-4 shrink-0 text-ink-faint" strokeWidth={1.75} aria-hidden />
+                  <div className="min-w-0"><Link href={u.href} className="font-semibold hover:text-blue-deep">{u.title}</Link><div className="text-xs text-ink-soft">{u.sub}</div></div>
                 </div>
-              )) : <p className="rounded-lg border border-dashed border-line p-4 text-center text-sm text-ink-soft">Everything&apos;s booked.</p>}
+              )) : <p className="rounded-lg border border-dashed border-line bg-tint/40 px-4 py-6 text-center text-sm text-ink-soft">Everything is booked.</p>}
             </div>
-            <p className="mt-2 text-xs text-ink-soft">Drag onto the calendar to book. Storm visits stay on their storm day.</p>
-          </aside>
+            <p className="mt-3 text-xs text-ink-soft">Drag onto the calendar to book. Storm visits stay on their storm day.</p>
+          </Card>
         )}
       </div>
 
       {pop && (
         <div className="fixed inset-0 z-40" onMouseDown={(e) => { if (e.target === e.currentTarget) setPop(null); }}>
           <div role="dialog" aria-label={pop.type === "slot" ? "Create" : pop.item.title}
-            className="absolute w-72 rounded-lg border border-line bg-white p-3 text-sm shadow-xl"
-            style={{ left: Math.min(pop.x, (typeof window !== "undefined" ? window.innerWidth : 1200) - 300), top: Math.min(pop.y, (typeof window !== "undefined" ? window.innerHeight : 800) - 260) }}>
-            <button type="button" onClick={() => setPop(null)} className="absolute right-2 top-2 rounded p-1 text-ink-soft hover:bg-tint" aria-label="Close"><X className="size-4" /></button>
+            className="absolute max-h-[calc(100dvh-1.5rem)] w-72 max-w-[calc(100vw-1.5rem)] overflow-y-auto rounded-xl border border-line bg-white p-3.5 text-sm shadow-lift"
+            style={{ left: Math.max(12, Math.min(pop.x, window.innerWidth - 300)), top: Math.max(12, Math.min(pop.y, window.innerHeight - (pop.type === "slot" ? 250 : 400))) }}>
+            <button type="button" onClick={() => setPop(null)} className="absolute right-2 top-2 grid size-8 place-items-center rounded-lg text-ink-soft hover:bg-tint hover:text-navy" aria-label="Close"><X className="size-4" strokeWidth={1.75} aria-hidden /></button>
             {pop.type === "slot" ? (
               <>
-                <p className="mb-2 pr-6 font-bold">{new Date(`${pop.date}T12:00`).toLocaleDateString("en-CA", { weekday: "long", month: "long", day: "numeric" })}{pop.time && ` · ${timeOf(`${pop.date}T${pop.time}`)}`}</p>
-                <div className="grid gap-1">
-                  <Link href={`/jobs/new?date=${pop.date}${pop.time ? `&time=${pop.time}` : ""}`} className="flex items-center gap-2 rounded-md px-2 py-2 font-semibold hover:bg-tint"><Hammer className="size-4 text-emerald-700" />New job visit</Link>
-                  <Link href={`/tasks/new?date=${pop.date}${pop.time ? `&time=${pop.time}` : ""}`} className="flex items-center gap-2 rounded-md px-2 py-2 font-semibold hover:bg-tint"><ClipboardList className="size-4 text-navy" />New task</Link>
-                  <Link href={`/tasks/new?kind=EVENT&date=${pop.date}${pop.time ? `&time=${pop.time}` : ""}`} className="flex items-center gap-2 rounded-md px-2 py-2 font-semibold hover:bg-tint"><CalendarClock className="size-4 text-yellow-700" />New event</Link>
-                  <Link href={`/requests?new=1&date=${pop.date}`} className="flex items-center gap-2 rounded-md px-2 py-2 font-semibold hover:bg-tint"><Inbox className="size-4 text-orange-700" />Requests</Link>
+                <p className="mb-2 pr-8 font-display text-[0.95rem] font-semibold tabular-nums">{new Date(`${pop.date}T12:00`).toLocaleDateString("en-CA", { weekday: "long", month: "long", day: "numeric" })}{pop.time && ` · ${timeOf(`${pop.date}T${pop.time}`)}`}</p>
+                <div className="-mx-1 grid">
+                  <Link href={`/jobs/new?date=${pop.date}${pop.time ? `&time=${pop.time}` : ""}`} className={menuRow}><Hammer {...ico} className="size-4 shrink-0 text-ink-soft" />New job visit</Link>
+                  <Link href={`/tasks/new?date=${pop.date}${pop.time ? `&time=${pop.time}` : ""}`} className={menuRow}><ClipboardList {...ico} className="size-4 shrink-0 text-ink-soft" />New task</Link>
+                  <Link href={`/tasks/new?kind=EVENT&date=${pop.date}${pop.time ? `&time=${pop.time}` : ""}`} className={menuRow}><CalendarClock {...ico} className="size-4 shrink-0 text-ink-soft" />New event</Link>
+                  <Link href={`/requests?new=1&date=${pop.date}`} className={menuRow}><Inbox {...ico} className="size-4 shrink-0 text-ink-soft" />Requests</Link>
                 </div>
               </>
             ) : (
               <>
-                <p className="pr-6 font-bold">{pop.item.title}</p>
-                {pop.item.warnings?.length ? <ul className="my-1 rounded bg-amber-50 p-2 text-xs text-amber-900">{pop.item.warnings.map((w) => <li key={w}>⚠ {w}</li>)}</ul> : null}
-                {pop.item.confirmed && <p className="text-xs font-semibold text-emerald-700">Client confirmed</p>}
-                {pop.item.rescheduleAsked && <p className="text-xs font-semibold text-amber-700">Client asked to reschedule</p>}
-                <p className="text-xs text-ink-soft">{pop.item.sub}{!pop.item.allDay && pop.item.start && ` · ${timeOf(pop.item.start)}${pop.item.end ? `–${timeOf(pop.item.end)}` : ""}`}{pop.item.late && " · overdue"}{pop.item.done && " · done"}</p>
+                <p className="pr-8 font-display text-[0.95rem] font-semibold leading-snug">{pop.item.title}</p>
+                <p className="mt-0.5 text-xs tabular-nums text-ink-soft">{pop.item.sub}{!pop.item.allDay && pop.item.start && ` · ${timeOf(pop.item.start)}${pop.item.end ? `–${timeOf(pop.item.end)}` : ""}`}</p>
+                {(pop.item.done || pop.item.late || pop.item.confirmed || pop.item.rescheduleAsked) && (
+                  <ul className="mt-2 space-y-1 text-xs font-medium">
+                    {pop.item.done && <li className="flex items-center gap-1.5 text-emerald-800"><Check {...ico} className="size-3.5 shrink-0" />Done</li>}
+                    {pop.item.late && <li className="flex items-center gap-1.5 text-red-700"><Clock {...ico} className="size-3.5 shrink-0" />Overdue</li>}
+                    {pop.item.confirmed && <li className="flex items-center gap-1.5 text-emerald-800"><CheckCheck {...ico} className="size-3.5 shrink-0" />Client confirmed</li>}
+                    {pop.item.rescheduleAsked && <li className="flex items-center gap-1.5 text-amber-800"><RefreshCw {...ico} className="size-3.5 shrink-0" />Client asked to reschedule</li>}
+                  </ul>
+                )}
+                {pop.item.warnings?.length ? (
+                  <ul className="mt-2 space-y-1 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2 text-xs font-medium text-amber-950">
+                    {pop.item.warnings.map((w) => <li key={w} className="flex gap-1.5"><TriangleAlert {...ico} className="mt-px size-3.5 shrink-0 text-amber-700" />{w}</li>)}
+                  </ul>
+                ) : null}
                 {pop.item.kind !== "assessment" && (
-                  <form action={async (f) => { await assignPeople(f); setPop(null); router.refresh(); }} className="mt-3">
+                  <form action={async (f) => { await assignPeople(f); setPop(null); router.refresh(); }} className="mt-3 border-t border-line-soft pt-3">
                     <input type="hidden" name="kind" value={pop.item.kind} /><input type="hidden" name="id" value={pop.item.id} />
-                    <p className="mb-1 text-xs font-semibold uppercase text-ink-soft">Assigned</p>
-                    <div className="flex flex-wrap gap-2">
-                      {team.map((p) => (
-                        <label key={p.id} className="flex items-center gap-1 text-xs"><input type="checkbox" name="userId" value={p.id} defaultChecked={pop.item.people.some((x) => x.id === p.id)} className="size-3.5" />
-                          <span className="size-2 rounded-full" style={{ background: p.color }} />{p.name}</label>
-                      ))}
-                    </div>
-                    <button className="mt-2 rounded-md border border-line px-2 py-1 text-xs font-semibold hover:bg-tint">Save assignment</button>
+                    <fieldset>
+                      <legend className="mb-1 text-xs font-medium text-ink-soft">Assigned to</legend>
+                      <div className="flex flex-wrap gap-x-4">
+                        {team.map((p) => (
+                          <label key={p.id} className="flex min-h-9 items-center gap-1.5"><input type="checkbox" name="userId" value={p.id} defaultChecked={pop.item.people.some((x) => x.id === p.id)} className="size-4" />
+                            <span className="size-2.5 rounded-full" style={{ background: p.color }} aria-hidden />{p.name}</label>
+                        ))}
+                      </div>
+                    </fieldset>
+                    <button className={btn("secondary", `${small} mt-1.5`)}>Save assignment</button>
                   </form>
                 )}
-                <div className="mt-3 flex gap-2">
-                  <Link href={pop.item.href} className="inline-flex min-h-9 items-center rounded-lg bg-blue px-3 text-xs font-semibold text-white">Open</Link>
+                <div className="mt-3 flex gap-2 border-t border-line-soft pt-3">
+                  <Link href={pop.item.href} className={btn("primary", small)}>Open</Link>
                   {(pop.item.kind === "task" || pop.item.kind === "event") && (
                     <form action={async (f) => { await taskDone(f); setPop(null); router.refresh(); }}>
                       <input type="hidden" name="id" value={pop.item.id} /><input type="hidden" name="done" value={pop.item.done ? "0" : "1"} />
-                      <button className="inline-flex min-h-9 items-center gap-1 rounded-lg border border-line px-3 text-xs font-semibold hover:bg-tint"><Check className="size-3.5" />{pop.item.done ? "Not done" : "Mark done"}</button>
+                      <button className={btn("secondary", small)}><Check {...ico} />{pop.item.done ? "Mark not done" : "Mark done"}</button>
                     </form>
                   )}
                 </div>
