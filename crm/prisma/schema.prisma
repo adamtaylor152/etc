@@ -618,6 +618,10 @@ model Job {
   anytime            Boolean          @default(true)
   defaultStartMinute Int?
   defaultDurationMin Int?
+  defaultAssigneeIds String[]        @default([]) // who each generated visit is assigned to
+  pausedFrom         DateTime?        @db.Date // no visits are generated from here...
+  pausedUntil        DateTime?        @db.Date // ...to here (inclusive)
+  invoiceDay         Int? // MONTHLY invoicing: day of the month (1-28); null = the 1st
   // SNOW_PLAN
   triggerCm          Int?
   snowBillingMode    SnowBillingMode?
@@ -698,6 +702,7 @@ model Visit {
   depthCm                Int?
   iceMeltApplied         Boolean?
   instructions           String?
+  lineOverrides          Json? // this visit only: [{ name, description?, quantity, unitPriceCents }] charged instead of the job's lines
   createdAt              DateTime    @default(now())
 
   charges      VisitCharge[]

@@ -4,8 +4,9 @@ import { WALK_PREFIX } from "../billing/charges";
 import { defaultChecklistFor } from "./checklists";
 import { Prisma, type SnowBillingMode } from "@/generated/prisma/client";
 import { maxInstalments, planBillingLocked, seasonalTermsError } from "../billing/instalments";
-import { addDays, dateOnly, todayLocal, toDbDate } from "../dates";
-import { recurrenceDates, toRRule, type Repeat } from "../recurrence";
+import { recurringBillingError, type RecurringBilling } from "../billing/periods";
+import { addDays, dateOnly, fromLocalInput, todayLocal, toDbDate } from "../dates";
+import { lastRecurrenceDate, outsidePause, recurrenceDates, toRRule, type Repeat } from "../recurrence";
 import { db, type Tx } from "../db";
 import { logActivity, nextNumber } from "../records";
 import { seasonFor } from "../booking/create";
@@ -195,8 +196,33 @@ export async function updateJob(user: Actor, jobId: string, input: {
 
 // ---------- recurring jobs ----------
 const HORIZON_DAYS = 90;
+const HM = /^([01]\d|2[0-3]):[0-5]\d$/;
+const minuteOf = (hm: string) => Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3));
+const clock = (min: number) => `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
 
-/** Create concrete visits for the next 90 days. Safe to re-run (unique on job + recurrenceDate). */
+/** When and who for every generated visit ("HH:MM", Calgary time). No start time = any time that day. */
+export type VisitDefaults = { startTime?: string | null; endTime?: string | null; assigneeIds?: string[] };
+
+async function defaultColumns(user: Actor, d: VisitDefaults) {
+  const start = d.startTime && HM.test(d.startTime) ? minuteOf(d.startTime) : null;
+  const end = start != null && d.endTime && HM.test(d.endTime) ? minuteOf(d.endTime) : null;
+  const people = d.assigneeIds?.length ? await db.user.findMany({ where: { id: { in: d.assigneeIds }, businessId: user.businessId }, select: { id: true } }) : [];
+  return { anytime: start == null, defaultStartMinute: start, defaultDurationMin: start != null && end != null && end > start ? end - start : null, defaultAssigneeIds: people.map((p) => p.id) };
+}
+
+const scheduleColumns = (repeat: Repeat | null) => {
+  const rrule = repeat ? toRRule(repeat) : null, last = rrule ? lastRecurrenceDate(rrule) : null;
+  // recurrenceEndsOn = the last visit day of a rule that ends (on a date or after N visits): fixed-price billing stops with it.
+  return { rrule, asNeeded: !repeat, recurrenceStartsOn: repeat ? toDbDate(repeat.startsOn) : null, recurrenceEndsOn: last ? toDbDate(last) : null };
+};
+
+/** Future visits of the series nobody has touched: safe to drop and rebuild. */
+const untouched = (jobId: string) => ({
+  jobId, source: "RECURRENCE" as const, state: "SCHEDULED" as const, detachedFromRecurrence: false, lineOverrides: { equals: Prisma.DbNull },
+  scheduledDate: { gte: toDbDate(todayLocal()) }, charges: { none: {} }, attachments: { none: {} },
+});
+
+/** Create concrete visits for the next 90 days, with the job's time and people. Safe to re-run (unique on job + recurrenceDate). */
 export async function generateRecurringVisits(businessId: string, jobId?: string) {
   const today = todayLocal();
   const jobs = await db.job.findMany({
@@ -204,59 +230,97 @@ export async function generateRecurringVisits(businessId: string, jobId?: string
   });
   let created = 0;
   for (const j of jobs) {
-    const dates = recurrenceDates(j.rrule!, today, addDays(today, HORIZON_DAYS));
+    const dates = outsidePause(recurrenceDates(j.rrule!, today, addDays(today, HORIZON_DAYS)), dateOnly(j.pausedFrom), dateOnly(j.pausedUntil));
     if (!dates.length) continue;
-    const res = await db.visit.createMany({
-      skipDuplicates: true,
+    const start = j.anytime ? null : j.defaultStartMinute;
+    const made = await db.visit.createManyAndReturn({
+      skipDuplicates: true, select: { id: true },
       data: dates.map((d) => ({
-        businessId, jobId: j.id, propertyId: j.propertyId, scheduledDate: toDbDate(d), recurrenceDate: toDbDate(d),
-        source: "RECURRENCE" as const, anytime: true,
+        businessId, jobId: j.id, propertyId: j.propertyId, scheduledDate: toDbDate(d), recurrenceDate: toDbDate(d), source: "RECURRENCE" as const,
+        ...(start == null ? { anytime: true } : { anytime: false, startAt: fromLocalInput(`${d}T${clock(start)}`), endAt: j.defaultDurationMin ? fromLocalInput(`${d}T${clock(start + j.defaultDurationMin)}`) : null }),
       })),
     });
-    created += res.count;
+    if (made.length && j.defaultAssigneeIds.length) {
+      // Someone taken off the team since simply isn't on the new visits.
+      const people = await db.user.findMany({ where: { id: { in: j.defaultAssigneeIds }, businessId, active: true }, select: { id: true } });
+      await db.visitAssignee.createMany({ skipDuplicates: true, data: made.flatMap((v) => people.map((p) => ({ visitId: v.id, userId: p.id }))) });
+    }
+    created += made.length;
   }
   return created;
 }
 
 export async function createRecurringJob(user: Actor, input: {
   clientId: string; propertyId: string; title: string; instructions?: string; lines: LineInput[]; repeat: Repeat | null;
+  /** Parity with one-off jobs: time and people for each visit, the checklist (undefined = automatic), and how it's billed. */
+  defaults?: VisitDefaults; checklistTemplateId?: string | null; billing?: RecurringBilling;
 }) {
+  const billing = input.billing ?? { method: "PER_VISIT", when: "MONTHLY" };
+  const err = recurringBillingError(billing);
+  if (err) throw new TransitionError(err);
+  if (!input.lines.length) throw new TransitionError("Add at least one line item");
+  const checklistTemplateId = input.checklistTemplateId === undefined ? await defaultChecklistFor(user.businessId, input.lines.map((l) => l.name)) : input.checklistTemplateId;
   const prop = await db.property.findFirstOrThrow({ where: { id: input.propertyId, clientId: input.clientId, businessId: user.businessId } });
+  const defaults = await defaultColumns(user, input.defaults ?? {});
   const job = await db.$transaction(async (tx) => {
-    const lines = input.lines.map((l, i) => ({ ...l, totalCents: Math.round(l.quantity * l.unitPriceCents), sortOrder: i, perVisit: true }));
+    const fixed = billing.method === "FIXED_PRICE";
+    const lines = input.lines.map((l, i) => ({ ...l, totalCents: Math.round(l.quantity * l.unitPriceCents), sortOrder: i, perVisit: !fixed }));
     const j = await tx.job.create({
       data: {
         businessId: user.businessId, number: await nextNumber(tx, user.businessId, "JOB"), clientId: input.clientId, propertyId: prop.id,
-        kind: "RECURRING", title: input.title, instructions: input.instructions || null, billingType: "PER_VISIT", invoiceSchedule: "MONTHLY",
-        rrule: input.repeat ? toRRule(input.repeat) : null, asNeeded: !input.repeat,
-        recurrenceStartsOn: input.repeat ? toDbDate(input.repeat.startsOn) : null, recurrenceEndsOn: input.repeat?.endsOn ? toDbDate(input.repeat.endsOn) : null,
-        lineItems: { create: lines },
+        kind: "RECURRING", title: input.title, instructions: input.instructions || null, checklistTemplateId,
+        // Fixed price = the lines' total, billed once a month whatever the visit count (invoiceRecurringPeriods).
+        billingType: billing.method, invoiceSchedule: billing.when, invoiceDay: billing.when === "MONTHLY" ? billing.invoiceDay ?? null : null,
+        totalCents: fixed ? lines.reduce((a, l) => a + l.totalCents, 0) : null,
+        ...scheduleColumns(input.repeat), ...defaults, lineItems: { create: lines },
       },
     });
     await logActivity(tx, { businessId: user.businessId, type: "job.created", entityType: "Job", entityId: j.id, actorType: "USER", actorUserId: user.id, clientId: input.clientId, jobId: j.id });
     return j;
   });
   await generateRecurringVisits(user.businessId, job.id);
+  const first = await db.visit.findFirst({ where: { jobId: job.id, scheduledDate: { not: null } }, orderBy: { scheduledDate: "asc" } });
+  await alertAssigned(db, user.businessId, user.id, defaults.defaultAssigneeIds, dateOnly(first?.scheduledDate)); // first visit day only
   return job;
 }
 
-/** Change the schedule: future visits nobody touched are replaced; done, moved or detached visits stay. */
-export async function updateRecurrence(user: Actor, jobId: string, repeat: Repeat | null) {
+/** Change the schedule: future visits nobody touched are replaced; done, moved, re-priced or detached visits stay.
+ *  defaults omitted = the job keeps its time and people (the rebuilt visits get them again). */
+export async function updateRecurrence(user: Actor, jobId: string, repeat: Repeat | null, defaults?: VisitDefaults) {
   const job = await db.job.findFirstOrThrow({ where: { id: jobId, businessId: user.businessId, kind: "RECURRING" } });
+  const cols = defaults ? await defaultColumns(user, defaults) : {};
   await db.$transaction(async (tx) => {
-    await tx.visit.deleteMany({
-      where: { jobId, source: "RECURRENCE", state: "SCHEDULED", detachedFromRecurrence: false, scheduledDate: { gte: toDbDate(todayLocal()) }, charges: { none: {} }, attachments: { none: {} } },
-    });
-    await tx.job.update({
-      where: { id: jobId },
-      data: {
-        rrule: repeat ? toRRule(repeat) : null, asNeeded: !repeat, recurrenceStartsOn: repeat ? toDbDate(repeat.startsOn) : null,
-        recurrenceEndsOn: repeat?.endsOn ? toDbDate(repeat.endsOn) : null,
-      },
-    });
+    await tx.visit.deleteMany({ where: untouched(jobId) });
+    await tx.job.update({ where: { id: jobId }, data: { ...scheduleColumns(repeat), ...cols } });
     await logActivity(tx, { businessId: user.businessId, type: "job.schedule_changed", entityType: "Job", entityId: jobId, actorType: "USER", actorUserId: user.id, clientId: job.clientId, jobId });
   });
   await generateRecurringVisits(user.businessId, jobId);
+}
+
+/** Pause a recurring job between two days (inclusive): untouched visits in the range go and none are generated there.
+ *  Both null = resume (the visits come back). Snow plans pause with a plain on/off switch instead (setPlanPaused). */
+export async function setRecurringPause(user: Actor, jobId: string, from: string | null, until: string | null) {
+  const job = await db.job.findFirstOrThrow({ where: { id: jobId, businessId: user.businessId, kind: "RECURRING" } });
+  if (!from !== !until) throw new TransitionError("Pick both the first and the last day of the pause");
+  if (from && until && until < from) throw new TransitionError("The pause has to end on or after the day it starts");
+  await db.$transaction(async (tx) => {
+    const today = todayLocal();
+    if (from && until) await tx.visit.deleteMany({ where: { ...untouched(jobId), scheduledDate: { gte: toDbDate(from > today ? from : today), lte: toDbDate(until) } } });
+    await tx.job.update({ where: { id: jobId }, data: { pausedFrom: from ? toDbDate(from) : null, pausedUntil: until ? toDbDate(until) : null } });
+    await logActivity(tx, { businessId: user.businessId, type: from ? "job.paused" : "job.resumed", entityType: "Job", entityId: jobId, actorType: "USER", actorUserId: user.id, clientId: job.clientId, jobId, data: { from, until } });
+  });
+  await generateRecurringVisits(user.businessId, jobId);
+}
+
+/** When a recurring job is invoiced. The method (per visit / fixed per month) is set when the job is made (jobEditLocks). */
+export async function setRecurringInvoicing(user: Actor, jobId: string, when: RecurringBilling["when"], invoiceDay: number | null) {
+  const job = await db.job.findFirstOrThrow({ where: { id: jobId, businessId: user.businessId, kind: "RECURRING" } });
+  const err = recurringBillingError({ method: job.billingType, when, invoiceDay });
+  if (err) throw new TransitionError(err);
+  await db.$transaction(async (tx) => {
+    await tx.job.update({ where: { id: jobId }, data: { invoiceSchedule: when, invoiceDay: when === "MONTHLY" ? invoiceDay : null } });
+    await logActivity(tx, { businessId: user.businessId, type: "job.invoicing_changed", entityType: "Job", entityId: jobId, actorType: "USER", actorUserId: user.id, clientId: job.clientId, jobId, data: { when, invoiceDay } });
+  });
 }
 
 // ---------- plan renewals ----------

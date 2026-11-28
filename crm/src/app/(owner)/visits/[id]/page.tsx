@@ -21,7 +21,10 @@ import { businessId, db } from "@/server/db";
 import { money } from "@/server/money";
 import { clientName } from "@/server/queries";
 import { mapsLink, routeVisits } from "@/server/routing";
-import { visitStatus } from "@/server/status/job";
+import { visitLinesLock, visitStatus } from "@/server/status/job";
+import { parseOverrides } from "@/server/billing/charges";
+import { LineItems } from "@/components/line-items";
+import { visitLinesSet } from "../../recurring-actions";
 import { paymentRecord } from "../../billing-actions";
 import { visitTransition } from "../../work-actions";
 
@@ -62,6 +65,12 @@ export default async function VisitPage({ params, searchParams }: PageProps<"/vi
 
   const hidden = (to: string) => <><input type="hidden" name="id" value={v.id} /><input type="hidden" name="to" value={to} /><input type="hidden" name="back" value={here} /></>;
 
+  // One visit can be priced differently from its job (Visit.lineOverrides) until it's invoiced.
+  const overrides = parseOverrides(v.lineOverrides);
+  const priced: { name: string; description?: string | null; quantity: unknown; unitPriceCents: number }[] = overrides ?? v.job.lineItems.filter((l) => l.perVisit).sort((a, b) => a.sortOrder - b.sortOrder);
+  const linesLock = visitLinesLock({ state: v.state, invoiced: v.charges.some((c) => c.invoiceLineItemId), kind: v.job.kind, billingType: v.job.billingType, closedAt: v.job.closedAt });
+  const services = linesLock ? [] : await db.service.findMany({ where: { businessId: bid, active: true }, orderBy: { sortOrder: "asc" } });
+
   const people = await team(v.businessId);
   const [running, visitTime] = await Promise.all([
     db.timeEntry.findFirst({ where: { businessId: v.businessId, userId: user.id, endedAt: null } }),
@@ -92,6 +101,29 @@ export default async function VisitPage({ params, searchParams }: PageProps<"/vi
         </Card>
       )}
 
+
+      {v.job.kind !== "SNOW_PLAN" && v.job.billingType === "PER_VISIT" && (
+        <Card title={overrides ? "This visit's own price" : "What this visit charges"} className="mb-4">
+          <ul className="divide-y divide-line text-sm">
+            {priced.map((l, i) => <li key={i} className="flex justify-between gap-2 py-1.5"><span>{l.name}{Number(l.quantity) !== 1 && <span className="text-ink-soft"> × {Number(l.quantity)}</span>}</span><span className="font-semibold">{money(Math.round(Number(l.quantity) * l.unitPriceCents))}</span></li>)}
+          </ul>
+          <p className="mt-2 text-xs text-ink-soft">{overrides ? `Changed for this visit only; job #${v.job.number} keeps its own prices.` : "From the job's line items."}{linesLock && ` ${linesLock}.`}</p>
+          {!linesLock && (
+            <details className="mt-2">
+              <summary className="cursor-pointer text-sm font-semibold text-blue">Change for this visit only</summary>
+              <form action={visitLinesSet} className="mt-3 space-y-3">
+                <input type="hidden" name="id" value={v.id} /><input type="hidden" name="back" value={here} />
+                <LineItems services={services.map((s) => ({ id: s.id, name: s.name, description: s.description, unitPriceCents: s.unitPriceCents }))} label="Charged when this visit is done"
+                  initial={priced.map((l) => ({ name: l.name, desc: l.description ?? "", qty: String(Number(l.quantity)), price: String(l.unitPriceCents / 100) }))} />
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="secondary">Save for this visit</Button>
+                  {overrides && <Button variant="secondary" name="clear" value="1">Back to the job&apos;s prices</Button>}
+                </div>
+              </form>
+            </details>
+          )}
+        </Card>
+      )}
 
       <VisitChecklistCard businessId={v.businessId} visitId={v.id} editable={v.state !== "CANCELLED"} />
       {(v.job.requireSignature || v.state === "COMPLETED") && <div className="my-4"><SignatureCard where={{ visitId: v.id }} signHref={`/sign/visit/${v.id}`} title={v.job.requireSignature ? "Client signature (needed before Done)" : "Client signature"} /></div>}

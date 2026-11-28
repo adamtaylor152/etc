@@ -12,7 +12,8 @@ import { reminderDue } from "./billing/invoice";
 import { addDays, dateOnly, todayLocal, toDbDate, TZ } from "./dates";
 import { forecast, snowByDay } from "./forecast";
 import { generateRecurringVisits } from "./ops/jobs";
-import { billingEmailFor, invoiceSeasonalInstalments, invoiceUnbilled } from "./ops/invoices";
+import { billingEmailFor, invoiceRecurringPeriods, invoiceSeasonalInstalments, invoiceUnbilled } from "./ops/invoices";
+import { isInvoiceDay } from "./billing/periods";
 import { parseSettings } from "./settings";
 import { plansTriggered } from "./snow/select";
 import { enqueue, enqueueSms, processOutbox } from "./email/outbox";
@@ -55,6 +56,7 @@ async function hourly() {
   for (const b of await db.business.findMany({ select: { id: true } })) await generateRecurringVisits(b.id);
   if (hour === 7) await monthlyInvoices();
   if (hour >= 7 && hour < 20) await invoiceSeasonalInstalments(); // due instalments of seasonal snow plans; emails the client
+  if (hour >= 7 && hour < 20) await invoiceRecurringPeriods(); // recurring jobs on a fixed monthly price: a draft per month due
   if (hour >= 6 && hour < 22) await visitReminders(hour);
   if (hour >= 10 && hour < 18) await reviewRequests();
   if (hour === 6) await dailyDigest();
@@ -74,17 +76,17 @@ async function opsAlerts() {
   }
 }
 
-/** 1st of the month: draft invoices for recurring (monthly-billed) work. Re-runs find nothing left to bill. */
+/** A job's invoice day (the 1st unless it picked another): draft invoices for monthly-billed work. Re-runs find nothing left to bill. */
 async function monthlyInvoices() {
-  if (todayLocal().slice(8) !== "01") return;
+  const today = todayLocal();
   const groups = await db.visitCharge.findMany({
     where: { invoiceLineItemId: null, visit: { job: { invoiceSchedule: "MONTHLY" } } },
-    select: { businessId: true, visit: { select: { jobId: true, job: { select: { clientId: true } } } } },
+    select: { businessId: true, visit: { select: { jobId: true, job: { select: { clientId: true, invoiceDay: true } } } } },
   });
   const seen = new Set<string>();
   for (const g of groups) {
     const key = `${g.businessId}:${g.visit.job.clientId}:${g.visit.jobId}`;
-    if (seen.has(key)) continue;
+    if (seen.has(key) || !isInvoiceDay(today, g.visit.job.invoiceDay)) continue;
     seen.add(key);
     await invoiceUnbilled({ id: null, businessId: g.businessId }, { clientId: g.visit.job.clientId, jobId: g.visit.jobId });
   }

@@ -23,7 +23,7 @@ export default async function Billing({ searchParams }: PageProps<"/billing">) {
     db.invoice.findMany({ where: { businessId: bid, status: "DRAFT" }, include: { client: true }, orderBy: { number: "asc" } }),
     // Fixed-price jobs with every visit done and no invoice yet.
     db.job.findMany({
-      where: { businessId: bid, billingType: "FIXED_PRICE", closedAt: null, invoices: { none: { status: { not: "VOID" } } }, visits: { some: {}, every: { state: { in: ["COMPLETED", "SKIPPED", "CANCELLED"] } } } },
+      where: { businessId: bid, billingType: "FIXED_PRICE", kind: { not: "RECURRING" }, closedAt: null, invoices: { none: { status: { not: "VOID" } } }, visits: { some: {}, every: { state: { in: ["COMPLETED", "SKIPPED", "CANCELLED"] } } } },
       include: { client: true },
     }),
   ]);

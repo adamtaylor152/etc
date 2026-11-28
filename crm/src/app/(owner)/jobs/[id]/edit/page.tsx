@@ -51,7 +51,7 @@ export default async function EditJob({ params, searchParams }: PageProps<"/jobs
           {locks.lines ? locked("Line items", locks.lines) : (
             <div>
               <LineItems services={services.map((s) => ({ id: s.id, name: s.name, unitPriceCents: s.unitPriceCents }))}
-                label={job.billingType === "FIXED_PRICE" ? "Line items (their total is the fixed price)" : "Line items (charged each visit)"}
+                label={job.billingType !== "FIXED_PRICE" ? "Line items (charged each visit)" : job.kind === "RECURRING" ? "Line items (their total is the price per month, from the next invoice on)" : "Line items (their total is the fixed price)"}
                 initial={job.lineItems.map((l) => ({ name: l.name, desc: l.description ?? "", qty: String(Number(l.quantity)), price: String(l.unitPriceCents / 100) }))} />
               {facts.hasCharges && <p className="mt-2 text-xs text-ink-soft">Visits already done keep what they were charged. New prices apply to visits done from now on.</p>}
             </div>

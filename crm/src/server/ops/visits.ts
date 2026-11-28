@@ -1,8 +1,9 @@
 // Visit operations: the field flow (on my way -> arrived -> done / skip), scheduling and reopening.
 import { assertChecklistDone } from "./checklists";
 import { assertSigned } from "./signatures";
-import type { SkipReason, VisitState } from "@/generated/prisma/client";
-import { chargesForVisit, STORM_CHARGE } from "../billing/charges";
+import { Prisma, type SkipReason, type VisitState } from "@/generated/prisma/client";
+import { chargesForVisit, parseOverrides, STORM_CHARGE, type OverrideLine } from "../billing/charges";
+import { visitLinesLock } from "../status/job";
 import { dueDate } from "../billing/invoice";
 import { dateOnly, todayLocal, toDbDate } from "../dates";
 import { invoiceUnbilled } from "./invoices";
@@ -63,7 +64,7 @@ function transitionTx(user: Actor, visitId: string, to: VisitState, extra: Trans
       const job = { ...v.job, lineItems: v.job.lineItems.map((l) => ({ ...l, quantity: Number(l.quantity) })) };
       const stormCharged = v.job.snowBillingMode === "PER_EVENT" && !!v.snowEventId
         && (await tx.visitCharge.count({ where: { name: STORM_CHARGE, visit: { jobId: v.jobId, snowEventId: v.snowEventId, id: { not: visitId } } } })) > 0;
-      const lines = chargesForVisit(job, { iceMeltApplied: updated.iceMeltApplied, stormCharged }, await iceMeltPrice(tx, user.businessId));
+      const lines = chargesForVisit(job, { iceMeltApplied: updated.iceMeltApplied, stormCharged, overrides: parseOverrides(v.lineOverrides) }, await iceMeltPrice(tx, user.businessId));
       if (lines.length) await tx.visitCharge.createMany({ data: lines.map((l) => ({ ...l, businessId: user.businessId, visitId })) });
       // Billed per visit (one-off jobs): invoice it now so the "all done" email can carry a pay link.
       if (lines.length && v.job.invoiceSchedule === "AFTER_EACH_VISIT") {
@@ -143,6 +144,20 @@ export async function addVisit(user: Actor, jobId: string, date: string | null) 
   const job = await db.job.findFirstOrThrow({ where: { id: jobId, businessId: user.businessId } });
   return db.visit.create({
     data: { businessId: user.businessId, jobId, propertyId: job.propertyId, scheduledDate: date ? toDbDate(date) : null, source: "MANUAL" },
+  });
+}
+
+/** Price this one visit differently from its job (extra work this time); null or no lines = back to the job's lines.
+ *  Only while the visit is still to do (visitLinesLock): the charges are then made from these lines when it's done,
+ *  exactly as they would be from the job's, so it bills once; once invoiced it can't change. */
+export async function setVisitLines(user: Actor, visitId: string, lines: OverrideLine[] | null) {
+  await db.$transaction(async (tx) => {
+    const v = await tx.visit.findFirstOrThrow({ where: { id: visitId, businessId: user.businessId }, include: { job: true, charges: true } });
+    const lock = visitLinesLock({ state: v.state, invoiced: v.charges.some((c) => c.invoiceLineItemId), kind: v.job.kind, billingType: v.job.billingType, closedAt: v.job.closedAt });
+    if (lock) throw new TransitionError(lock);
+    const next = lines?.length ? lines.map((l) => ({ name: l.name, ...(l.description ? { description: l.description } : {}), quantity: l.quantity, unitPriceCents: l.unitPriceCents })) : null;
+    await tx.visit.update({ where: { id: visitId }, data: { lineOverrides: next ?? Prisma.DbNull } });
+    await logActivity(tx, { businessId: user.businessId, type: "visit.lines_changed", entityType: "Visit", entityId: visitId, actorType: "USER", actorUserId: user.id, clientId: v.job.clientId, jobId: v.jobId, data: { lines: next } });
   });
 }
 
