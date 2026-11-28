@@ -7,7 +7,7 @@ import { z } from "zod";
 import type { SkipReason, VisitState } from "@/generated/prisma/client";
 import { requireOwner } from "@/server/auth";
 import { addVisit, deleteVisit, scheduleVisit, transitionVisit } from "@/server/ops/visits";
-import { createRecurringJob, createSnowPlan, renewalCandidates, renewalSeason, setJobClosed, setPlanPaused, updatePlan, updateRecurrence } from "@/server/ops/jobs";
+import { createRecurringJob, createSnowPlan, renewalCandidates, renewalSeason, setJobClosed, setPlanPaused, updatePlan, updateRecurrence, type PlanBilling } from "@/server/ops/jobs";
 import { db } from "@/server/db";
 import { enqueue, kickOutbox } from "@/server/email/outbox";
 import { env } from "@/server/env";
@@ -71,13 +71,31 @@ export async function visitDelete(f: FormData) {
 
 // ---------- jobs & plans ----------
 
+/** Billing fields of the plan forms. No "mode" field (the plan's billing is locked) = leave it alone. */
+function planBilling(f: FormData): PlanBilling | undefined {
+  if (!f.has("mode")) return undefined;
+  const mode = z.enum(["PER_PUSH", "PER_EVENT", "SEASONAL"]).parse(str(f, "mode"));
+  if (mode !== "SEASONAL") return { mode };
+  return {
+    mode, seasonalPriceCents: str(f, "seasonPrice") ? dollars.parse(str(f, "seasonPrice")) : null,
+    instalments: z.coerce.number().int().min(1).max(12).parse(str(f, "instalments") || "1"),
+    firstDueOn: date.parse(str(f, "firstDueOn")), addonsIncluded: f.get("addonsIncluded") === "on",
+  };
+}
+
 export async function planCreate(f: FormData) {
   const user = await requireOwner();
-  const job = await createSnowPlan(user, {
-    clientId: str(f, "clientId"), propertyId: str(f, "propertyId"),
-    triggerCm: str(f, "triggerCm") ? cm.parse(str(f, "triggerCm")) : null,
-    pricePerPushCents: dollars.parse(str(f, "price") || "30"), iceMelt: f.get("iceMelt") === "on",
-  });
+  let job;
+  try {
+    job = await createSnowPlan(user, {
+      clientId: str(f, "clientId"), propertyId: str(f, "propertyId"),
+      triggerCm: str(f, "triggerCm") ? cm.parse(str(f, "triggerCm")) : null,
+      pricePerPushCents: dollars.parse(str(f, "price") || "30"), iceMelt: f.get("iceMelt") === "on", billing: planBilling(f),
+    });
+  } catch (e) {
+    if (!(e instanceof TransitionError || e instanceof z.ZodError)) throw e;
+    redirect(`/jobs/new?client=${encodeURIComponent(str(f, "clientId"))}&kind=plan&error=${encodeURIComponent(e instanceof z.ZodError ? "Check the form and try again" : e.message)}`);
+  }
   revalidatePath("/", "layout");
   redirect(`/jobs/${job.id}`);
 }
@@ -86,7 +104,7 @@ export async function planUpdate(f: FormData) {
   const user = await requireOwner();
   await run(f, () => updatePlan(user, str(f, "id"), {
     triggerCm: str(f, "triggerCm") ? cm.parse(str(f, "triggerCm")) : null,
-    pricePerPushCents: dollars.parse(str(f, "price")), iceMelt: f.get("iceMelt") === "on",
+    pricePerPushCents: dollars.parse(str(f, "price")), iceMelt: f.get("iceMelt") === "on", billing: planBilling(f),
   }));
 }
 

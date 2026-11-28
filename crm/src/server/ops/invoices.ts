@@ -1,7 +1,8 @@
 // Invoices and payments: unbilled charges -> draft invoice -> send -> payment (cash / e-Transfer / card) -> receipt.
 import type { PaymentMethod, Prisma } from "@/generated/prisma/client";
 import { billingEmail, depositCents, depositCredit, dueDate, etransferRef, invoiceTotals, statusAfterPayments } from "../billing/invoice";
-import { todayLocal, toDbDate } from "../dates";
+import { instalmentKey, instalmentSchedule } from "../billing/instalments";
+import { dateOnly, todayLocal, toDbDate } from "../dates";
 import { db, type Tx } from "../db";
 import { enqueue, kickOutbox } from "../email/outbox";
 import { env } from "../env";
@@ -19,6 +20,7 @@ type LineIn = { name: string; quantity: number; unitPriceCents: number; totalCen
 
 async function createDraft(tx: Tx, user: Actor, input: {
   clientId: string; propertyId?: string | null; jobId?: string | null; snowEventId?: string | null; subject: string; lines: LineIn[];
+  instalmentKey?: string;
 }) {
   if (!input.lines.length) throw new TransitionError("Nothing to invoice");
   const biz = await tx.business.findUniqueOrThrow({ where: { id: user.businessId } });
@@ -37,7 +39,7 @@ async function createDraft(tx: Tx, user: Actor, input: {
   const inv = await tx.invoice.create({
     data: {
       businessId: user.businessId, number, clientId: input.clientId, propertyId: input.propertyId, jobId: input.jobId, snowEventId: input.snowEventId,
-      subject: input.subject, paymentTerms: biz.defaultPaymentTerms, etransferRef: etransferRef(number), allowPartial: parseSettings(biz.settings).allowPartialPayments,
+      subject: input.subject, instalmentKey: input.instalmentKey, paymentTerms: biz.defaultPaymentTerms, etransferRef: etransferRef(number), allowPartial: parseSettings(biz.settings).allowPartialPayments,
       subtotalCents: totals.subtotalCents, taxCents: totals.taxCents, totalCents: totals.totalCents,
     },
   });
@@ -125,6 +127,44 @@ export async function billingRun(user: Actor) {
   }
   let made = 0;
   for (const k of keys.values()) { await invoiceUnbilled(user, k); made++; }
+  await invoiceSeasonalInstalments({ businessId: user.businessId }); // sent, not drafts: not part of the count
+  return made;
+}
+
+/**
+ * Seasonal snow plans: invoice and send every instalment that has come due. Each invoice carries a unique
+ * instalmentKey, so the hourly run, the billing run and saving a plan can all call this and never bill one twice
+ * (a voided instalment is not re-issued either). Ended plans are skipped: no more instalments after a plan is cancelled.
+ */
+export async function invoiceSeasonalInstalments(where: { businessId?: string; id?: string } = {}) {
+  const today = todayLocal();
+  const jobs = await db.job.findMany({
+    where: { ...where, kind: "SNOW_PLAN", snowBillingMode: "SEASONAL", closedAt: null, seasonalPriceCents: { gt: 0 }, seasonalInstalments: { gt: 0 }, seasonalFirstDueOn: { lte: toDbDate(today) } },
+    include: { season: true },
+  });
+  let made = 0;
+  for (const job of jobs) {
+    const count = job.seasonalInstalments!;
+    const system = { id: null, businessId: job.businessId };
+    for (const i of instalmentSchedule(job.seasonalPriceCents!, count, dateOnly(job.seasonalFirstDueOn)!)) {
+      const key = instalmentKey(job.id, i.n);
+      if (i.dueOn > today || (await db.invoice.count({ where: { businessId: job.businessId, instalmentKey: key } }))) continue;
+      const name = `Snow clearing · ${job.season?.name ?? "season"}${count > 1 ? ` (instalment ${i.n} of ${count})` : " (full season)"}`;
+      try {
+        await db.$transaction(async (tx) => {
+          const inv = await createDraft(tx, system, {
+            clientId: job.clientId, propertyId: job.propertyId, jobId: job.id, subject: name, instalmentKey: key,
+            lines: [{ name, quantity: 1, unitPriceCents: i.amountCents, totalCents: i.amountCents, serviceDate: toDbDate(i.dueOn), jobId: job.id }],
+          });
+          await sendInvoice(system, inv.id, tx);
+        });
+        made++;
+      } catch (e) {
+        if ((e as { code?: string }).code !== "P2002") throw e; // unique instalmentKey: another run invoiced it first
+      }
+    }
+  }
+  if (made) kickOutbox();
   return made;
 }
 

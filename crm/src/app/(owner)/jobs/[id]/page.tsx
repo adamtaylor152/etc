@@ -18,6 +18,8 @@ import { clientName, jobsWithStatus } from "@/server/queries";
 import { visitStatus } from "@/server/status/job";
 import { invoiceCreate } from "../../billing-actions";
 import { RepeatFields } from "@/components/repeat-fields";
+import { PLAN_MODE, PlanBillingFields } from "@/components/plan-billing-fields";
+import { instalmentKey, instalmentSchedule, planBillingLocked } from "@/server/billing/instalments";
 import { describeRule } from "@/server/recurrence";
 import { jobClose, planPause, recurringUpdate, planUpdate, visitAdd, visitDelete, visitSchedule } from "../../work-actions";
 
@@ -50,6 +52,14 @@ export default async function JobPage({ params, searchParams }: PageProps<"/jobs
   const closed = !!job.closedAt;
   const charges = job.visits.flatMap((v) => v.charges.map((c) => ({ ...c, date: dateOnly(v.scheduledDate) })));
   const unbilled = charges.filter((c) => !c.invoiceLineItemId);
+  // Snow plan billing: same lock rule as updatePlan; seasonal plans show their instalment schedule against the invoices made so far.
+  const mode = job.snowBillingMode ?? "PER_PUSH";
+  const instalmentInvoices = job.invoices.filter((i) => i.instalmentKey);
+  const billingLocked = planBillingLocked({ visitCharges: charges.length, instalmentInvoices: instalmentInvoices.length });
+  const instalments = plan && mode === "SEASONAL" && job.seasonalPriceCents && job.seasonalInstalments && job.seasonalFirstDueOn
+    ? instalmentSchedule(job.seasonalPriceCents, job.seasonalInstalments, dateOnly(job.seasonalFirstDueOn)!).map((i) => ({ ...i, invoice: instalmentInvoices.find((x) => x.instalmentKey === instalmentKey(job.id, i.n)) }))
+    : [];
+  const paidCents = instalmentInvoices.filter((i) => i.status !== "VOID").reduce((a, i) => a + i.amountPaidCents, 0);
 
   return (
     <>
@@ -78,11 +88,30 @@ export default async function JobPage({ params, searchParams }: PageProps<"/jobs
               <form action={planUpdate} className="grid items-end gap-3 sm:grid-cols-4">
                 <input type="hidden" name="id" value={job.id} /><input type="hidden" name="back" value={here} />
                 <label className="text-sm font-semibold">Trigger (cm)<Input name="triggerCm" type="number" min={0} max={100} defaultValue={job.triggerCm ?? ""} placeholder={`${job.season?.defaultTriggerCm ?? 2} (season)`} /></label>
-                <label className="text-sm font-semibold">Per push ($)<Input name="price" type="number" step="0.01" min={0} defaultValue={(job.pricePerPushCents ?? 3000) / 100} /></label>
+                <label className="text-sm font-semibold">Per push / storm ($)<Input name="price" type="number" step="0.01" min={0} defaultValue={(job.pricePerPushCents ?? 3000) / 100} /></label>
                 <label className="flex min-h-11 items-center gap-2 text-sm font-semibold"><input type="checkbox" name="iceMelt" defaultChecked={job.iceMelt} className="size-5" /> Ice melt</label>
                 <Button variant="secondary">Save</Button>
+                {/* No billing fields once locked: the action then leaves the billing mode alone. */}
+                {!billingLocked && <div className="sm:col-span-4"><PlanBillingFields mode={mode} seasonPriceCents={job.seasonalPriceCents} instalments={job.seasonalInstalments} firstDueOn={dateOnly(job.seasonalFirstDueOn) ?? today} addonsIncluded={mode === "SEASONAL" ? job.addonsIncluded : undefined} /></div>}
               </form>
-              <p className="mt-3 text-sm text-ink-soft">{job.season?.name}. A visit is added automatically when a storm reaches the trigger. Billed per push, once per storm.</p>
+              <p className="mt-3 text-sm text-ink-soft">{job.season?.name}. A visit is added automatically when a storm reaches the trigger. {mode === "SEASONAL"
+                ? <>Billed a flat <b>{money(job.seasonalPriceCents ?? 0)}</b> for the season{job.addonsIncluded ? ", ice melt included" : "; ice melt is charged per visit"}.</>
+                : mode === "PER_EVENT" ? "Billed once per storm, however many pushes; invoiced when the storm is finished." : "Billed per push, once per storm."}
+                {billingLocked && " The billing mode can't change now that this plan has charges or instalment invoices: end it and start a new plan instead."}</p>
+              {mode === "SEASONAL" && (
+                <div className="mt-3 border-t border-line pt-3 text-sm">
+                  <p className="font-semibold">{PLAN_MODE.SEASONAL}: {money(paidCents)} of {money(job.seasonalPriceCents ?? 0)} paid · {instalments.filter((i) => i.invoice?.status === "PAID").length} of {instalments.length} instalment{instalments.length === 1 ? "" : "s"} paid</p>
+                  <ul className="mt-1 divide-y divide-line">
+                    {instalments.map((i) => (
+                      <li key={i.n} className="flex justify-between gap-2 py-1.5">
+                        <span>{prettyDate(i.dueOn)} · {money(i.amountCents)}</span>
+                        {i.invoice ? <Link href={`/invoices/${i.invoice.id}`} className="font-semibold text-blue">Invoice #{i.invoice.number} · {i.invoice.status === "PAID" ? "Paid" : i.invoice.status === "VOID" ? "Void" : "Unpaid"}</Link>
+                          : <span className="text-ink-soft">{closed ? "Not invoiced (plan ended)" : i.dueOn <= today ? "Invoicing within the hour" : "Not due yet"}</span>}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </Card>
           ) : (
             <>

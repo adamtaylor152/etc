@@ -2,7 +2,7 @@
 import { assertChecklistDone } from "./checklists";
 import { assertSigned } from "./signatures";
 import type { SkipReason, VisitState } from "@/generated/prisma/client";
-import { chargesForVisit } from "../billing/charges";
+import { chargesForVisit, STORM_CHARGE } from "../billing/charges";
 import { dueDate } from "../billing/invoice";
 import { todayLocal, toDbDate } from "../dates";
 import { invoiceUnbilled } from "./invoices";
@@ -59,7 +59,9 @@ function transitionTx(user: Actor, visitId: string, to: VisitState, extra: Trans
 
     if (to === "COMPLETED") {
       const job = { ...v.job, lineItems: v.job.lineItems.map((l) => ({ ...l, quantity: Number(l.quantity) })) };
-      const lines = chargesForVisit(job, { pushNumber: v.pushNumber, iceMeltApplied: updated.iceMeltApplied }, await iceMeltPrice(tx, user.businessId));
+      const stormCharged = v.job.snowBillingMode === "PER_EVENT" && !!v.snowEventId
+        && (await tx.visitCharge.count({ where: { name: STORM_CHARGE, visit: { jobId: v.jobId, snowEventId: v.snowEventId, id: { not: visitId } } } })) > 0;
+      const lines = chargesForVisit(job, { iceMeltApplied: updated.iceMeltApplied, stormCharged }, await iceMeltPrice(tx, user.businessId));
       if (lines.length) await tx.visitCharge.createMany({ data: lines.map((l) => ({ ...l, businessId: user.businessId, visitId })) });
       // Billed per visit (one-off jobs): invoice it now so the "all done" email can carry a pay link.
       if (lines.length && v.job.invoiceSchedule === "AFTER_EACH_VISIT") {
