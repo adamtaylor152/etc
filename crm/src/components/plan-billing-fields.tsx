@@ -25,7 +25,7 @@ export function PlanBillingFields(p: { mode?: SnowBillingMode; seasonPriceCents?
           </select>
         </Field>
         <Field label="First payment due"><Input name="firstDueOn" type="date" defaultValue={p.firstDueOn} /></Field>
-        <label className="flex items-center gap-2 text-sm font-semibold sm:col-span-3"><input type="checkbox" name="addonsIncluded" defaultChecked={p.addonsIncluded ?? true} className="size-5" /> Ice melt is included in the season price</label>
+        <label className="flex items-center gap-2 text-sm font-semibold max-sm:min-h-11 sm:col-span-3"><input type="checkbox" name="addonsIncluded" defaultChecked={p.addonsIncluded ?? true} className="size-5" /> Ice melt is included in the season price</label>
         <p className="text-xs text-ink-soft sm:col-span-3">Each payment is invoiced and emailed automatically on its due date: the first on the date above, the rest on the 1st of each following month.</p>
       </fieldset>
     </div>

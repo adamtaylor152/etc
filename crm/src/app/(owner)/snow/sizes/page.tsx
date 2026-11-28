@@ -25,6 +25,7 @@ export default async function SizeCheck({ searchParams }: PageProps<"/snow/sizes
     orderBy: { createdAt: "asc" },
   });
   const link = "font-semibold text-blue hover:text-blue-deep";
+  const rowLink = `${link} max-sm:inline-flex max-sm:min-h-11 max-sm:items-center`; // its own 44px box on a phone
   return (
     <>
       <DetailHeader back={{ href: "/snow", label: "Snow" }} title="Size check"
@@ -49,9 +50,9 @@ export default async function SizeCheck({ searchParams }: PageProps<"/snow/sizes
                       <h2 className="font-display text-[0.95rem] font-semibold">{p.formatted}</h2>
                       {held && pend && <Badge tone="amber">Off the route</Badge>}
                     </div>
-                    <p className="mt-1 text-ink-soft"><Link href={`/clients/${p.clientId}`} className={link}>{clientName(p.client)}</Link> · booked as <span className="font-semibold text-navy">{SIZES[size].short}</span>{p.extraWalk ? " + extra sidewalk" : ""}</p>
+                    <p className="mt-1 text-ink-soft"><Link href={`/clients/${p.clientId}`} className={rowLink}>{clientName(p.client)}</Link> · booked as <span className="font-semibold text-navy">{SIZES[size].short}</span>{p.extraWalk ? " + extra sidewalk" : ""}</p>
                     <ul className="mt-1 space-y-0.5 text-ink-soft">
-                      {p.jobs.map((j) => { const c = currentCharge(j.lineItems); return <li key={j.id}><Link href={`/jobs/${j.id}`} className={link}>Job #{j.number}</Link> · {j.kind === "SNOW_PLAN" ? "every snowfall" : "one-time"} · <span className="tabular-nums">{j.snowBillingMode === "SEASONAL" ? "flat season price (size won't change it)" : dollars(c.base + c.walk)}</span></li>; })}
+                      {p.jobs.map((j) => { const c = currentCharge(j.lineItems); return <li key={j.id}><Link href={`/jobs/${j.id}`} className={rowLink}>Job #{j.number}</Link> · {j.kind === "SNOW_PLAN" ? "every snowfall" : "one-time"} · <span className="tabular-nums">{j.snowBillingMode === "SEASONAL" ? "flat season price (size won't change it)" : dollars(c.base + c.walk)}</span></li>; })}
                     </ul>
                     {p.lat != null && p.lng != null && <a href={`https://www.google.com/maps/@${p.lat},${p.lng},40m/data=!3m1!1e3`} target="_blank" rel="noreferrer" className={`mt-2 inline-flex min-h-8 items-center gap-1.5 text-xs ${link}`}><ExternalLink className="size-3.5" aria-hidden />Open in Google Maps (measure distance)</a>}
                     {held && pend && (

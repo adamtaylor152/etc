@@ -1,6 +1,8 @@
 // Availability: working hours + time off, conflict warnings, and "Find a time" slot suggestions.
 // Everything here is pure (Calgary-local minutes and YYYY-MM-DD dates) and unit-tested; schedule-data.ts loads the rows.
 
+import { prettyMinutes } from "./dates";
+
 export type WorkHours = Record<string, [string, string]>; // weekday "0"(Sun)..."6" -> ["08:00","18:00"]; missing = day off
 export type TimeOffRow = { userId: string | null; startDate: string; endDate: string; reason?: string | null };
 export type Busy = { id: string; userIds: string[]; date: string; start: number | null; end: number | null; label: string; lat?: number | null; lng?: number | null };
@@ -22,10 +24,10 @@ export const onTimeOff = (rows: TimeOffRow[], userId: string | null, date: strin
 /** Why a person can't work then (null = fine). */
 export function unavailable(hours: WorkHours, timeOff: TimeOffRow[], userId: string, date: string, start: number | null, end: number | null) {
   const off = onTimeOff(timeOff, userId, date);
-  if (off) return off.userId ? `time off${off.reason ? ` (${off.reason})` : ""}` : `closed${off.reason ? ` (${off.reason})` : ""}`;
+  if (off) return off.userId ? `time off${off.reason ? `: ${off.reason}` : ""}` : `closed${off.reason ? `: ${off.reason}` : ""}`;
   const day = hours[String(weekday(date))];
   if (!day) return "their day off";
-  if (start != null && (start < toMin(day[0]) || (end ?? start + 60) > toMin(day[1]))) return `outside their hours (${fmtMin(toMin(day[0]))}–${fmtMin(toMin(day[1]))})`;
+  if (start != null && (start < toMin(day[0]) || (end ?? start + 60) > toMin(day[1]))) return `outside their hours, ${prettyMinutes(toMin(day[0]))}–${prettyMinutes(toMin(day[1]))}`;
   return null;
 }
 
