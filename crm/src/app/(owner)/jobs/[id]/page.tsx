@@ -35,7 +35,7 @@ import { describeTiers, parseTiers } from "@/server/snow/tiers";
 import { SKIP_LABEL } from "@/server/status/visit";
 
 const hm = (min: number) => `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
-const SKIP = (["CLIENT_CANCELLED", "WEATHER", "NO_ACCESS", "OTHER"] as const).map((k) => [k, SKIP_LABEL[k]] as const);
+const SKIP = (["ALREADY_CLEARED", "BLOCKED_BY_CAR", "NO_ACCESS", "CLIENT_CANCELLED", "WEATHER", "OTHER"] as const).map((k) => [k, SKIP_LABEL[k]] as const);
 
 export async function generateMetadata({ params }: PageProps<"/jobs/[id]">) {
   await requireOwner();

@@ -193,7 +193,7 @@ export function ListPage({ title, base, params, newHref, newLabel, actions, over
                   <tr key={r.id} className={`relative grid items-start gap-x-3 gap-y-0.5 border-b border-line-soft px-4 py-3 max-sm:py-2 last:border-0 hover:bg-tint has-[:checked]:bg-blue/5 sm:table-row sm:p-0 ${bulk ? "grid-cols-[auto_minmax(0,1fr)_auto]" : "grid-cols-[minmax(0,1fr)_auto]"}`}>
                     {bulk && (
                       <td className="col-start-1 row-span-2 self-center sm:w-10 sm:py-3.5 sm:pl-4 sm:align-top">
-                        <input type="checkbox" name="ids" value={r.id} form="bulk-form" aria-label="Select row" className="relative z-10 block size-5 sm:mt-0.5 sm:size-4" />
+                        <label className="relative z-10 -my-2 -ml-3 grid size-11 place-items-center sm:m-0 sm:block sm:size-auto"><input type="checkbox" name="ids" value={r.id} form="bulk-form" aria-label="Select row" className="block size-5 sm:mt-0.5 sm:size-4" /></label>
                       </td>
                     )}
                     {columns.map((c, i) => (

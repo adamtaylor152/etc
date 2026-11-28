@@ -129,7 +129,7 @@ export default async function Timesheets({ searchParams }: PageProps<"/timesheet
                     {list.map((e) => (
                       <li key={e.id} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 py-2">
                         <span className="w-28 shrink-0 truncate font-semibold">{personName(e.user)}</span>
-                        <span className="flex min-w-32 flex-1 flex-wrap items-center gap-2">{e.jobId ? <Link href={`/jobs/${e.jobId}`} className="font-medium text-blue hover:text-blue-deep">{jobs.get(e.jobId)}</Link> : <span className="text-ink-soft">General</span>}{!e.endedAt && <Running />}</span>
+                        <span className="flex min-w-32 flex-1 flex-wrap items-center gap-2">{e.jobId ? <Link href={`/jobs/${e.jobId}`} className="font-medium text-blue hover:text-blue-deep max-sm:inline-flex max-sm:min-h-11 max-sm:items-center">{jobs.get(e.jobId)}</Link> : <span className="text-ink-soft">General</span>}{!e.endedAt && <Running />}</span>
                         <div className="flex w-full items-center justify-end gap-1.5 sm:w-auto">
                         {e.approvedAt ? (
                           <span className="mr-auto inline-flex items-center gap-1.5 text-emerald-700 sm:mr-0"><Lock className="size-3.5" strokeWidth={1.75} aria-hidden /><span className="font-medium tabular-nums">{hm(e.minutes ?? 0)}</span> approved{e.note && <span className="text-ink-soft">· {e.note}</span>}</span>

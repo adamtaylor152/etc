@@ -85,7 +85,7 @@ export default async function ReportPage({ params, searchParams }: PageProps<"/r
             <span className="text-xs tabular-nums text-ink-soft">{t.rows.length.toLocaleString("en-CA")} row{t.rows.length === 1 ? "" : "s"}</span>
           </div>
           <div className="report-scroll relative max-h-[70vh] overflow-auto">
-            <table className="report-table w-full border-separate border-spacing-0 text-sm">
+            <table className={`report-table w-full border-separate border-spacing-0 ${t.columns.length >= 12 ? "text-xs [&_td]:px-1.5! [&_th]:px-1.5! [&_td]:min-w-0! [&_td]:whitespace-normal!" : "text-sm"}`}>
               <thead>
                 <tr>{t.columns.map(([l, k], j) => <th key={l} scope="col" className={`sticky top-0 z-10 ${t.columns.length >= 10 ? "align-bottom whitespace-normal!" : "whitespace-nowrap"} border-b border-line bg-white px-3 py-2.5 shadow-[0_1px_0_var(--color-line)] text-xs font-medium text-ink-soft first:pl-4 last:pr-4 ${cell(k)} ${j === 0 ? "left-0 z-20" : ""}`}>{l}</th>)}</tr>
               </thead>

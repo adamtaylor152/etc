@@ -39,7 +39,7 @@ export function conflicts(item: Busy, others: Busy[], people: { id: string; name
     const p = people.find((x) => x.id === uid);
     if (!p) continue;
     const why = unavailable(p.hours, timeOff, uid, item.date, item.start, item.end);
-    if (why) out.push(`${p.name}: ${why}`);
+    if (why) out.push(`${p.name} isn't working then (${why})`);
     const clash = others.find((o) => o.id !== item.id && o.date === item.date && o.userIds.includes(uid) && overlaps(o, item));
     if (clash) out.push(`${p.name} is already booked then (${clash.label})`);
   }

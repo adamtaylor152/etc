@@ -22,7 +22,7 @@ export function BrandFields({ logoUrl, color, businessName }: { logoUrl: string 
         <label className="block">
           <span className="mb-1 block text-sm font-semibold">Brand colour</span>
           <span className="flex items-center gap-3">
-            <input type="color" name="brandColor" value={c} onChange={(e) => setC(e.target.value)} className="h-10 w-16 cursor-pointer rounded-lg border border-line bg-white p-1" />
+            <input type="color" name="brandColor" value={c} onChange={(e) => setC(e.target.value)} className="h-10 w-16 cursor-pointer rounded-lg border border-line bg-white p-1 max-sm:h-11" />
             <code className="text-sm tabular-nums text-ink-soft">{c}</code>
           </span>
           <span className="mt-1 block text-xs text-ink-soft">Buttons and links. Light colours are refused so white button text stays readable.</span>

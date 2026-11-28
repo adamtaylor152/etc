@@ -75,7 +75,7 @@ export default async function Marketing({ searchParams }: PageProps<"/marketing"
             <ul className="divide-y divide-line-soft text-sm">
               {referrals.slice(0, 15).map((r) => (
                 <li key={r.id} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 py-2.5">
-                  <span className="min-w-0"><Link href={`/clients/${r.referrerId}`} className="font-semibold text-blue hover:underline">{names.get(r.referrerId)}</Link> referred <Link href={`/clients/${r.refereeId}`} className="font-medium text-blue hover:underline">{names.get(r.refereeId)}</Link></span>
+                  <span className="min-w-0"><Link href={`/clients/${r.referrerId}`} className="font-semibold text-blue hover:underline max-sm:flex max-sm:min-h-11 max-sm:items-center">{names.get(r.referrerId)}</Link> <span className="max-sm:flex max-sm:min-h-11 max-sm:items-center max-sm:gap-1">referred <Link href={`/clients/${r.refereeId}`} className="font-medium text-blue hover:underline max-sm:flex max-sm:min-h-11 max-sm:items-center">{names.get(r.refereeId)}</Link></span></span>
                   <Badge tone={r.status === "REWARDED" ? "green" : r.status === "QUALIFIED" ? "blue" : "gray"}>{r.status === "PENDING" ? "Booked" : r.status === "QUALIFIED" ? "Credit issued" : "Credit used"}</Badge>
                 </li>
               ))}

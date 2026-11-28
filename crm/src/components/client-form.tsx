@@ -26,7 +26,7 @@ const group = "mb-1 text-sm font-semibold";
 // Repeatable phone / email rows share one grid (type, value, texts, remove). Phones: tighter padding so a full number shows at 390px.
 const rowCls = "grid items-center gap-1.5 sm:gap-2 max-sm:[&_input:not([type=checkbox])]:px-2 max-sm:[&_select]:px-1.5";
 const Toggle = ({ checked, onChange, label, hint }: { checked: boolean; onChange: (v: boolean) => void; label: string; hint?: string }) => (
-  <label className="flex items-start gap-3 py-2.5 text-sm">
+  <label className="flex items-start gap-3 py-2.5 text-sm max-sm:min-h-11 max-sm:items-center">
     <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="mt-0.5 size-4 shrink-0" />
     <span><span className="font-medium">{label}</span>{hint && <span className="block text-xs text-ink-soft">{hint}</span>}</span>
   </label>
