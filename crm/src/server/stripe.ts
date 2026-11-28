@@ -16,7 +16,7 @@ export function stripe(): Stripe {
  * A Checkout Session for an invoice's remaining balance; created when the client clicks Pay, never in advance.
  * With `save`, the card is also kept on the client's Stripe Customer for later (the webhook stores it).
  */
-export async function checkoutForInvoice(inv: { id: string; businessId: string; number: number; balanceCents: number; email: string }, token: string, save?: { customerId: string; clientId: string; autoPay: boolean }) {
+export async function checkoutForInvoice(inv: { id: string; businessId: string; number: number; balanceCents: number; email: string }, returnPath: string, save?: { customerId: string; clientId: string; autoPay: boolean }) {
   const metadata = { invoiceId: inv.id, businessId: inv.businessId, ...(save ? { saveCard: "1", clientId: save.clientId, autoPay: save.autoPay ? "1" : "0", source: "invoice" } : {}) };
   return stripe().checkout.sessions.create({
     mode: "payment",
@@ -25,8 +25,8 @@ export async function checkoutForInvoice(inv: { id: string; businessId: string; 
     line_items: [{ quantity: 1, price_data: { currency: "cad", unit_amount: inv.balanceCents, product_data: { name: `etc. invoice #${inv.number}` } } }],
     metadata,
     payment_intent_data: { metadata, statement_descriptor_suffix: "ETC CREW", ...(save ? { setup_future_usage: "off_session" as const } : {}) },
-    success_url: `${env.appUrl}/i/${token}?paid=1`,
-    cancel_url: `${env.appUrl}/i/${token}`,
+    success_url: `${env.appUrl}${returnPath}?paid=1`,
+    cancel_url: `${env.appUrl}${returnPath}`,
   });
 }
 

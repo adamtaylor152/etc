@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chargesForVisit } from "@/server/billing/charges";
+import { chargesForVisit, extrasOffered } from "@/server/billing/charges";
 import { plansTriggered } from "@/server/snow/select";
 import { assertTransition, canTransition } from "@/server/status/visit";
 
@@ -43,6 +43,13 @@ describe("chargesForVisit", () => {
     expect(chargesForVisit(seasonal, { iceMeltApplied: true }, 500)).toEqual([{ name: "Ice melt", quantity: 1, unitPriceCents: 500, totalCents: 500 }]);
     expect(chargesForVisit(seasonal, { iceMeltApplied: false }, 500)).toEqual([]);
   });
+  it("extra sidewalk is charged with every clearing the client pays for", () => {
+    const walk = { ...plan, iceMelt: false, lineItems: [{ name: "Extra sidewalk (corner lot / long walk)", quantity: 1, unitPriceCents: 1000, perVisit: true }] };
+    expect(chargesForVisit({ ...walk, snowBillingMode: "PER_PUSH" }, { iceMeltApplied: null }, 500).map((c) => c.totalCents)).toEqual([3000, 1000]);
+    expect(chargesForVisit({ ...walk, snowBillingMode: "PER_EVENT" }, { iceMeltApplied: null }, 500).map((c) => c.totalCents)).toEqual([3000, 1000]);
+    expect(chargesForVisit({ ...walk, snowBillingMode: "PER_EVENT" }, { iceMeltApplied: null, stormCharged: true }, 500)).toEqual([]);
+    expect(chargesForVisit({ ...walk, snowBillingMode: "SEASONAL" }, { iceMeltApplied: null }, 500)).toEqual([]);
+  });
   it("fixed price charges nothing per visit", () => {
     expect(chargesForVisit({ ...plan, kind: "ONE_OFF", billingType: "FIXED_PRICE", snowBillingMode: null }, { iceMeltApplied: null }, 500)).toEqual([]);
   });
@@ -54,6 +61,33 @@ describe("chargesForVisit", () => {
     ] };
     expect(chargesForVisit(job, { iceMeltApplied: null }, 500).map((c) => c.totalCents)).toEqual([3500, 500]);
     expect(chargesForVisit(job, { iceMeltApplied: false }, 500).map((c) => c.totalCents)).toEqual([3500]);
+  });
+  it("a plan's extra-sidewalk line is charged with each clearing", () => {
+    const job = { ...plan, iceMelt: false, snowBillingMode: "PER_PUSH" as const, lineItems: [
+      { name: "Snow shovelling, every snowfall (per push)", quantity: 1, unitPriceCents: 3000, perVisit: true },
+      { name: "Extra sidewalk (corner lot / long walk)", quantity: 1, unitPriceCents: 1000, perVisit: true },
+    ] };
+    expect(chargesForVisit(job, { iceMeltApplied: null }, 500).map((c) => c.totalCents)).toEqual([3000, 1000]);
+  });
+  const iceExtra = { serviceKey: "ice_melt", name: "Ice melt (pet safe)", unitPriceCents: 600 };
+  const gutters = { serviceKey: "gutters", name: "Gutter check", unitPriceCents: 2000 };
+  it("a client's one-off extras are billed once, with the visit", () => {
+    const noIce = { ...plan, iceMelt: false, snowBillingMode: "PER_PUSH" as const };
+    expect(chargesForVisit(noIce, { iceMeltApplied: null }, 500, [iceExtra, gutters]).map((c) => c.totalCents)).toEqual([3000, 600, 2000]);
+    // crew ticked "ice melt": the job's ice-melt charge stands in for the extra, never both
+    expect(chargesForVisit(noIce, { iceMeltApplied: true }, 500, [iceExtra]).map((c) => c.name)).toEqual(["Snow clearing (per push)", "Ice melt"]);
+    // crew said none went down: not billed
+    expect(chargesForVisit(noIce, { iceMeltApplied: false }, 500, [iceExtra, gutters]).map((c) => c.totalCents)).toEqual([3000, 2000]);
+    // seasonal plans and later pushes of a per-event storm still bill the extra
+    expect(chargesForVisit({ ...noIce, snowBillingMode: "SEASONAL" }, { iceMeltApplied: null }, 500, [gutters]).map((c) => c.totalCents)).toEqual([2000]);
+    expect(chargesForVisit({ ...noIce, snowBillingMode: "PER_EVENT" }, { iceMeltApplied: null, stormCharged: true }, 500, [gutters]).map((c) => c.totalCents)).toEqual([2000]);
+  });
+  it("offers only add-ons the job and visit don't already have", () => {
+    const addOns = [{ key: "ice_melt", name: "Ice melt (pet safe)" }, { key: "extra_walk", name: "Extra sidewalk (corner lot / long walk)" }, { key: "gutters", name: "Gutter check" }];
+    const job = { billingType: "PER_VISIT" as const, iceMelt: false, lineItems: [{ name: "Extra sidewalk (corner lot / long walk)" }] };
+    expect(extrasOffered(addOns, job, []).map((a) => a.key)).toEqual(["ice_melt", "gutters"]);
+    expect(extrasOffered(addOns, { ...job, iceMelt: true }, [{ serviceKey: "gutters" }])).toEqual([]);
+    expect(extrasOffered(addOns, { ...job, billingType: "FIXED_PRICE" }, [])).toEqual([]);
   });
 });
 

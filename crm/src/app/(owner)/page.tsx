@@ -40,7 +40,7 @@ export default async function Home({ searchParams }: PageProps<"/">) {
     jobsWithStatus({ businessId: bid, closedAt: null }, today),
     db.invoice.findMany({ where: { businessId: bid, status: { in: ["DRAFT", "AWAITING_PAYMENT"] } }, include: { client: true } }),
     db.visitCharge.aggregate({ where: { businessId: bid, invoiceLineItemId: null }, _sum: { totalCents: true } }),
-    db.visit.findMany({ where: { businessId: bid, scheduledDate: toDbDate(today), state: { not: "CANCELLED" } }, include: { job: { include: { client: true } }, property: true, assignees: { include: { user: true } } }, orderBy: [{ startAt: "asc" }, { routeSort: "asc" }] }),
+    db.visit.findMany({ where: { businessId: bid, scheduledDate: toDbDate(today), state: { not: "CANCELLED" } }, include: { job: { include: { client: true } }, property: true, assignees: { include: { user: true } } }, orderBy: [{ startAt: "asc" }, { property: { routeSort: "asc" } }] }),
     db.task.findMany({ where: { businessId: bid, date: toDbDate(today) }, include: { assignees: { include: { user: true } } }, orderBy: { startAt: "asc" } }),
     db.task.count({ where: { businessId: bid, kind: "TASK", completedAt: null, date: { lte: toDbDate(today) } } }),
     db.unmatchedPayment.count({ where: { businessId: bid, status: "OPEN" } }),

@@ -1,12 +1,14 @@
 import { requireOwner } from "@/server/auth";
 import Link from "next/link";
-import { Button, Card, Field, Input, PageHeader, inputCls } from "@/components/ui";
+import { ConfirmButton } from "@/components/confirm-button";
+import { Flash } from "@/components/flash";
+import { Button, Card, Field, Input, PageHeader, btn, inputCls } from "@/components/ui";
 import { dateOnly } from "@/server/dates";
 import { business, businessId, db } from "@/server/db";
 import { env } from "@/server/env";
-import { parseSettings, SETTING_LABELS, type ToggleKey } from "@/server/settings";
+import { parseSettings, SETTING_DAYS, SETTING_LABELS, type ToggleKey } from "@/server/settings";
 import { stripeEnabled } from "@/server/stripe";
-import { saveAutomations, saveBusiness, saveSeason, saveTax } from "./actions";
+import { quoteTemplateDelete, quoteTemplateRename, saveAutomations, saveBusiness, saveSchedule, saveSeason, saveTax } from "./actions";
 
 export const metadata = { title: "Settings" };
 
@@ -16,14 +18,16 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
   const bid = await businessId();
   const biz = await business();
   const settings = parseSettings(biz.settings);
-  const [seasons, users, area] = await Promise.all([
+  const [seasons, users, area, templates] = await Promise.all([
     db.season.findMany({ where: { businessId: bid }, orderBy: { startsOn: "desc" } }),
     db.user.findMany({ where: { businessId: bid }, orderBy: { email: "asc" } }),
     db.serviceCommunity.findMany({ where: { businessId: bid, active: true }, include: { community: true }, orderBy: { sortOrder: "asc" } }),
+    db.quoteTemplate.findMany({ where: { businessId: bid }, orderBy: { name: "asc" } }),
   ]);
   return (
     <>
       <PageHeader title="Settings" actions={<><Link href="/settings/price-book" className="inline-flex min-h-10 items-center rounded-lg border border-line bg-white px-4 text-sm font-semibold hover:bg-tint">Price book</Link><Link href="/settings/checklists" className="inline-flex min-h-10 items-center rounded-lg border border-line bg-white px-4 text-sm font-semibold hover:bg-tint">Checklists</Link><Link href="/settings/team" className="inline-flex min-h-10 items-center rounded-lg border border-line bg-white px-4 text-sm font-semibold hover:bg-tint">Team &amp; people</Link></>} />
+      <Flash error={sp.error} />
       {sp.saved && <p className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-medium text-emerald-800">Saved.</p>}
       <div className="grid gap-5 lg:grid-cols-2">
         <Card title="Business">
@@ -47,16 +51,56 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
 
         <Card title="Automations">
           <form action={saveAutomations} className="space-y-3">
-            {(Object.keys(SETTING_LABELS) as ToggleKey[]).map((k) => (
-              <label key={k} className="flex items-start gap-3">
-                <input type="checkbox" name={k} defaultChecked={settings[k]} className="mt-1 size-5 shrink-0" />
-                <span><span className="block font-semibold">{SETTING_LABELS[k][0]}</span><span className="text-sm text-ink-soft">{SETTING_LABELS[k][1]}</span></span>
-              </label>
-            ))}
+            {(Object.keys(SETTING_LABELS) as ToggleKey[]).map((k) => {
+              const days = k in SETTING_DAYS ? SETTING_DAYS[k as keyof typeof SETTING_DAYS] : null;
+              return (
+                <div key={k}>
+                  <label className="flex items-start gap-3">
+                    <input type="checkbox" name={k} defaultChecked={settings[k]} className="mt-1 size-5 shrink-0" />
+                    <span><span className="block font-semibold">{SETTING_LABELS[k][0]}</span><span className="text-sm text-ink-soft">{SETTING_LABELS[k][1]}</span></span>
+                  </label>
+                  {days && <label className="ml-8 mt-1 flex items-center gap-2 text-sm">Send <input name={days} type="number" min={1} max={60} defaultValue={settings[days]} className="h-9 w-20 rounded-lg border border-line px-2" /> days after the quote is sent</label>}
+                </div>
+              );
+            })}
             <Field label="Auto-pay: days between the invoice email and the charge" hint={stripeEnabled() ? "Time for the client to object. 0 = charged the same day. Never before the invoice is due." : "Needs card payments (Stripe) turned on."}>
               <Input name="autoPayGraceDays" type="number" min={0} max={14} defaultValue={settings.autoPayGraceDays} className="max-w-24" />
             </Field>
             <Button>Save automations</Button>
+          </form>
+        </Card>
+
+        <Card title="Quote templates">
+          <ul className="space-y-2">
+            {templates.map((t) => (
+              <li key={t.id} className="flex items-center gap-2">
+                <form action={quoteTemplateRename} className="flex flex-1 gap-2"><input type="hidden" name="id" value={t.id} /><Input name="name" defaultValue={t.name} required maxLength={80} aria-label="Template name" /><Button variant="secondary">Rename</Button></form>
+                <form action={quoteTemplateDelete}><input type="hidden" name="id" value={t.id} /><ConfirmButton message={`Delete the template "${t.name}"? Quotes already made from it are not affected.`} className={btn("danger")}>Delete</ConfirmButton></form>
+              </li>
+            ))}
+          </ul>
+          <p className={`text-sm text-ink-soft ${templates.length ? "mt-3" : ""}`}>{templates.length ? "" : "None yet. "}Open any quote and choose “Save as template”; pick the template when you start a new quote.</p>
+        </Card>
+
+        <Card title="Reminders & arrival windows">
+          <form id="schedule" action={saveSchedule} className="space-y-3">
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              Remind clients <input name="reminderDaysBefore" type="number" min={1} max={7} defaultValue={settings.reminderDaysBefore} aria-label="Days before" className="h-9 w-16 rounded-lg border border-line px-2" /> day(s) before, at
+              <select name="reminderHour" defaultValue={settings.reminderHour} aria-label="Hour" className="h-9 rounded-lg border border-line bg-white px-2">
+                {Array.from({ length: 16 }, (_, i) => i + 6).map((h) => <option key={h} value={h}>{h % 12 || 12} {h < 12 ? "am" : "pm"}</option>)}
+              </select>
+            </div>
+            <p className="text-sm font-semibold">Arrival windows <span className="font-normal text-ink-soft">(offered in online booking and as one-tap times on the schedule forms)</span></p>
+            {[...settings.arrivalWindows, ...Array.from({ length: Math.max(0, 6 - settings.arrivalWindows.length) }, () => ({ key: "", label: "", from: "", to: "" }))].map((w, i) => (
+              <div key={i} className="grid grid-cols-[1fr_7rem_7rem] gap-2">
+                <input type="hidden" name="winKey" value={w.key} />
+                <Input name="winLabel" defaultValue={w.label} placeholder={w.key ? undefined : "Add a window"} maxLength={20} aria-label="Window name" />
+                <Input name="winFrom" type="time" defaultValue={w.from} aria-label="From" />
+                <Input name="winTo" type="time" defaultValue={w.to} aria-label="To" />
+              </div>
+            ))}
+            <p className="text-xs text-ink-soft">Clear a name to remove that window. Times already booked keep their own start and end.</p>
+            <Button>Save</Button>
           </form>
         </Card>
 
@@ -99,7 +143,8 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
 
         <Card title="Service area">
           <p className="text-sm">{area.map((a) => a.community.name).join(", ")}</p>
-          <p className="mt-2 text-xs text-ink-soft">Routes visit communities in this order (Evergreen first). Addresses outside it still work; they land under &quot;No community&quot; until pinned.</p>
+          <p className="mt-2 text-xs text-ink-soft">Routes visit communities in this order. Addresses outside it still work; they land under &quot;No community&quot; until pinned.</p>
+          <Link href="/settings/route" className="mt-2 inline-block text-sm font-semibold text-blue">Change the order &amp; stop times</Link>
         </Card>
       </div>
     </>

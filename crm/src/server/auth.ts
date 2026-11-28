@@ -40,7 +40,7 @@ export const currentUser = cache(async () => {
   return s.user;
 });
 
-/** Anyone signed in, crew included. Only the crew surface uses this: the route runner, its API and photo uploads. */
+/** Anyone signed in, crew included. Only the crew surface uses this: the route runner, its API, photo uploads and their own time. */
 export async function requireUser(next?: string) {
   const u = await currentUser();
   if (!u) redirect(next ? `/login?next=${encodeURIComponent(next)}` : "/login");

@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import { saveSignature } from "@/server/ops/signatures";
 import { redirect } from "next/navigation";
 import { db } from "@/server/db";
-import { approveQuote, requestQuoteChanges } from "@/server/ops/quotes";
+import { approveQuote, declineQuote, requestQuoteChanges } from "@/server/ops/quotes";
 import { TransitionError } from "@/server/status/visit";
 import { peekToken } from "@/server/tokens";
 
@@ -48,4 +48,16 @@ export async function clientRequestChanges(f: FormData) {
     throw e;
   }
   redirect(`/q/${token}?changes=1`);
+}
+
+/** "No thanks": the reason is optional. The owner is emailed. */
+export async function clientDecline(f: FormData) {
+  const { token, quoteId } = await quoteFor(f);
+  try {
+    await declineQuote(quoteId, String(f.get("reason") ?? "").trim().slice(0, 2000));
+  } catch (e) {
+    if (e instanceof TransitionError) redirect(`/q/${token}?error=${encodeURIComponent("This quote can't be declined any more. Give us a call.")}`);
+    throw e;
+  }
+  redirect(`/q/${token}?declined=1`);
 }

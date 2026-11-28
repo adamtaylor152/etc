@@ -472,6 +472,7 @@
       services: d.raw, plan: form.plan.value, icemelt: form.icemelt.checked, size: d.raw.includes("Snow shovelling") ? d.size : undefined, extraWalk: d.walk,
       date: d.date, notes: d.notes, payment: d.payment, website: form.website.value, smsOptIn: !!d.phone && form.smsOptIn.checked, offers: form.offers.checked, ...(geo || {}),
       slot: pickedSlot && d.quoted.length ? (pickedSlot.window ? { date: pickedSlot.date, window: pickedSlot.window } : { date: pickedSlot.date, start: pickedSlot.start }) : undefined,
+      utm: new URLSearchParams(location.search).get("utm_source") || undefined, // which ad or post sent them (becomes the client's lead source)
       ref: new URLSearchParams(location.search).get("ref") || localStorage.getItem("etcRef") || undefined, // referral code from a friend's link
     });
     const post = url => fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: payload });

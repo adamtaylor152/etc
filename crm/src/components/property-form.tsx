@@ -5,7 +5,7 @@ import { Field, Input, Textarea } from "./ui";
 
 export function PropertyForm({ clientId, p, mapsKey, communities, error }: {
   clientId: string; mapsKey?: string; communities: { code: string; name: string }[]; error?: string;
-  p?: { id: string; formatted: string; label: string | null; communityCode: string | null; lat: number | null; lng: number | null; accessNotes: string | null; gateCode: string | null; petNotes: string | null; hazards: string | null; isDefault: boolean };
+  p?: { id: string; formatted: string; label: string | null; communityCode: string | null; lat: number | null; lng: number | null; accessNotes: string | null; gateCode: string | null; petNotes: string | null; hazards: string | null; isDefault: boolean; routePriority: boolean; steps: number | null; sidewalkM: number | null; lawnSqM: number | null };
 }) {
   return (
     <form action={propertySave} className="max-w-2xl space-y-4 rounded-lg border border-line bg-white p-5 shadow-card">
@@ -22,6 +22,12 @@ export function PropertyForm({ clientId, p, mapsKey, communities, error }: {
         <Field label="Pets"><Input name="petNotes" defaultValue={p?.petNotes ?? ""} placeholder="Friendly lab in the yard" /></Field>
         <Field label="Hazards"><Input name="hazards" defaultValue={p?.hazards ?? ""} placeholder="Icy patch by the downspout" /></Field>
       </div>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Field label="Steps" hint="How many to clear"><Input name="steps" type="number" min={0} max={200} defaultValue={p?.steps ?? ""} /></Field>
+        <Field label="Sidewalk (m)" hint="Length the crew clears"><Input name="sidewalkM" type="number" min={0} max={2000} defaultValue={p?.sidewalkM ?? ""} /></Field>
+        <Field label="Lawn (m²)" hint="For yard-care quotes"><Input name="lawnSqM" type="number" min={0} max={100000} defaultValue={p?.lawnSqM ?? ""} /></Field>
+      </div>
+      <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="routePriority" defaultChecked={p?.routePriority} className="size-4" />Do first on the route <span className="text-ink-soft">(seniors, medical needs, early commuters: goes to the front of its community)</span></label>
       <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="isDefault" defaultChecked={p?.isDefault} className="size-4" />Main property for this client</label>
       <button className="inline-flex min-h-10 items-center rounded-lg bg-blue px-5 text-sm font-semibold text-white">Save property</button>
     </form>

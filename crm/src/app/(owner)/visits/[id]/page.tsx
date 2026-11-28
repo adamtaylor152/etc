@@ -1,3 +1,4 @@
+import { siteFacts } from "@/server/clients";
 import { SignatureCard } from "@/components/signatures";
 import { VisitChecklistCard } from "@/components/visit-checklist";
 import { assignPeople } from "../../schedule-actions";
@@ -38,7 +39,7 @@ export default async function VisitPage({ params, searchParams }: PageProps<"/vi
   const v = await db.visit.findFirst({
     where: { id, businessId: bid },
     include: {
-      job: { include: { client: true, lineItems: true } }, property: { include: { community: true } }, snowEvent: true, charges: true, assignees: true,
+      job: { include: { client: true, lineItems: true } }, property: { include: { community: true } }, snowEvent: true, charges: true, assignees: true, extras: { orderBy: { createdAt: "asc" } },
       attachments: { where: { deletedAt: null }, orderBy: { createdAt: "asc" } },
     },
   });
@@ -86,18 +87,24 @@ export default async function VisitPage({ params, searchParams }: PageProps<"/vi
         </div>
       </div>
 
-      {(v.property.accessNotes || v.property.gateCode || v.property.hazards || v.property.petNotes || v.job.instructions || v.instructions) && (
+      {(v.property.accessNotes || v.property.gateCode || v.property.hazards || v.property.petNotes || v.job.instructions || v.instructions || siteFacts(v.property)) && (
         <Card className="mb-4 border-amber-200 bg-amber-50">
-          <Dl rows={[["Access", v.property.accessNotes], ["Gate code", v.property.gateCode], ["Pets", v.property.petNotes], ["Watch out", v.property.hazards], ["Instructions", v.instructions ?? v.job.instructions]]} />
+          <Dl rows={[["Access", v.property.accessNotes], ["Gate code", v.property.gateCode], ["Pets", v.property.petNotes], ["Watch out", v.property.hazards], ["Site", siteFacts(v.property)], ["Instructions", v.instructions ?? v.job.instructions]]} />
         </Card>
       )}
 
 
+      {v.extras.length > 0 && (
+        <Card title="Extras the client added" className="mb-4 border-blue/30">
+          <ul className="text-sm">{v.extras.map((e) => <li key={e.id} className="flex justify-between gap-2 py-0.5"><span className="font-semibold">{e.name}</span><span className="text-ink-soft">{money(e.unitPriceCents)}</span></li>)}</ul>
+          <p className="mt-1 text-xs text-ink-soft">Added from their client page. Billed once, with this visit, when it&apos;s marked done.</p>
+        </Card>
+      )}
       <VisitChecklistCard businessId={v.businessId} visitId={v.id} editable={v.state !== "CANCELLED"} />
       {(v.job.requireSignature || v.state === "COMPLETED") && <div className="my-4"><SignatureCard where={{ visitId: v.id }} signHref={`/sign/visit/${v.id}`} title={v.job.requireSignature ? "Client signature (needed before Done)" : "Client signature"} /></div>}
       <Card title="Time" className="my-4">
         <VisitTimer visitId={v.id} runningSince={running?.visitId === v.id ? running.startedAt.toISOString() : null} back={`/visits/${v.id}`} />
-        {running && running.visitId !== v.id && <p className="mt-2 text-xs text-ink-soft">Your timer is running on another visit. Starting here stops that one.</p>}
+        {running && running.visitId !== v.id && <p className="mt-2 text-xs text-ink-soft">{running.visitId ? "Your timer is running on another visit. Starting here stops that one." : "You're on the day clock. Starting here pauses it until you stop this timer."}</p>}
         {visitTime.length > 0 && <p className="mt-2 text-sm text-ink-soft">Logged: {visitTime.map((t) => `${personName(t.user)} ${hm(t.minutes ?? 0)}`).join(" · ")}</p>}
       </Card>
       <Card title="Who's on it" className="my-4">

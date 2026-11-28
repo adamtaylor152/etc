@@ -37,3 +37,18 @@ describe("merge covers every table that points at a client", () => {
     expect([...CLIENT_REFS].sort()).toEqual(models.sort());
   });
 });
+
+import { leadSourceFromUtm, siteFacts } from "@/server/clients";
+describe("lead source from a booking link", () => {
+  it("maps known sources and tidies unknown ones", () => {
+    expect(["google", "GMB", "fb", "Instagram", "nextdoor", "doorhanger", "spring_flyer"].map(leadSourceFromUtm)).toEqual(["Google", "Google", "Facebook", "Facebook", "Nextdoor", "Door hanger", "Door hanger"]);
+    expect(leadSourceFromUtm("kijiji<script>")).toBe("Kijijiscript");
+    expect([leadSourceFromUtm(""), leadSourceFromUtm(undefined), leadSourceFromUtm(42)]).toEqual([null, null, null]);
+  });
+});
+describe("siteFacts", () => {
+  it("lists what is recorded", () => {
+    expect(siteFacts({ steps: 1, sidewalkM: 22, lawnSqM: null })).toBe("1 step · 22 m sidewalk");
+    expect(siteFacts({ steps: null, sidewalkM: null, lawnSqM: null })).toBeNull();
+  });
+});

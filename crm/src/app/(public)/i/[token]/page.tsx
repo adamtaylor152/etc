@@ -1,6 +1,7 @@
 /* eslint-disable @next/next/no-img-element -- private photos/signatures via signed URLs, not optimizable */
 // Client invoice page: view, pay by card (Stripe Checkout), e-Transfer instructions, print / save as PDF.
-import { Button, Card } from "@/components/ui";
+import { InvoicePay } from "@/components/invoice-pay";
+import { Card } from "@/components/ui";
 import { InvoiceBadge } from "@/components/status";
 import { invoiceView } from "@/server/billing/invoice";
 import { dateOnly, prettyDate, todayLocal } from "@/server/dates";
@@ -8,7 +9,6 @@ import { db } from "@/server/db";
 import { env } from "@/server/env";
 import { money } from "@/server/money";
 import { clientName } from "@/server/queries";
-import { stripeEnabled } from "@/server/stripe";
 import { peekToken } from "@/server/tokens";
 import { prettyDateTime } from "@/server/dates";
 import { signedMediaPath } from "@/server/media";
@@ -17,7 +17,6 @@ import { STATEMENTS } from "@/server/ops/signatures";
 import { autoPayPending, cardLabel } from "@/server/billing/autopay";
 import { parseSettings } from "@/server/settings";
 import { clientSignInvoice } from "./actions";
-import { payByCard } from "./actions";
 
 export const metadata = { title: { absolute: "Your invoice · etc." } };
 
@@ -72,27 +71,14 @@ export default async function PublicInvoice({ params, searchParams }: PageProps<
         </p>
       </Card>
       {balance > 0 && inv.status === "AWAITING_PAYMENT" ? (
-        <div className="no-print space-y-3">
+        <>
+        <div className="no-print mb-3">
           {autoPayPending(inv.autoPayState) && inv.autoPayOn && card && (
             <Card className="border-blue/30"><p className="text-sm"><b>{inv.autoPayState === "RETRYING" ? `The last charge to your ${card} didn't go through. We'll try again on` : `We'll charge your ${card} on`} {prettyDate(dateOnly(inv.autoPayOn))}.</b> {inv.autoPayState === "SCHEDULED" && "There's nothing you need to do. "}If you&apos;d rather pay another way, do it below before then and the card isn&apos;t charged.</p></Card>
           )}
-          {stripeEnabled() && (
-            <form action={payByCard} className="space-y-2"><input type="hidden" name="t" value={token} />
-              {inv.allowPartial && <label className="flex items-center justify-between gap-2 text-sm font-semibold">Amount to pay<span className="flex items-center gap-1">$<input name="amount" type="number" step="0.01" min="0.50" max={balance / 100} defaultValue={(balance / 100).toFixed(2)} className="min-h-11 w-32 rounded-lg border border-line px-2 text-right" /></span></label>}
-              <Button className="min-h-14 w-full text-base">{inv.allowPartial ? "Pay by card" : `Pay ${money(balance)} by card`}</Button>
-              {cards && !card && <>
-                <label className="flex items-start gap-2 text-sm"><input type="checkbox" name="save" className="mt-0.5 size-5 shrink-0" /><span>Save this card for future invoices</span></label>
-                <label className="flex items-start gap-2 text-sm"><input type="checkbox" name="autopay" className="mt-0.5 size-5 shrink-0" /><span>Charge this card automatically for my future invoices. We&apos;ll email each invoice first, with the date the card will be charged; you can turn this off any time on your etc. page.</span></label>
-              </>}
-            </form>
-          )}
-          {etransfer && (
-            <Card title="Pay by e-Transfer">
-              <p className="text-sm">Send <b>{money(balance)}</b> to <b className="select-all">{etransfer}</b> and put <b className="select-all">{inv.etransferRef}</b> in the message so we can match it.</p>
-            </Card>
-          )}
-          <p className="text-center text-sm text-ink-soft">Or pay the crew in cash.</p>
         </div>
+        <InvoicePay token={token} balanceCents={balance} allowPartial={inv.allowPartial} etransfer={etransfer} etransferRef={inv.etransferRef} offerSave={!!cards && !card} />
+        </>
       ) : inv.status === "PAID" ? (
         <Card className="border-emerald-200 bg-emerald-50"><p className="font-semibold text-emerald-800">Paid in full. Thank you!</p></Card>
       ) : null}

@@ -1,6 +1,7 @@
 // Driveway size pricing for snow shovelling. Clients pick a size when booking; an owner checks it on the satellite view
 // before the first visit. Smaller or same: price applied. Bigger: the job is held and the client gets a link to OK the
 // new price (or cancel). Oversized: held until someone sends a quote.
+import { WALK_PREFIX } from "../billing/charges";
 import { Prisma, type DriveSize } from "@/generated/prisma/client";
 import { db, type Tx } from "../db";
 import { enqueue, enqueueSms, kickOutbox } from "../email/outbox";
@@ -32,7 +33,7 @@ export function snowCharge(prices: SnowPrices, plan: boolean, size: DriveSize, e
 }
 
 const isBase = (name: string) => name.startsWith("Snow shovelling");
-const isWalk = (name: string) => name.startsWith("Extra sidewalk");
+const isWalk = (name: string) => name.startsWith(WALK_PREFIX);
 export const BASE_NAME = { plan: { STANDARD: "Snow shovelling, every snowfall (per push)", LARGE: "Snow shovelling, every snowfall, large driveway (per push)" }, once: { STANDARD: "Snow shovelling (one-time)", LARGE: "Snow shovelling (one-time), large driveway" } };
 export const WALK_NAME = "Extra sidewalk (corner lot / long walk)";
 
@@ -48,11 +49,16 @@ async function applyCharge(tx: Tx, job: { id: string; kind: string }, size: "STA
   const name = (plan ? BASE_NAME.plan : BASE_NAME.once)[size];
   if (base) await tx.jobLineItem.update({ where: { id: base.id }, data: { name, unitPriceCents: c.base, totalCents: c.base, quantity: 1 } });
   else await tx.jobLineItem.create({ data: { jobId: job.id, name, unitPriceCents: c.base, totalCents: c.base, perVisit: true } });
-  const walk = lines.find((l) => isWalk(l.name));
-  if (c.walk && walk) await tx.jobLineItem.update({ where: { id: walk.id }, data: { unitPriceCents: c.walk, totalCents: c.walk } });
-  else if (c.walk) await tx.jobLineItem.create({ data: { jobId: job.id, name: WALK_NAME, unitPriceCents: c.walk, totalCents: c.walk, perVisit: true, sortOrder: 2 } });
-  else if (walk) await tx.jobLineItem.delete({ where: { id: walk.id } });
+  await setWalkLine(tx, job.id, c.walk);
   await tx.job.update({ where: { id: job.id }, data: { ...(plan ? { pricePerPushCents: c.base } : {}), sizeHoldAt: null, pendingPrice: Prisma.DbNull } });
+}
+
+/** The job's extra-sidewalk line at this price per visit (0 = no extra sidewalk). */
+export async function setWalkLine(tx: Tx, jobId: string, cents: number) {
+  const walk = (await tx.jobLineItem.findMany({ where: { jobId } })).find((l) => isWalk(l.name));
+  if (cents && walk) await tx.jobLineItem.update({ where: { id: walk.id }, data: { unitPriceCents: cents, totalCents: cents } });
+  else if (cents) await tx.jobLineItem.create({ data: { jobId, name: WALK_NAME, unitPriceCents: cents, totalCents: cents, perVisit: true, sortOrder: 2 } });
+  else if (walk) await tx.jobLineItem.delete({ where: { id: walk.id } });
 }
 
 export const openSnowJobs = (businessId: string, propertyId: string) => ({

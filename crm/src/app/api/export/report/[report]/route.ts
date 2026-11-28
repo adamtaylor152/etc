@@ -8,7 +8,8 @@ export async function GET(req: Request, ctx: RouteContext<"/api/export/report/[r
   const { report } = await ctx.params;
   const def = REPORTS[report];
   if (!user || !def) return new Response("Not found", { status: 404 });
-  const r = parseRange(Object.fromEntries(new URL(req.url).searchParams));
+  const sp = new URL(req.url).searchParams;
+  const r = { ...parseRange(Object.fromEntries(sp)), person: sp.get("person") ?? undefined };
   const t = await def.run(user.businessId, r);
   const rows = t.rows.map((row) => row.map((v, i) => (t.columns[i][1] === "money" && typeof v === "number" ? (v / 100).toFixed(2) : v)));
   return new Response(toCsv([t.columns.map(([l]) => l), ...rows]), {
