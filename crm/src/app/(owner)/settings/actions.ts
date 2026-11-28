@@ -52,8 +52,9 @@ export async function saveAutomations(f: FormData) {
   const toggles = Object.fromEntries(Object.keys(SETTING_LABELS).map((k) => [k, f.get(k) === "on"]));
   const days = Object.fromEntries(Object.values(SETTING_DAYS).filter((k) => s(f, k)).map((k) => [k, s(f, k)]));
   const grace = z.coerce.number().int().min(0).max(14).safeParse(s(f, "autoPayGraceDays") || undefined);
-  const parsed = SettingsSchema.safeParse({ ...(biz.settings as object), ...toggles, ...days, ...(grace.success ? { autoPayGraceDays: grace.data } : {}) });
-  if (!parsed.success) redirect(`/settings?error=${encodeURIComponent("Follow-up days must be a whole number from 1 to 60")}`);
+  const fee = f.has("lateFeeDollars") ? { lateFeeCents: Math.round(Number(s(f, "lateFeeDollars") || 0) * 100), lateFeeBps: Math.round(Number(s(f, "lateFeePercent") || 0) * 100) } : {};
+  const parsed = SettingsSchema.safeParse({ ...(biz.settings as object), ...toggles, ...days, ...fee, ...(grace.success ? { autoPayGraceDays: grace.data } : {}) });
+  if (!parsed.success) redirect(`/settings?error=${encodeURIComponent("Days must be a whole number from 1 to 60, and the late fee no more than $1,000 plus 25%")}`);
   const next = parsed.data;
   await db.business.update({ where: { id: biz.id }, data: { settings: next as Prisma.InputJsonValue } });
   revalidatePath("/", "layout");

@@ -5,6 +5,7 @@ import { requireOwner } from "@/server/auth";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Archive, Banknote, FileText, Hammer, Inbox, ListTodo, Mail, MapPin, MessageSquare, Pencil, Phone, Plus, Receipt, Repeat, Snowflake } from "lucide-react";
+import { creditAdd, creditRemove } from "../../billing-extras-actions";
 import { clientArchive, clientMerge, propertyArchive } from "../../client-actions";
 import { clientAutoPayOff, clientCardRemove } from "../../card-actions";
 import { cardLabel } from "@/server/billing/autopay";
@@ -18,7 +19,7 @@ import { Gallery } from "@/components/gallery";
 import { Menu } from "@/components/menu";
 import { NotesCard } from "@/components/notes-card";
 import { InvoiceBadge, JobBadge, QUOTE, RequestBadge, VisitBadge } from "@/components/status";
-import { Badge, Card, Empty, Tabs } from "@/components/ui";
+import { Badge, Card, Empty, Tabs, btn, inputCls } from "@/components/ui";
 import { activityFeed } from "@/server/activity";
 import { invoiceView } from "@/server/billing/invoice";
 import { ledger } from "@/server/billing/ledger";
@@ -70,12 +71,12 @@ export default async function ClientPage({ params, searchParams }: PageProps<"/c
     tab === "files" ? db.attachment.findMany({ where: { businessId: bid, clientId: id, deletedAt: null }, orderBy: { createdAt: "desc" }, take: 120 }) : Promise.resolve([]),
   ]);
   const books = ledger(c.invoices, c.payments);
-  const [referredBy, referredCount, creditAgg] = await Promise.all([
+  const [referredBy, referredCount, credits] = await Promise.all([
     c.referredById ? db.client.findUnique({ where: { id: c.referredById } }) : null,
     db.referral.count({ where: { referrerId: c.id } }),
-    db.clientCredit.aggregate({ where: { clientId: c.id, appliedToInvoiceId: null }, _sum: { amountCents: true } }),
+    db.clientCredit.findMany({ where: { clientId: c.id, appliedToInvoiceId: null }, orderBy: { createdAt: "asc" } }),
   ]);
-  const credit = creditAgg._sum.amountCents ?? 0;
+  const credit = credits.reduce((n, k) => n + k.amountCents, 0);
   const lifetime = c.payments.reduce((n, p) => n + p.amountCents - p.refundedCents, 0);
   const lead = !jobs.length && !c.invoices.some((i) => i.status !== "DRAFT") && !c.quotes.some((q) => q.status === "APPROVED" || q.status === "CONVERTED");
   const phones = (Array.isArray(c.phones) && c.phones.length ? c.phones : c.phone ? [{ number: c.phone, label: "Mobile", sms: c.smsOptIn }] : []) as { number: string; label: string; sms: boolean }[];
@@ -269,6 +270,30 @@ export default async function ClientPage({ params, searchParams }: PageProps<"/c
               <div><dt className="text-xs font-semibold uppercase text-ink-soft">Lifetime value</dt><dd className="font-display text-xl font-bold">{money(lifetime)}</dd></div>
               <div><dt className="text-xs font-semibold uppercase text-ink-soft">Balance</dt><dd className={`font-display text-xl font-bold ${books.balanceCents > 0 ? "text-amber-700" : ""}`}>{money(books.balanceCents)}</dd></div>
             </dl>
+          </section>
+          <section className="rounded-lg border border-line bg-white p-4 shadow-card">
+            <h2 className="mb-2 text-base font-bold">Account credit{credit > 0 && <span className="ml-2 text-emerald-700">{money(credit)}</span>}</h2>
+            {credits.length ? (
+              <ul className="mb-2 divide-y divide-line text-sm">
+                {credits.map((k) => (
+                  <li key={k.id} className="flex items-center justify-between gap-2 py-1.5">
+                    <span><span className="font-semibold">{money(k.amountCents)}</span> {k.reason}<span className="block text-xs text-ink-soft">{prettyDate(dateOnly(k.createdAt))}</span></span>
+                    {!k.referralId && <form action={creditRemove}><input type="hidden" name="id" value={k.id} /><input type="hidden" name="back" value={here} /><ConfirmButton message={`Remove this ${money(k.amountCents)} credit?`} className="text-xs text-ink-soft">Remove</ConfirmButton></form>}
+                  </li>
+                ))}
+              </ul>
+            ) : <p className="mb-2 text-sm text-ink-soft">None waiting.</p>}
+            <p className="mb-2 text-xs text-ink-soft">Credit comes off this client&apos;s next invoice automatically.</p>
+            <details>
+              <summary className="cursor-pointer text-sm font-semibold text-blue">Add credit</summary>
+              <form action={creditAdd} className="mt-2 space-y-2">
+                <input type="hidden" name="clientId" value={id} /><input type="hidden" name="back" value={here} />
+                <label className="block text-sm font-semibold">Amount ($)<input name="amount" type="number" step="0.01" min="0.01" required className={inputCls} /></label>
+                <label className="block text-sm font-semibold">Reason <span className="font-normal text-ink-soft">(the client sees it on their invoice)</span><input name="reason" list="credit-reasons" defaultValue="Goodwill credit" maxLength={120} required className={inputCls} /></label>
+                <datalist id="credit-reasons"><option value="Goodwill credit" /><option value="Overpayment credit" /></datalist>
+                <button className={btn("secondary")}>Add credit</button>
+              </form>
+            </details>
           </section>
           <section className="rounded-lg border border-line bg-white p-4 shadow-card">
             <h2 className="mb-2 text-base font-bold">Last communication</h2>

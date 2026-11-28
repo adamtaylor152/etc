@@ -14,6 +14,7 @@ export type RunStop = {
   isReturn: boolean; // a return visit on the same storm (never whether it's billable: crew don't see prices)
   storm: boolean;    // part of a storm, so a return visit can follow it once it's done
   usualMin: number | null; // what this property usually takes, once it has enough timed visits
+  more: boolean; // this job has a checklist or needs the client's signature: the runner links to the stop page for them
 };
 
 /** Crew work their own stops plus ones nobody is assigned to; owners work any. Spread into a visit `where`. */
@@ -38,6 +39,7 @@ export async function runStops(businessId: string, date: string, userId: string 
     sizeNote: sizeNote(v.job.kind === "SNOW_PLAN" || !!v.snowEventId, v.property),
     extras: extras.filter((e) => e.visitId === v.id).map((e) => e.name),
     isReturn: v.isReturn, storm: !!v.snowEventId, usualMin: (!v.isReturn && usual.get(usualKey(v.propertyId, isSnowVisit(v)))) || null,
+    more: !!v.job.checklistTemplateId || v.job.requireSignature,
   }));
 }
 

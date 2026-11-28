@@ -5,6 +5,8 @@ import { createStorm } from "./ops/storms";
 import { health, markTick } from "./health";
 import { retryTextMedia } from "./ops/texts";
 import { sendReviewRequests } from "./ops/marketing";
+import { runAutomations } from "./ops/automations";
+import { markScheduledSent } from "./ops/campaigns";
 import { syncTelnyxCalls } from "./ops/calls";
 import { db } from "./db";
 import { env } from "./env";
@@ -12,7 +14,7 @@ import { reminderDue } from "./billing/invoice";
 import { addDays, dateOnly, todayLocal, toDbDate, TZ } from "./dates";
 import { forecast, snowByDay } from "./forecast";
 import { generateRecurringVisits } from "./ops/jobs";
-import { billingEmailFor, invoiceRecurringPeriods, invoiceSeasonalInstalments, invoiceUnbilled } from "./ops/invoices";
+import { applyLateFees, billingEmailFor, invoiceRecurringPeriods, invoiceSeasonalInstalments, invoiceUnbilled } from "./ops/invoices";
 import { isInvoiceDay } from "./billing/periods";
 import { parseSettings } from "./settings";
 import { autoPayPending } from "./billing/autopay";
@@ -53,6 +55,7 @@ let lastCallSync = 0;
 /** Hourly automations. Each one is idempotent (dedupe keys / state checks), so a missed or doubled run is harmless. */
 async function hourly() {
   const hour = Number(new Intl.DateTimeFormat("en-CA", { timeZone: TZ, hour: "numeric", hourCycle: "h23" }).format(new Date()));
+  if (hour === 9) await applyLateFees().catch((e) => console.error("late fees failed", e)); // once a day, before that day's reminders go out
   if (hour >= 8 && hour < 20) await invoiceReminders(); // no reminder emails at night
   if (hour >= 7 && hour < 22) await snowAlert();
   if (hour >= 9 && hour < 19) await quoteFollowUps();
@@ -63,6 +66,8 @@ async function hourly() {
   if (hour >= 8 && hour < 20) await runAutoPay().catch((e) => console.error("auto-pay run failed", e)); // saved cards: charge due invoices, retry failed ones
   if (hour >= 6 && hour < 22) await visitReminders(hour);
   if (hour >= 10 && hour < 18) await reviewRequests();
+  if (hour >= 9 && hour < 19) await runAutomations(); // win-back and plan renewal emails, if switched on (Marketing)
+  await markScheduledSent();
   if (hour === 6) await dailyDigest();
   await opsAlerts();
 }
@@ -122,7 +127,7 @@ async function visitReminders(hour: number) {
   }
 }
 
-/** Google review ask, 2 days after a client's first completed visit of the season; once per client per season. */
+/** Review ask a set time after a completed visit, and its one reminder (Marketing settings: trigger, caps, days). */
 async function reviewRequests() {
   await sendReviewRequests();
 }
@@ -190,7 +195,8 @@ async function snowAlert() {
 async function invoiceReminders() {
   const today = todayLocal();
   const due = await db.invoice.findMany({
-    where: { status: "AWAITING_PAYMENT", dueOn: { lt: toDbDate(today) }, remindersSent: { lt: 2 }, client: { followUpInvoices: true } },
+    // A refund re-opens an invoice; chasing the client for money we just sent back is the owner's call, not automatic.
+    where: { status: "AWAITING_PAYMENT", dueOn: { lt: toDbDate(today) }, remindersSent: { lt: 2 }, client: { followUpInvoices: true }, payments: { none: { refundedCents: { gt: 0 } } } },
     include: { client: true },
   });
   for (const inv of due) {

@@ -227,6 +227,16 @@ export const REPORTS: Record<string, Report> = {
       return { columns: [["Date", "text"], ["Person", "text"], ["Job", "text"], ["Note", "text"], ["Hours", "num"], ["Cost", "money"], ["Approved", "text"]], rows };
     },
   },
+  payments: {
+    title: "Payments", sub: "Money received in the period. Tips are their own column: never part of an invoice, never taxed.", ranged: true,
+    async run(businessId, r) {
+      const pays = await db.payment.findMany({ where: { businessId, receivedAt: instants(r) }, include: { client: true, invoice: { select: { number: true } } }, orderBy: { receivedAt: "asc" } });
+      return {
+        columns: [["Date", "text"], ["Client", "text"], ["Invoice", "text"], ["Method", "text"], ["Amount", "money"], ["Refunded", "money"], ["Net", "money"], ["Tip", "money"], ["Stripe fee", "money"]],
+        rows: pays.map((p) => [day(p.receivedAt), clientName(p.client), `#${p.invoice.number}`, p.method, p.amountCents, p.refundedCents, p.amountCents - p.refundedCents, p.tipCents ?? 0, p.feeCents ?? 0]),
+      };
+    },
+  },
   invoices: {
     title: "Invoices", sub: "Invoices issued in the period.", ranged: true,
     async run(businessId, r) {

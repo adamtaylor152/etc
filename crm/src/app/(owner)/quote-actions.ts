@@ -7,13 +7,14 @@ import { db } from "@/server/db";
 import { enqueue, kickOutbox } from "@/server/email/outbox";
 import { env } from "@/server/env";
 import { archiveQuote, convertQuote, createQuote, declineQuote, markQuoteApproved, reopenQuote, saveQuoteTemplate, sendQuote, updateQuote, type QuoteLineInput } from "@/server/ops/quotes";
+import { OPTION_KEYS } from "@/server/status/quote";
 import { TransitionError } from "@/server/status/visit";
 import { mintToken } from "@/server/tokens";
 
 const s = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 const back = (f: FormData, fallback: string) => { const p = s(f, "back"); return p.startsWith("/") && !p.startsWith("//") ? p : fallback; };
 
-/** Indexed rows: line_0_name, line_0_qty, line_0_price, line_0_optional, line_0_selected... Blank names are skipped. */
+/** Indexed rows: line_0_name, line_0_qty, line_0_price, line_0_optional, line_0_selected, line_0_option, line_0_photo... Blank names are skipped. */
 function parseLines(f: FormData): QuoteLineInput[] {
   const out: QuoteLineInput[] = [];
   for (let i = 0; i < 40; i++) {
@@ -24,10 +25,14 @@ function parseLines(f: FormData): QuoteLineInput[] {
       quantity: z.coerce.number().positive().max(10_000).parse(s(f, `line_${i}_qty`) || "1"),
       unitPriceCents: Math.round(z.coerce.number().min(0).max(100_000).parse(s(f, `line_${i}_price`) || "0") * 100),
       isOptional: f.get(`line_${i}_optional`) === "on", isSelected: f.get(`line_${i}_selected`) === "on",
+      optionKey: OPTION_KEYS.find((k) => k === s(f, `line_${i}_option`)) ?? null, photoId: s(f, `line_${i}_photo`) || null,
     });
   }
   return out;
 }
+
+/** opt_a_name ... opt_d_name plus the opt_recommended radio. Options no line uses are dropped when the quote is saved. */
+const parseOptions = (f: FormData) => OPTION_KEYS.map((key) => ({ key, name: s(f, `opt_${key}_name`), recommended: s(f, "opt_recommended") === key }));
 
 async function guard(f: FormData, fallback: string, fn: () => Promise<unknown>) {
   try {
@@ -43,13 +48,16 @@ async function guard(f: FormData, fallback: string, fn: () => Promise<unknown>) 
 
 export async function quoteCreate(f: FormData) {
   const user = await requireOwner();
-  const q = await createQuote(user, {
-    clientId: s(f, "clientId"), propertyId: s(f, "propertyId") || null, requestId: s(f, "requestId") || null,
-    title: z.string().min(1).max(150).parse(s(f, "title")), message: s(f, "message").slice(0, 3000), lines: parseLines(f),
-    from: { templateId: s(f, "templateId") || undefined, quoteId: s(f, "similarId") || undefined },
+  let id = "";
+  await guard(f, `/quotes/new?client=${encodeURIComponent(s(f, "clientId"))}`, async () => {
+    id = (await createQuote(user, {
+      clientId: s(f, "clientId"), propertyId: s(f, "propertyId") || null, requestId: s(f, "requestId") || null,
+      title: z.string().min(1).max(150).parse(s(f, "title")), message: s(f, "message").slice(0, 3000), lines: parseLines(f), options: parseOptions(f),
+      from: { templateId: s(f, "templateId") || undefined, quoteId: s(f, "similarId") || undefined },
+    })).id;
   });
   revalidatePath("/", "layout");
-  redirect(`/quotes/${q.id}`);
+  redirect(`/quotes/${id}`);
 }
 
 export async function quoteUpdate(f: FormData) {
@@ -62,7 +70,7 @@ export async function quoteUpdate(f: FormData) {
     validUntil: s(f, "validUntil") || null,
     // x100 either way: dollars -> cents, percent -> hundredths of a percent
     discount: { type: percent ? "PERCENT" : "FIXED", value: Math.round(z.coerce.number().min(0).max(percent ? 100 : 100_000).parse(s(f, "discount") || "0") * 100) },
-    lines: parseLines(f),
+    lines: parseLines(f), options: parseOptions(f),
     deposit: { type: s(f, "depositType"), value: s(f, "depositType") === "FIXED" ? Math.round(Number(s(f, "depositValue") || 0) * 100) : Number(s(f, "depositValue") || 0), required: f.get("depositRequired") === "on" },
   }));
   if (f.get("send")) await guard(f, `/quotes/${id}`, () => sendQuote(user, id, via));
@@ -110,7 +118,7 @@ export async function quoteSaveTemplate(f: FormData) {
 export async function quoteMarkApproved(f: FormData) {
   const user = await requireOwner();
   const id = s(f, "id");
-  await guard(f, `/quotes/${id}`, () => markQuoteApproved(user, id));
+  await guard(f, `/quotes/${id}`, () => markQuoteApproved(user, id, s(f, "option")));
   revalidatePath("/", "layout");
   redirect(`/quotes/${id}`);
 }

@@ -5,7 +5,7 @@ import { enqueue, enqueueSms, kickOutbox } from "../email/outbox";
 import { env } from "../env";
 import { clientName } from "../queries";
 import { logActivity } from "../records";
-import { parseSettings } from "../settings";
+import { parseSettings, type Settings } from "../settings";
 import { smsEnabled, toE164 } from "../sms";
 
 /** 4–5 stars -> Google; 1–3 -> private feedback. Pure, unit-tested. */
@@ -63,23 +63,57 @@ export async function qualifyReferral(tx: Tx, clientId: string) {
   }
 }
 
-/** Scheduler: send "How did we do?" a set time after a visit is done, once per client per season. */
+const DAY = 86_400_000, MONTH = 30.44 * DAY;
+/**
+ * Ask this client for a review now? Never if they rated us in the last `reviewRatedMonths`. Otherwise "first" (first job of
+ * the season) is one ask per 180 days, as it always was, and "every" is one ask per `reviewCapMonths`. Pure, unit-tested.
+ */
+export function reviewAskDue(s: Pick<Settings, "reviewTrigger" | "reviewCapMonths" | "reviewRatedMonths">, c: { lastAskedAt: Date | null; lastRatedAt: Date | null }, now = new Date()) {
+  const ago = (d: Date | null) => (d ? now.getTime() - d.getTime() : Infinity);
+  if (ago(c.lastRatedAt) < s.reviewRatedMonths * MONTH) return false;
+  return ago(c.lastAskedAt) >= (s.reviewTrigger === "every" ? s.reviewCapMonths * MONTH : 180 * DAY);
+}
+
+/** One reminder, `days` after the ask, only while unrated; an ask more than a week past that point is left alone (so switching this on doesn't chase old ones). Pure, unit-tested. */
+export function reviewFollowUpDue(r: { sentAt: Date; ratedAt: Date | null; followUpAt: Date | null }, days: number, now = new Date()) {
+  const age = now.getTime() - r.sentAt.getTime();
+  return !r.ratedAt && !r.followUpAt && age >= days * DAY && age < (days + 7) * DAY;
+}
+
+/** Scheduler: send "How did we do?" a set time after a visit is done (Marketing settings: how often), then one reminder if switched on. */
 export async function sendReviewRequests() {
   for (const biz of await db.business.findMany()) {
     const s = parseSettings(biz.settings);
     if (!s.reviewRequests || !biz.googleReviewUrl) continue;
     const to = new Date(Date.now() - s.reviewDelayHours * 3_600_000), from = new Date(to.getTime() - 2 * 86_400_000);
     const done = await db.visit.findMany({ where: { businessId: biz.id, state: "COMPLETED", completedAt: { gte: from, lte: to } }, include: { job: { include: { client: true } } }, distinct: ["jobId"] });
-    const seasonStart = new Date(Date.now() - 180 * 86_400_000);
+    const canText = (c: { phone: string | null; smsOptIn: boolean; smsOptOutAt: Date | null }) => smsEnabled() && c.smsOptIn && !c.smsOptOutAt && !!toE164(c.phone);
     for (const v of done) {
       const c = v.job.client;
       if (c.marketingOptOut || c.archivedAt) continue;
-      if (await db.reviewRequest.count({ where: { clientId: c.id, sentAt: { gte: seasonStart } } })) continue;
-      const bySms = smsEnabled() && c.smsOptIn && !c.smsOptOutAt && !!toE164(c.phone);
+      const [asked, rated] = await Promise.all([
+        db.reviewRequest.findFirst({ where: { clientId: c.id }, orderBy: { sentAt: "desc" } }),
+        db.reviewRequest.findFirst({ where: { clientId: c.id, ratedAt: { not: null } }, orderBy: { ratedAt: "desc" } }),
+      ]);
+      if (!reviewAskDue(s, { lastAskedAt: asked?.sentAt ?? null, lastRatedAt: rated?.ratedAt ?? null })) continue;
+      const bySms = canText(c);
       if (!bySms && (!c.email || c.emailBouncedAt)) continue;
       const rr = await db.reviewRequest.create({ data: { businessId: biz.id, clientId: c.id, jobId: v.jobId, channel: bySms ? "SMS" : "EMAIL" } });
       if (bySms) await enqueueSms(db, { businessId: biz.id, template: "sms.review_request", client: c, props: { clientId: c.id, reviewId: rr.id }, dedupeKey: `review:${rr.id}` });
       else await enqueue(db, { businessId: biz.id, template: "review.request", to: c.email, replyTo: env.helpEmail, priority: 8, props: { clientId: c.id, reviewId: rr.id }, dedupeKey: `review:${rr.id}`, clientId: c.id });
+    }
+    if (!s.reviewFollowUp) continue;
+    // The reminder: same channel as the ask, same opt-outs, once per request (followUpAt + the dedupe key).
+    const day = (n: number) => new Date(Date.now() - n * DAY);
+    const open = await db.reviewRequest.findMany({ where: { businessId: biz.id, ratedAt: null, followUpAt: null, sentAt: { gte: day(s.reviewFollowUpDays + 7), lte: day(s.reviewFollowUpDays) } } });
+    for (const r of open) {
+      const c = await db.client.findUnique({ where: { id: r.clientId } });
+      if (!c || c.marketingOptOut || c.archivedAt || !reviewFollowUpDue(r, s.reviewFollowUpDays)) continue;
+      if (await db.reviewRequest.count({ where: { clientId: c.id, ratedAt: { gte: r.sentAt } } })) continue; // rated through another ask
+      const m = { businessId: biz.id, props: { clientId: c.id, reviewId: r.id, followUp: true }, dedupeKey: `review:${r.id}:followup` };
+      const sent = r.channel === "SMS" ? canText(c) && await enqueueSms(db, { ...m, template: "sms.review_request", client: c })
+        : !c.emailBouncedAt && await enqueue(db, { ...m, template: "review.request", to: c.email, replyTo: env.helpEmail, priority: 8, clientId: c.id });
+      if (sent) await db.reviewRequest.update({ where: { id: r.id }, data: { followUpAt: new Date() } });
     }
   }
   kickOutbox();

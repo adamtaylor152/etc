@@ -13,7 +13,7 @@ export function ledger(
     })),
     ...payments.map((p) => ({
       id: p.id, kind: "payment" as const, date: p.receivedAt, href: `/invoices/${p.invoiceId}`,
-      label: `Payment${p.invoice ? ` for #${p.invoice.number}` : ""} · ${p.method === "ETRANSFER" ? "e-Transfer" : p.method.charAt(0) + p.method.slice(1).toLowerCase()}`,
+      label: `Payment${p.invoice ? ` for #${p.invoice.number}` : ""} · ${p.method === "ETRANSFER" ? "e-Transfer" : p.method.charAt(0) + p.method.slice(1).toLowerCase()}${p.refundedCents <= 0 ? "" : p.refundedCents >= p.amountCents ? " (refunded)" : " (part refunded)"}`,
       amountCents: -(p.amountCents - p.refundedCents),
     })),
   ].sort((a, b) => a.date.getTime() - b.date.getTime() || (a.kind === "invoice" ? -1 : 1));

@@ -10,6 +10,7 @@ import { money } from "../money";
 import { dollars } from "../ops/drive-size";
 import { prettyDate } from "../dates";
 import { dayCount, dayLines } from "../runner";
+import { skipNotice } from "../status/visit";
 
 type Ctx = { businessId: string };
 const first = (n: string) => n.trim().split(" ")[0] || "there";
@@ -46,11 +47,21 @@ export const smsTemplates = {
     return `Snow day! ${first(v.job.client.firstName)}, you're on our route today for ${v.property.formatted.split(",")[0]}. Away? Just reply. - etc.`;
   },
   // Once, when someone ticks "text me" on the booking form (carriers and RCS review expect a confirmation).
-  "sms.review_request": async (p: { clientId: string; reviewId: string }, ctx: Ctx) => {
+  "sms.review_request": async (p: { clientId: string; reviewId: string; followUp?: boolean }, ctx: Ctx) => {
     const c = await db.client.findUniqueOrThrow({ where: { id: p.clientId } });
     const raw = await mintToken(db, ctx.businessId, "REVIEW", { clientId: c.id, redirectPath: p.reviewId });
-    return `Hi ${first(c.firstName)}, thanks for choosing etc.! How did we do? ${env.appUrl}/r/${raw} - etc.`;
+    return p.followUp
+      ? `Hi ${first(c.firstName)}, got 30 seconds to tell us how we did? ${env.appUrl}/r/${raw} We won't ask again. - etc.`
+      : `Hi ${first(c.firstName)}, thanks for choosing etc.! How did we do? ${env.appUrl}/r/${raw} - etc.`;
   },
+  "sms.visit_skipped": async (p: { visitId: string }) => {
+    const v = await db.visit.findUniqueOrThrow({ where: { id: p.visitId }, include: { job: { include: { client: true } }, property: true } });
+    const n = skipNotice(v.skipReason)!;
+    return `Hi ${first(v.job.client.firstName)}, we came by ${v.property.formatted.split(",")[0]} but ${n.what}. No charge for this visit. ${n.next} - etc.`;
+  },
+  // To whoever called and got no answer (maybe not a client yet). Once per number per day; see ops/calls.ts.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- no props, but enqueueSms needs a props type
+  "sms.missed_call": async (_p: Record<string, never>) => `Sorry we missed your call! Reply here by text, or book at ${env.siteUrl}/book.html - etc. (Reply STOP to opt out)`,
   "sms.visit_reminder": async (p: { visitId: string }, ctx: Ctx) => {
     const v = await db.visit.findUniqueOrThrow({ where: { id: p.visitId }, include: { job: { include: { client: true } }, property: true } });
     const raw = await mintToken(db, ctx.businessId, "VISIT_CONFIRM", { visitId: v.id, clientId: v.job.clientId });
