@@ -11,9 +11,10 @@ import { OwnerPhotosUploaded, PhotoUploadRequest, VisitDone } from "@/emails/vis
 import { invoiceTotals } from "../billing/invoice";
 import { money } from "../money";
 import { stripeEnabled } from "../stripe";
-import { dateOnly, prettyDate, todayLocal, toDbDate } from "../dates";
+import { dateOnly, dayWord, prettyDate, todayLocal, toDbDate } from "../dates";
 import { signedMediaPath } from "../media";
 import { clientName } from "../queries";
+import { dayCount, dayLines } from "../runner";
 import { db } from "../db";
 import { CampaignEmail } from "@/emails/campaign";
 import { clickUrl, openPixelUrl, unsubscribeUrl, type Block } from "../ops/campaigns";
@@ -106,8 +107,8 @@ async function invoiceData(invoiceId: string, businessId: string): Promise<Invoi
   return {
     name: clientName(inv.client), number: inv.number, subject: inv.subject ?? "Services", issued: prettyDate(dateOnly(inv.issuedOn) ?? todayLocal()),
     due: prettyDate(dateOnly(inv.dueOn) ?? todayLocal()),
-    lines: inv.lineItems.map((l) => ({ name: Number(l.quantity) !== 1 ? `${l.name} × ${Number(l.quantity)}` : l.name, date: prettyDate(dateOnly(l.serviceDate)), amount: money(l.totalCents) })),
-    total: money(inv.totalCents), paid: inv.amountPaidCents ? money(inv.amountPaidCents) : null, balance: money(Math.max(0, inv.totalCents - inv.amountPaidCents)),
+    lines: inv.lineItems.map((l) => ({ name: (Number(l.quantity) !== 1 ? `${l.name} × ${Number(l.quantity)}` : l.name) + (l.description ? ` (${l.description})` : ""), date: prettyDate(dateOnly(l.serviceDate)), amount: money(l.totalCents) })),
+    total: money(inv.totalCents), discount: inv.discountCents ? money(inv.discountCents) : null, message: inv.message, paid: inv.amountPaidCents ? money(inv.amountPaidCents) : null, balance: money(Math.max(0, inv.totalCents - inv.amountPaidCents)),
     taxNote: biz.taxRegistered ? (t.taxIncluded ? `Includes ${biz.taxName} of ${money(inv.taxCents)}` : `${biz.taxName} ${money(inv.taxCents)} included in total`) + (biz.taxNumber ? ` · ${biz.taxName} #${biz.taxNumber}` : "") : null,
     payUrl: `${env.appUrl}/i/${raw}`, etransferEmail: biz.etransferEmail || env.etransferEmail, etransferRef: inv.etransferRef,
     cardEnabled: stripeEnabled(), site: env.siteUrl, phone: env.phone,
@@ -204,6 +205,18 @@ const ownerNotice: Template<{ title: string; body: string; path: string }> = {
   },
 };
 
+// To the person whose day an owner changed (ops/assign-alerts.ts). Built at send time from their day; never prices.
+const crewAssignment: Template<{ userId: string; date: string }> = {
+  subject: (p) => `Your work for ${prettyDate(p.date)} was updated`,
+  async render(p, ctx) {
+    const day = await dayLines(ctx.businessId, p.userId, p.date);
+    const all = [...day.stops, ...day.tasks];
+    const body = all.length ? `On your day now (${dayCount(day)}):\n${all.slice(0, 25).join("\n")}${all.length > 25 ? `\nand ${all.length - 25} more` : ""}` : "Nothing is assigned to you that day now.";
+    const url = `${env.appUrl}/auth/go?t=${await mintToken(db, ctx.businessId, "OWNER_DEEP_LINK", { userId: p.userId, redirectPath: `/run?date=${p.date}` })}`;
+    return <OwnerNotice title={`Your work for ${prettyDate(p.date)} was updated`} body={body} url={url} />;
+  },
+};
+
 const priceChange: Template<{ jobId: string }> = {
   subject: () => "Your snow clearing price (please confirm)",
   async render(p, ctx) {
@@ -227,10 +240,10 @@ const hubLink: Template<{ clientId: string }> = {
 async function scheduledEmail(visitId: string, reminder: boolean) {
   const v = await db.visit.findUniqueOrThrow({ where: { id: visitId }, include: { job: { include: { client: true } }, property: true } });
   const confirmUrl = reminder ? `${env.appUrl}/c/${await mintToken(db, v.businessId, "VISIT_CONFIRM", { visitId: v.id, clientId: v.job.clientId })}` : undefined;
-  return <VisitScheduled name={clientName(v.job.client)} what={v.job.title} date={prettyDate(dateOnly(v.scheduledDate))} address={v.property.formatted} reminder={reminder} site={env.siteUrl} phone={env.phone} confirmUrl={confirmUrl} />;
+  return <VisitScheduled name={clientName(v.job.client)} what={v.job.title} date={prettyDate(dateOnly(v.scheduledDate))} address={v.property.formatted} reminder={reminder} when={dayWord(dateOnly(v.scheduledDate) ?? todayLocal())} site={env.siteUrl} phone={env.phone} confirmUrl={confirmUrl} />;
 }
 const visitScheduled: Template<{ visitId: string }> = { subject: () => "You're booked with etc.", render: (p) => scheduledEmail(p.visitId, false) };
-const visitReminder: Template<{ visitId: string }> = { subject: () => "Reminder: etc. is coming tomorrow", render: (p) => scheduledEmail(p.visitId, true) };
+const visitReminder: Template<{ visitId: string }> = { subject: () => "Reminder: etc. is coming soon", render: (p) => scheduledEmail(p.visitId, true) };
 
 const reviewRequest: Template<{ clientId: string; reviewId?: string }> = {
   subject: () => "How did we do?",
@@ -284,7 +297,7 @@ const planRenewal: Template<{ clientId: string; seasonId: string }> = {
       db.job.findFirst({ where: { clientId: p.clientId, kind: "SNOW_PLAN" }, orderBy: { createdAt: "desc" } }),
     ]);
     const raw = await mintToken(db, ctx.businessId, "CLIENT_HUB", { clientId: c.id });
-    return <PlanRenewal name={clientName(c)} season={season.name} price={money(last?.pricePerPushCents ?? 3000)} url={`${env.appUrl}/hub/${raw}`} site={env.siteUrl} phone={env.phone} />;
+    return <PlanRenewal name={clientName(c)} season={season.name} price={money(last?.pricePerPushCents ?? 3000)} seasonPrice={last?.snowBillingMode === "SEASONAL" && last.seasonalPriceCents ? money(last.seasonalPriceCents) : undefined} url={`${env.appUrl}/hub/${raw}`} site={env.siteUrl} phone={env.phone} />;
   },
 };
 
@@ -306,6 +319,7 @@ export const templates = {
   "quote.follow_up": quoteFollowUp,
   "quote.approved": quoteApproved,
   "owner.notice": ownerNotice,
+  "crew.assignment": crewAssignment,
   "campaign.email": campaignEmail,
   "hub.link": hubLink,
   "price.change": priceChange,

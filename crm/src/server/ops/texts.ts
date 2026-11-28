@@ -1,4 +1,5 @@
 // Two-way texting: owners text clients from the CRM; client replies come in through the Telnyx webhook.
+import { addDays, dateOnly, dayWord, todayLocal, toDbDate } from "../dates";
 import { Prisma } from "@/generated/prisma/client";
 import { db } from "../db";
 import { enqueue, kickOutbox } from "../email/outbox";
@@ -68,6 +69,9 @@ export async function sendText(user: Actor, input: { clientId?: string; to?: str
 type PendingMedia = { url: string; contentType: string; attempts?: number }[];
 
 /** Inbound text from the webhook. Idempotent on the provider id (Telnyx retries webhooks). MMS files download in the background. */
+/** A one-word yes to a reminder text. Pure, unit-tested. */
+export const isConfirm = (text: string) => ["YES", "Y", "C", "CONFIRM", "CONFIRMED", "OUI"].includes(text.trim().toUpperCase().replace(/[.!]+$/, ""));
+
 export async function receiveText(businessId: string, e: { id: string; from: string; to: string; text: string; type?: string; media?: { url: string; contentType: string }[] }) {
   if (await db.textMessage.findUnique({ where: { providerId: e.id } })) return;
   const client = await clientByPhone(businessId, e.from);
@@ -84,6 +88,19 @@ export async function receiveText(businessId: string, e: { id: string; from: str
   if (client && k === "START") await db.client.update({ where: { id: client.id }, data: { smsOptOutAt: null } });
   // Carriers answer HELP/STOP for plain SMS; RCS leaves it to us (and approval requires it). HELP gets an answer either way.
   if (k === "HELP" || (e.type === "RCS" && k === "STOP")) await autoReply(businessId, client?.id ?? null, e.from, k === "HELP" ? HELP_TEXT : STOP_TEXT);
+  // "YES" to a visit reminder confirms the visit (YES also counts as START above, which is harmless).
+  if (client && !client.smsOptOutAt && k !== "STOP" && isConfirm(e.text)) {
+    const today = todayLocal();
+    const v = await db.visit.findFirst({
+      where: { businessId, state: "SCHEDULED", confirmedAt: null, scheduledDate: { gte: toDbDate(today), lte: toDbDate(addDays(today, 8)) }, job: { clientId: client.id, kind: { not: "SNOW_PLAN" } } },
+      orderBy: { scheduledDate: "asc" },
+    });
+    // Only if we actually texted them a reminder for that visit: a stray "yes" in a conversation confirms nothing.
+    if (v && (await db.emailMessage.count({ where: { businessId, template: "sms.visit_reminder", entityId: v.id, status: "SENT" } }))) {
+      await db.visit.update({ where: { id: v.id }, data: { confirmedAt: new Date(), rescheduleRequest: null, rescheduleRequestedAt: null } });
+      await autoReply(businessId, client.id, e.from, `Thanks ${client.firstName}, you're confirmed for ${dayWord(dateOnly(v.scheduledDate)!, today)}. - etc.`);
+    }
+  }
   // Tell the owners (at most one email per conversation every 15 minutes).
   const who = client ? clientName(client) : e.from;
   const slot = Math.floor(Date.now() / 900_000);

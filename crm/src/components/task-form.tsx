@@ -1,5 +1,6 @@
 // Task / event form: title, notes, optional client, date + time or all day, repeat, people.
 import { WindowChips } from "@/components/window-chips";
+import type { Win } from "@/server/windows";
 import { taskDelete, taskSave } from "@/app/(owner)/schedule-actions";
 import { REPEATS } from "@/server/ops/tasks";
 import type { Person } from "@/server/schedule";
@@ -11,7 +12,7 @@ export type TaskDefaults = {
   allDay: boolean; repeat: string; assigneeIds: string[]; series: boolean;
 };
 
-export function TaskForm({ d, clients, team, back, error }: { d: TaskDefaults; clients: { id: string; name: string }[]; team: Person[]; back: string; error?: string }) {
+export function TaskForm({ d, clients, team, back, error, windows }: { windows?: Win[]; d: TaskDefaults; clients: { id: string; name: string }[]; team: Person[]; back: string; error?: string }) {
   const sel = "min-h-10 w-full rounded-lg border border-line bg-white px-3";
   return (
     <div className="max-w-2xl space-y-3">
@@ -34,7 +35,7 @@ export function TaskForm({ d, clients, team, back, error }: { d: TaskDefaults; c
           <Field label="Start"><Input name="startTime" type="time" defaultValue={d.startTime} /></Field>
           <Field label="End"><Input name="endTime" type="time" defaultValue={d.endTime} /></Field>
         </div>
-        <WindowChips />
+        <WindowChips windows={windows} />
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="allDay" defaultChecked={d.allDay} className="size-4" />Any time that day (no start time)</label>
         {!d.id && (
           <div className="grid gap-3 sm:grid-cols-2">

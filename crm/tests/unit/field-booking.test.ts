@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { freeInWindow, openTimes, slotText, whoIsFree } from "@/server/booking/slots";
 import { splitRoute } from "@/server/runner";
+import { windowOf, WINDOWS } from "@/server/windows";
+const win = (k: string) => windowOf(WINDOWS, k)!;
 
 describe("splitRoute", () => {
   const stops = (spec: string) => [...spec].map((c, i) => ({ id: `v${i}`, community: c }));
@@ -45,10 +47,10 @@ describe("booking slots", () => {
     expect(whoIsFree(av(), MON, 480)).toBeNull();
   });
   it("windows: first free person and time inside the window", () => {
-    expect(freeInWindow(av(), MON, "early")).toEqual({ userId: "a", start: 540 });
-    expect(freeInWindow(av([{ userIds: ["a"], start: 540, end: 720 }]), MON, "midday")).toEqual({ userId: "b", start: 600 });
-    expect(freeInWindow(av(), MON, "evening")).toBeNull();
-    expect(freeInWindow(av([{ userIds: [], start: 540, end: 720 }]), MON, "early")).toBeNull();
+    expect(freeInWindow(av(), MON, win("early"))).toEqual({ userId: "a", start: 540 });
+    expect(freeInWindow(av([{ userIds: ["a"], start: 540, end: 720 }]), MON, win("midday"))).toEqual({ userId: "b", start: 600 });
+    expect(freeInWindow(av(), MON, win("evening"))).toBeNull();
+    expect(freeInWindow(av([{ userIds: [], start: 540, end: 720 }]), MON, win("early"))).toBeNull();
   });
   it("tells the client the window, not the planned time", () => {
     expect(slotText({ date: MON, start: 540, window: { label: "Early", hint: "6–11 am" } })).toBe("Monday, December 7, Early (6–11 am)");
@@ -76,10 +78,10 @@ describe("driveway size", () => {
   });
   it("validate: missing size = standard; bad size rejected; walk dropped for oversized", () => {
     const base = { name: "A B", email: "a@b.co", address: "1 Main St", payment: "Cash", plan: "One-time visit", services: ["Snow shovelling"] };
-    expect(validate(base, "2026-12-01").size).toBe("Standard");
-    expect(() => validate({ ...base, size: "Huge" }, "2026-12-01")).toThrow();
-    expect(validate({ ...base, size: "Oversized", extraWalk: true }, "2026-12-01")).toMatchObject({ extraWalk: false, estimate: "Quote" });
-    expect(validate({ ...base, services: ["Window cleaning"], size: "Large" }, "2026-12-01").size).toBe("");
+    expect(validate(base, "2026-12-01", ["Snow shovelling", "Window cleaning"]).size).toBe("Standard");
+    expect(() => validate({ ...base, size: "Huge" }, "2026-12-01", ["Snow shovelling", "Window cleaning"])).toThrow();
+    expect(validate({ ...base, size: "Oversized", extraWalk: true }, "2026-12-01", ["Snow shovelling", "Window cleaning"])).toMatchObject({ extraWalk: false, estimate: "Quote" });
+    expect(validate({ ...base, services: ["Window cleaning"], size: "Large" }, "2026-12-01", ["Snow shovelling", "Window cleaning"]).size).toBe("");
   });
   it("reads the current charge off job lines", () => {
     expect(currentCharge([{ name: "Snow shovelling (one-time)", unitPriceCents: 3500 }, { name: "Ice melt", unitPriceCents: 500 }, { name: "Extra sidewalk (corner lot / long walk)", unitPriceCents: 1000 }])).toEqual({ base: 3500, walk: 1000 });

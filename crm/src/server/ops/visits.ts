@@ -2,9 +2,9 @@
 import { assertChecklistDone } from "./checklists";
 import { assertSigned } from "./signatures";
 import type { SkipReason, VisitState } from "@/generated/prisma/client";
-import { chargesForVisit } from "../billing/charges";
+import { chargesForVisit, STORM_CHARGE } from "../billing/charges";
 import { dueDate } from "../billing/invoice";
-import { todayLocal, toDbDate } from "../dates";
+import { dateOnly, todayLocal, toDbDate } from "../dates";
 import { invoiceUnbilled } from "./invoices";
 import { db, type Tx } from "../db";
 import { enqueue, enqueueSms, kickOutbox } from "../email/outbox";
@@ -12,6 +12,7 @@ import { env } from "../env";
 import { logActivity } from "../records";
 import { getSettings } from "../settings";
 import { assertTransition, TransitionError } from "../status/visit";
+import { withAssignAlert, type Assigned } from "./assign-alerts";
 
 type Actor = { id: string; businessId: string };
 export type TransitionExtra = {
@@ -60,7 +61,9 @@ function transitionTx(user: Actor, visitId: string, to: VisitState, extra: Trans
 
     if (to === "COMPLETED") {
       const job = { ...v.job, lineItems: v.job.lineItems.map((l) => ({ ...l, quantity: Number(l.quantity) })) };
-      const lines = chargesForVisit(job, { pushNumber: v.pushNumber, iceMeltApplied: updated.iceMeltApplied }, await iceMeltPrice(tx, user.businessId));
+      const stormCharged = v.job.snowBillingMode === "PER_EVENT" && !!v.snowEventId
+        && (await tx.visitCharge.count({ where: { name: STORM_CHARGE, visit: { jobId: v.jobId, snowEventId: v.snowEventId, id: { not: visitId } } } })) > 0;
+      const lines = chargesForVisit(job, { iceMeltApplied: updated.iceMeltApplied, stormCharged }, await iceMeltPrice(tx, user.businessId));
       if (lines.length) await tx.visitCharge.createMany({ data: lines.map((l) => ({ ...l, businessId: user.businessId, visitId })) });
       // Billed per visit (one-off jobs): invoice it now so the "all done" email can carry a pay link.
       if (lines.length && v.job.invoiceSchedule === "AFTER_EACH_VISIT") {
@@ -108,8 +111,14 @@ function transitionTx(user: Actor, visitId: string, to: VisitState, extra: Trans
   });
 }
 
+/** What an assignment alert watches on a visit that is still to be done (ops/assign-alerts.ts). */
+const visitSnap = (user: Actor, visitId: string) => async (): Promise<Assigned | null> => {
+  const v = await db.visit.findFirst({ where: { id: visitId, businessId: user.businessId, state: { in: ["SCHEDULED", "EN_ROUTE", "IN_PROGRESS"] } }, select: { scheduledDate: true, startAt: true, anytime: true, assignees: { select: { userId: true } } } });
+  return v && { date: dateOnly(v.scheduledDate), at: v.anytime ? null : v.startAt?.getTime() ?? null, userIds: v.assignees.map((a) => a.userId) };
+};
+
 export async function scheduleVisit(user: Actor, visitId: string, date: string | null) {
-  await scheduleTx(user, visitId, date);
+  await withAssignAlert(user, visitSnap(user, visitId), () => scheduleTx(user, visitId, date));
   kickOutbox();
 }
 
@@ -144,18 +153,30 @@ export async function deleteVisit(user: Actor, visitId: string) {
 }
 
 /** Calendar drag with times (week/day view): date + optional start/end; no time = anytime that day. */
-export async function rescheduleVisitTimed(user: Actor, visitId: string, m: { date: string | null; startAt?: Date | null; endAt?: Date | null }, opts: { notify?: boolean } = {}) {
-  await scheduleTx(user, visitId, m.date, opts.notify ?? true);
-  await db.visit.update({ where: { id: visitId }, data: { startAt: m.startAt ?? null, endAt: m.endAt ?? null, anytime: !m.startAt } });
-  kickOutbox();
-}
+export const rescheduleVisitTimed = (user: Actor, visitId: string, m: VisitSlot, opts: { notify?: boolean } = {}) => moveVisit(user, visitId, m, null, opts);
 
 /** Who's on a visit. */
-export async function setVisitAssignees(user: Actor, visitId: string, userIds: string[]) {
-  await db.visit.findFirstOrThrow({ where: { id: visitId, businessId: user.businessId } });
-  const ok = await db.user.findMany({ where: { id: { in: userIds }, businessId: user.businessId }, select: { id: true } });
-  await db.$transaction([
-    db.visitAssignee.deleteMany({ where: { visitId } }),
-    db.visitAssignee.createMany({ data: ok.map((u) => ({ visitId, userId: u.id })) }),
-  ]);
+export const setVisitAssignees = (user: Actor, visitId: string, userIds: string[]) => moveVisit(user, visitId, null, userIds);
+
+type VisitSlot = { date: string | null; startAt?: Date | null; endAt?: Date | null };
+/**
+ * Reschedule and/or reassign a visit as ONE change (null = leave that part alone), so whoever is on it afterwards
+ * gets a single assignment alert. Every reschedule and every assignee change goes through here.
+ */
+export async function moveVisit(user: Actor, visitId: string, when: VisitSlot | null, userIds: string[] | null, opts: { notify?: boolean } = {}) {
+  await withAssignAlert(user, visitSnap(user, visitId), async () => {
+    if (when) {
+      await scheduleTx(user, visitId, when.date, opts.notify ?? true);
+      await db.visit.update({ where: { id: visitId }, data: { startAt: when.startAt ?? null, endAt: when.endAt ?? null, anytime: !when.startAt } });
+    }
+    if (userIds) {
+      await db.visit.findFirstOrThrow({ where: { id: visitId, businessId: user.businessId } });
+      const ok = await db.user.findMany({ where: { id: { in: userIds }, businessId: user.businessId }, select: { id: true } });
+      await db.$transaction([
+        db.visitAssignee.deleteMany({ where: { visitId } }),
+        db.visitAssignee.createMany({ data: ok.map((u) => ({ visitId, userId: u.id })) }),
+      ]);
+    }
+  });
+  kickOutbox();
 }

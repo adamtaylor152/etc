@@ -1,16 +1,30 @@
 // End to end against a real database (CI's seeded Postgres, or the local dev one): the path money and storm days
 // depend on. Book a one-time shovel, find it's a large driveway, client OKs the new price, it shows on the route,
 // the crew finishes it. Nothing is sent: the outbox doesn't run under vitest.
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { createBooking } from "@/server/booking/create";
 import { publicTimes } from "@/server/booking/slots";
-import { validate } from "@/server/booking/validate";
+import { bookingLabels, validate } from "@/server/booking/validate";
 import { todayLocal, toDbDate } from "@/server/dates";
 import { businessId, db } from "@/server/db";
 import { health } from "@/server/health";
 import { answerPrice, confirmSize, currentCharge, snowPrices } from "@/server/ops/drive-size";
 import { transitionVisit } from "@/server/ops/visits";
 import { runStops } from "@/server/runner";
+
+const labels = async (bid: string) => bookingLabels(await db.service.findMany({ where: { businessId: bid, active: true, bookable: true } }));
+
+describe("price book ↔ etccrew.ca/book.html", () => {
+  it("accepts every service the marketing site's form can send", async () => {
+    const sent = [...readFileSync("../public/book.html", "utf8").matchAll(/name="services" value="([^"]+)"/g)].map((m) => m[1]);
+    expect(sent.length).toBeGreaterThanOrEqual(14);
+    const allowed = await labels(await businessId());
+    expect(sent.filter((s) => !allowed.includes(s))).toEqual([]);
+    const base = { name: "A B", email: "a@b.co", address: "1 Main St", payment: "Cash", plan: "One-time visit" };
+    for (const s of sent) expect(validate({ ...base, services: [s] }, todayLocal(), allowed).services).toEqual([s]);
+  });
+});
 
 describe("booking → size check → route → done", () => {
   it("works end to end", async () => {
@@ -22,7 +36,7 @@ describe("booking → size check → route → done", () => {
     const booking = validate({
       name: "Flow Test", email: `flow-${tag}@example.com`, address: `${tag} Evergreen Way SW, Calgary`, lat: 50.914, lng: -114.112,
       payment: "Cash", plan: "One-time visit", services: ["Snow shovelling"], size: "Standard",
-    }, today);
+    }, today, await labels(bid));
     expect(booking.estimate).toBe("$35");
     const res = await createBooking(booking, { businessId: bid, source: "BOOKING_FORM", sendEmails: false });
     const job = await db.job.findUniqueOrThrow({ where: { id: res.jobId! }, include: { visits: true, lineItems: true } });

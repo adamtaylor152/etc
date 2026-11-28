@@ -6,8 +6,8 @@ import { notFound } from "next/navigation";
 import { Flash } from "@/components/flash";
 import { InvoiceBadge } from "@/components/status";
 import { RecordPanel } from "@/components/record-panel";
-import { Button, Card, Dl, Input, PageHeader, inputCls } from "@/components/ui";
-import { invoiceView } from "@/server/billing/invoice";
+import { Button, ButtonLink, Card, Dl, Input, PageHeader, inputCls } from "@/components/ui";
+import { TERMS_LABEL, invoiceView } from "@/server/billing/invoice";
 import { dateOnly, prettyDate, prettyDateTime, todayLocal } from "@/server/dates";
 import { business, businessId, db } from "@/server/db";
 import { money } from "@/server/money";
@@ -41,6 +41,7 @@ export default async function InvoicePage({ params, searchParams }: PageProps<"/
         sub={<><Link className="font-semibold text-blue" href={`/clients/${inv.clientId}`}>{clientName(inv.client)}</Link> · {inv.subject}</>}
         actions={<>
           {open && <form action={invoiceSend}>{hidden}<Button>{inv.status === "DRAFT" ? "Send invoice" : "Resend"}</Button></form>}
+          {inv.status === "DRAFT" && inv.kind !== "DEPOSIT" && <ButtonLink href={`${here}/edit`}>Edit</ButtonLink>}
           {inv.status === "DRAFT" && <form action={invoiceMarkSent}>{hidden}<Button variant="secondary">Mark sent (no email)</Button></form>}
           <form action={viewAsClient}>{hidden}<Button variant="secondary">Client view / print</Button></form>
         </>}
@@ -53,13 +54,15 @@ export default async function InvoicePage({ params, searchParams }: PageProps<"/
               <tbody className="divide-y divide-line">
                 {inv.lineItems.map((l) => (
                   <tr key={l.id}>
-                    <td className="py-2">{l.name}{Number(l.quantity) !== 1 && <span className="text-ink-soft"> × {Number(l.quantity)} @ {money(l.unitPriceCents)}</span>}</td>
+                    <td className="py-2">{l.name}{Number(l.quantity) !== 1 && <span className="text-ink-soft"> × {Number(l.quantity)} @ {money(l.unitPriceCents)}</span>}{l.description && <span className="block text-xs text-ink-soft">{l.description}</span>}</td>
                     <td className="py-2 text-ink-soft">{prettyDate(dateOnly(l.serviceDate))}</td>
                     <td className="py-2 text-right font-semibold">{money(l.totalCents)}</td>
                   </tr>
                 ))}
               </tbody>
               <tfoot className="border-t-2 border-navy">
+                {inv.discountCents > 0 && <tr><td colSpan={2} className="pt-2 text-ink-soft">Subtotal</td><td className="pt-2 text-right text-ink-soft">{money(inv.subtotalCents)}</td></tr>}
+                {inv.discountCents > 0 && <tr><td colSpan={2} className="text-ink-soft">Discount</td><td className="text-right text-ink-soft">−{money(inv.discountCents)}</td></tr>}
                 {biz.taxRegistered && inv.taxCents > 0 && <tr><td colSpan={2} className="pt-2 text-ink-soft">{biz.taxName}{biz.pricesIncludeTax ? " (included)" : ""}</td><td className="pt-2 text-right">{money(inv.taxCents)}</td></tr>}
                 <tr><td colSpan={2} className="pt-2 font-semibold">Total</td><td className="pt-2 text-right font-display text-xl font-bold">{money(inv.totalCents)}</td></tr>
                 {inv.amountPaidCents > 0 && <tr><td colSpan={2} className="text-ink-soft">Paid</td><td className="text-right text-ink-soft">−{money(inv.amountPaidCents)}</td></tr>}
@@ -67,6 +70,7 @@ export default async function InvoicePage({ params, searchParams }: PageProps<"/
               </tfoot>
             </table>
             {!biz.taxRegistered && <p className="mt-2 text-xs text-ink-soft">Prices include tax (not GST-registered).</p>}
+            {inv.message && <p className="mt-3 whitespace-pre-line rounded-lg bg-tint p-3 text-sm"><span className="block text-xs font-semibold uppercase tracking-wide text-ink-soft">Message to the client</span>{inv.message}</p>}
           </Card>
 
           {open && balance > 0 && (
@@ -110,6 +114,7 @@ export default async function InvoicePage({ params, searchParams }: PageProps<"/
             <Dl rows={[
               ["Issued", inv.issuedOn ? prettyDate(dateOnly(inv.issuedOn)) : "Not sent yet"],
               ["Due", inv.dueOn ? prettyDate(dateOnly(inv.dueOn)) : null],
+              ["Payment terms", TERMS_LABEL[inv.paymentTerms]],
               ["e-Transfer code", inv.etransferRef],
               ["Job", inv.job ? <Link className="text-blue" href={`/jobs/${inv.job.id}`}>#{inv.job.number} {inv.job.title}</Link> : null],
               ["Storm", inv.snowEvent ? <Link className="text-blue" href={`/snow/${inv.snowEvent.id}`}>{inv.snowEvent.name}</Link> : null],

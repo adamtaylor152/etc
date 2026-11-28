@@ -17,25 +17,41 @@ describe("visit transitions", () => {
   });
 });
 
-const plan = { kind: "SNOW_PLAN" as const, billingType: "PER_VISIT" as const, pricePerPushCents: 3000, iceMelt: true, lineItems: [] };
+const plan = { kind: "SNOW_PLAN" as const, billingType: "PER_VISIT" as const, pricePerPushCents: 3000, iceMelt: true, addonsIncluded: false, lineItems: [] };
 describe("chargesForVisit", () => {
   it("per push: $30 + ice melt every push", () => {
-    expect(chargesForVisit({ ...plan, snowBillingMode: "PER_PUSH" }, { pushNumber: 2, iceMeltApplied: null }, 500))
+    expect(chargesForVisit({ ...plan, snowBillingMode: "PER_PUSH" }, { iceMeltApplied: null, stormCharged: true }, 500))
       .toEqual([
         { name: "Snow clearing (per push)", quantity: 1, unitPriceCents: 3000, totalCents: 3000 },
         { name: "Ice melt", quantity: 1, unitPriceCents: 500, totalCents: 500 },
       ]);
   });
   it("crew can say ice melt wasn't used", () => {
-    expect(chargesForVisit({ ...plan, snowBillingMode: "PER_PUSH" }, { pushNumber: 1, iceMeltApplied: false }, 500)).toHaveLength(1);
+    expect(chargesForVisit({ ...plan, snowBillingMode: "PER_PUSH" }, { iceMeltApplied: false }, 500)).toHaveLength(1);
   });
-  it("per event: only push 1 charges", () => {
-    expect(chargesForVisit({ ...plan, snowBillingMode: "PER_EVENT" }, { pushNumber: 1, iceMeltApplied: null }, 500)).toHaveLength(2);
-    expect(chargesForVisit({ ...plan, snowBillingMode: "PER_EVENT" }, { pushNumber: 2, iceMeltApplied: null }, 500)).toEqual([]);
+  it("per event: one clearing charge per storm, whichever push is done first", () => {
+    const event = { ...plan, snowBillingMode: "PER_EVENT" as const };
+    expect(chargesForVisit(event, { iceMeltApplied: null }, 500).map((c) => [c.name, c.totalCents])).toEqual([["Snow clearing (storm)", 3000], ["Ice melt", 500]]);
+    // Later pushes of a storm that's already charged: the clearing is free, ice melt is still per visit.
+    expect(chargesForVisit(event, { iceMeltApplied: null, stormCharged: true }, 500).map((c) => c.name)).toEqual(["Ice melt"]);
+    expect(chargesForVisit(event, { iceMeltApplied: false, stormCharged: true }, 500)).toEqual([]);
+    expect(chargesForVisit({ ...event, iceMelt: false }, { iceMeltApplied: null, stormCharged: true }, 500)).toEqual([]);
   });
-  it("seasonal and fixed price charge nothing per visit", () => {
-    expect(chargesForVisit({ ...plan, snowBillingMode: "SEASONAL" }, { pushNumber: 1, iceMeltApplied: true }, 500)).toEqual([]);
-    expect(chargesForVisit({ ...plan, kind: "ONE_OFF", billingType: "FIXED_PRICE", snowBillingMode: null }, { pushNumber: null, iceMeltApplied: null }, 500)).toEqual([]);
+  it("seasonal: no clearing charge; ice melt only when it isn't included in the season price", () => {
+    const seasonal = { ...plan, snowBillingMode: "SEASONAL" as const };
+    expect(chargesForVisit({ ...seasonal, addonsIncluded: true }, { iceMeltApplied: true }, 500)).toEqual([]);
+    expect(chargesForVisit(seasonal, { iceMeltApplied: true }, 500)).toEqual([{ name: "Ice melt", quantity: 1, unitPriceCents: 500, totalCents: 500 }]);
+    expect(chargesForVisit(seasonal, { iceMeltApplied: false }, 500)).toEqual([]);
+  });
+  it("extra sidewalk is charged with every clearing the client pays for", () => {
+    const walk = { ...plan, iceMelt: false, lineItems: [{ name: "Extra sidewalk (corner lot / long walk)", quantity: 1, unitPriceCents: 1000, perVisit: true }] };
+    expect(chargesForVisit({ ...walk, snowBillingMode: "PER_PUSH" }, { iceMeltApplied: null }, 500).map((c) => c.totalCents)).toEqual([3000, 1000]);
+    expect(chargesForVisit({ ...walk, snowBillingMode: "PER_EVENT" }, { iceMeltApplied: null }, 500).map((c) => c.totalCents)).toEqual([3000, 1000]);
+    expect(chargesForVisit({ ...walk, snowBillingMode: "PER_EVENT" }, { iceMeltApplied: null, stormCharged: true }, 500)).toEqual([]);
+    expect(chargesForVisit({ ...walk, snowBillingMode: "SEASONAL" }, { iceMeltApplied: null }, 500)).toEqual([]);
+  });
+  it("fixed price charges nothing per visit", () => {
+    expect(chargesForVisit({ ...plan, kind: "ONE_OFF", billingType: "FIXED_PRICE", snowBillingMode: null }, { iceMeltApplied: null }, 500)).toEqual([]);
   });
   it("one-off per visit uses the job's per-visit line items", () => {
     const job = { ...plan, kind: "ONE_OFF" as const, snowBillingMode: null, lineItems: [
@@ -43,8 +59,8 @@ describe("chargesForVisit", () => {
       { name: "Ice melt", quantity: 1, unitPriceCents: 500, perVisit: true },
       { name: "Setup fee", quantity: 1, unitPriceCents: 1000, perVisit: false },
     ] };
-    expect(chargesForVisit(job, { pushNumber: null, iceMeltApplied: null }, 500).map((c) => c.totalCents)).toEqual([3500, 500]);
-    expect(chargesForVisit(job, { pushNumber: null, iceMeltApplied: false }, 500).map((c) => c.totalCents)).toEqual([3500]);
+    expect(chargesForVisit(job, { iceMeltApplied: null }, 500).map((c) => c.totalCents)).toEqual([3500, 500]);
+    expect(chargesForVisit(job, { iceMeltApplied: false }, 500).map((c) => c.totalCents)).toEqual([3500]);
   });
 });
 
