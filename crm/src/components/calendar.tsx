@@ -49,7 +49,7 @@ export function ScheduleCalendar({ items, unscheduled, team, initialDate }: { it
     const [kind, id] = key.split(":") as [Kind, string];
     if (kind === "assessment") { revert?.(); return; }
     setMsg("Saving…");
-    try { await calendarMove(kind, id, start, end, allDay); setMsg("Saved"); router.refresh(); }
+    try { const w = await calendarMove(kind, id, start, end, allDay); setMsg(w.length ? `Saved, but: ${w.join("; ")}` : "Saved"); router.refresh(); }
     catch { revert?.(); setMsg("Couldn't save that move"); }
   }
   const toggleKind = (k: Kind) => setKinds((cur) => (cur.includes(k) ? cur.filter((x) => x !== k) : [...cur, k]));
@@ -86,7 +86,7 @@ export function ScheduleCalendar({ items, unscheduled, team, initialDate }: { it
             firstDay={1} height="auto" slotMinTime="06:00:00" slotMaxTime="21:00:00" nowIndicator allDayText="Any time"
             editable droppable eventResizableFromStart={false}
             events={shown.map((i) => ({
-              id: `${i.kind}:${i.id}`, title: `${i.done ? "✓ " : ""}${i.title}`, start: i.start, end: i.end, allDay: i.allDay,
+              id: `${i.kind}:${i.id}`, title: `${i.done ? "✓ " : i.warnings?.length ? "⚠ " : i.rescheduleAsked ? "↻ " : i.confirmed ? "👍 " : ""}${i.title}`, start: i.start, end: i.end, allDay: i.allDay,
               // FullCalendar v7 takes color + contrastColor (no separate background/border/text colours).
               color: i.done ? "#cbd5e1" : i.late ? "#dc2626" : i.color, contrastColor: i.done ? "#334155" : "#ffffff",
               editable: i.editable, extendedProps: { item: i }, className: i.done ? "line-through" : "",
@@ -136,6 +136,9 @@ export function ScheduleCalendar({ items, unscheduled, team, initialDate }: { it
             ) : (
               <>
                 <p className="pr-6 font-bold">{pop.item.title}</p>
+                {pop.item.warnings?.length ? <ul className="my-1 rounded bg-amber-50 p-2 text-xs text-amber-900">{pop.item.warnings.map((w) => <li key={w}>⚠ {w}</li>)}</ul> : null}
+                {pop.item.confirmed && <p className="text-xs font-semibold text-emerald-700">Client confirmed</p>}
+                {pop.item.rescheduleAsked && <p className="text-xs font-semibold text-amber-700">Client asked to reschedule</p>}
                 <p className="text-xs text-ink-soft">{pop.item.sub}{!pop.item.allDay && pop.item.start && ` · ${timeOf(pop.item.start)}${pop.item.end ? `–${timeOf(pop.item.end)}` : ""}`}{pop.item.late && " · overdue"}{pop.item.done && " · done"}</p>
                 {pop.item.kind !== "assessment" && (
                   <form action={async (f) => { await assignPeople(f); setPop(null); router.refresh(); }} className="mt-3">

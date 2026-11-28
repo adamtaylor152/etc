@@ -5,12 +5,12 @@ import L from "leaflet";
 import { GeoJSON, MapContainer, Marker, Popup, TileLayer } from "react-leaflet";
 import type { GeoJsonObject } from "geojson";
 
-export type MapStop = { id: string; n: number; lat: number; lng: number; label: string; done: boolean };
+export type MapStop = { id: string; n: number; lat: number; lng: number; label: string; done: boolean; color?: string };
 export type MapArea = { code: string; name: string; geometry: GeoJsonObject };
 
-const icon = (n: number, done: boolean) => L.divIcon({
+const icon = (n: number, done: boolean, color = "#14213d") => L.divIcon({
   className: "",
-  html: `<div style="width:28px;height:28px;border-radius:50%;background:${done ? "#10b981" : "#14213d"};color:#fff;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;font:700 13px system-ui">${n}</div>`,
+  html: `<div style="width:28px;height:28px;border-radius:50%;background:${done ? "#10b981" : color};color:#fff;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;font:700 13px system-ui">${n}</div>`,
   iconSize: [28, 28], iconAnchor: [14, 14],
 });
 
@@ -24,7 +24,7 @@ export default function RouteMapInner({ stops, areas, depot }: { stops: MapStop[
         <GeoJSON key={a.code} data={a.geometry} style={{ color: "#1d6fd8", weight: 2, fillOpacity: 0.06 }} />
       ))}
       {stops.map((s) => (
-        <Marker key={s.id} position={[s.lat, s.lng]} icon={icon(s.n, s.done)}>
+        <Marker key={s.id} position={[s.lat, s.lng]} icon={icon(s.n, s.done, s.color)}>
           <Popup><a href={`/visits/${s.id}`} style={{ fontWeight: 600 }}>{s.n}. {s.label}</a></Popup>
         </Marker>
       ))}

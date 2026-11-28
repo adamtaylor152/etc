@@ -214,7 +214,8 @@ const hubLink: Template<{ clientId: string }> = {
 
 async function scheduledEmail(visitId: string, reminder: boolean) {
   const v = await db.visit.findUniqueOrThrow({ where: { id: visitId }, include: { job: { include: { client: true } }, property: true } });
-  return <VisitScheduled name={clientName(v.job.client)} what={v.job.title} date={prettyDate(dateOnly(v.scheduledDate))} address={v.property.formatted} reminder={reminder} site={env.siteUrl} phone={env.phone} />;
+  const confirmUrl = reminder ? `${env.appUrl}/c/${await mintToken(db, v.businessId, "VISIT_CONFIRM", { visitId: v.id, clientId: v.job.clientId })}` : undefined;
+  return <VisitScheduled name={clientName(v.job.client)} what={v.job.title} date={prettyDate(dateOnly(v.scheduledDate))} address={v.property.formatted} reminder={reminder} site={env.siteUrl} phone={env.phone} confirmUrl={confirmUrl} />;
 }
 const visitScheduled: Template<{ visitId: string }> = { subject: () => "You're booked with etc.", render: (p) => scheduledEmail(p.visitId, false) };
 const visitReminder: Template<{ visitId: string }> = { subject: () => "Reminder: etc. is coming tomorrow", render: (p) => scheduledEmail(p.visitId, true) };

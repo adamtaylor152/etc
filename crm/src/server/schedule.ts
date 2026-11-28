@@ -2,11 +2,14 @@
 import { addDays, dateOnly, todayLocal, toDbDate } from "./dates";
 import { db } from "./db";
 import { clientName } from "./queries";
+import { conflicts } from "./availability";
+import { loadAvailability } from "./schedule-data";
 
 export type Person = { id: string; name: string; color: string };
 export type CalItem = {
   id: string; kind: "visit" | "task" | "event" | "assessment"; title: string; sub: string; start: string; end?: string; allDay: boolean;
   color: string; done: boolean; late: boolean; editable: boolean; href: string; people: Person[]; snow?: boolean;
+  warnings?: string[]; confirmed?: boolean; rescheduleAsked?: boolean;
 };
 // Jobber's object colours, used when nobody is assigned.
 export const KIND_COLOR = { visit: "#2f7a3b", task: "#173f5e", event: "#b8991f", assessment: "#b36109" } as const;
@@ -42,7 +45,7 @@ export async function calendarItems(businessId: string, from = addDays(todayLoca
       id: v.id, kind: "visit", title: `${clientName(v.job.client)} · ${v.job.kind === "SNOW_PLAN" ? "Snow" : v.job.title}`, sub: v.property.formatted.split(",")[0],
       start: v.startAt && !v.anytime ? v.startAt.toISOString() : d ?? "", end: v.endAt && !v.anytime ? v.endAt.toISOString() : undefined, allDay: v.anytime || !v.startAt,
       color: p[0]?.color ?? KIND_COLOR.visit, done, late: !!d && d < today && v.state === "SCHEDULED", editable: v.state === "SCHEDULED" && !v.snowEventId,
-      href: `/visits/${v.id}`, people: p, snow: !!v.snowEventId,
+      href: `/visits/${v.id}`, people: p, snow: !!v.snowEventId, confirmed: !!v.confirmedAt, rescheduleAsked: !!v.rescheduleRequestedAt,
     };
     (d ? items : unscheduled).push(it);
   }
@@ -62,6 +65,13 @@ export async function calendarItems(businessId: string, from = addDays(todayLoca
       id: r.id, kind: "assessment", title: `Assessment · ${clientName(r.client)}`, sub: r.property?.formatted.split(",")[0] ?? "", start: r.assessmentAt!.toISOString(),
       allDay: false, color: KIND_COLOR.assessment, done: r.status === "CONVERTED", late: false, editable: false, href: `/requests/${r.id}`, people: [],
     });
+  }
+  // Conflict warnings (double-booked, day off, time off, outside hours) for upcoming, not-done items.
+  const av = await loadAvailability(businessId, today, to);
+  for (const it of items) {
+    if (it.done || it.kind === "assessment") continue;
+    const b = av.busy.find((x) => x.id === it.id);
+    if (b && b.date >= today) it.warnings = conflicts(b, av.busy, av.people, av.timeOff);
   }
   return { items, unscheduled };
 }

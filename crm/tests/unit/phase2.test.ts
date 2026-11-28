@@ -188,3 +188,33 @@ describe("campaigns", () => {
     expect(verifySigned("client123.forged")).toBeNull();
   });
 });
+
+import { conflicts, freeSlots, suggestSlots, unavailable, type WorkHours } from "@/server/availability";
+describe("availability", () => {
+  const hours: WorkHours = { "1": ["08:00", "17:00"], "2": ["08:00", "17:00"] }; // Mon, Tue
+  const off = [{ userId: "u1", startDate: "2026-12-08", endDate: "2026-12-08", reason: "exam" }, { userId: null, startDate: "2026-12-25", endDate: "2026-12-25", reason: "Christmas" }];
+  it("knows days off, time off, holidays and working hours", () => {
+    expect(unavailable(hours, off, "u1", "2026-12-07", 9 * 60, 10 * 60)).toBeNull(); // Mon 9-10
+    expect(unavailable(hours, off, "u1", "2026-12-07", 16 * 60 + 30, 17 * 60 + 30)).toMatch(/outside/);
+    expect(unavailable(hours, off, "u1", "2026-12-08", null, null)).toMatch(/time off \(exam\)/);
+    expect(unavailable(hours, off, "u1", "2026-12-09", null, null)).toBe("their day off"); // Wed
+    expect(unavailable({ ...hours, "5": ["08:00", "17:00"] }, off, "u2", "2026-12-25", null, null)).toMatch(/closed/);
+  });
+  it("warns about double-booking", () => {
+    const people = [{ id: "u1", name: "Silas", hours }];
+    const busy = [{ id: "a", userIds: ["u1"], date: "2026-12-07", start: 600, end: 660, label: "Jane" }];
+    expect(conflicts({ id: "b", userIds: ["u1"], date: "2026-12-07", start: 630, end: 690, label: "x" }, busy, people, [])).toEqual(["Silas is already booked then (Jane)"]);
+    expect(conflicts({ id: "b", userIds: ["u1"], date: "2026-12-07", start: 660, end: 720, label: "x" }, busy, people, [])).toEqual([]);
+  });
+  it("finds free windows and ranks slots near existing stops first", () => {
+    expect(freeSlots(["08:00", "10:00"], [{ start: 8 * 60, end: 9 * 60 }], 60)).toEqual([540]);
+    const addDays = (d: string, n: number) => new Date(Date.parse(`${d}T12:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
+    const s = suggestSlots({
+      people: [{ id: "u1", hours }, { id: "u2", hours }], timeOff: [], from: "2026-12-07", days: 2, durationMin: 60, addDays,
+      busy: [{ id: "a", userIds: ["u2"], date: "2026-12-07", start: 480, end: 540, label: "Next door", lat: 50.9, lng: -114.1 }],
+      where: { lat: 50.9001, lng: -114.1001 },
+    });
+    expect(s[0]).toMatchObject({ userId: "u2", date: "2026-12-07", start: 540, near: "Next door" });
+    expect(s.every((x) => x.date === "2026-12-07" || x.date === "2026-12-08")).toBe(true);
+  });
+});

@@ -18,6 +18,7 @@ export const TOKEN_RULES: Record<TokenPurpose, { ttlMs: number; maxUses: number 
   PHOTO_UPLOAD: { ttlMs: 14 * DAY, maxUses: null },
   VISIT_REPORT: { ttlMs: 365 * DAY, maxUses: null },
   REVIEW: { ttlMs: 60 * DAY, maxUses: null },
+  VISIT_CONFIRM: { ttlMs: 14 * DAY, maxUses: null },
 };
 
 type Refs = Partial<Pick<LinkToken, "userId" | "clientId" | "requestId" | "quoteId" | "invoiceId" | "jobId" | "visitId" | "redirectPath">>;
