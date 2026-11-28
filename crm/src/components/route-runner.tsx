@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Camera, Check, ChevronDown, MapPin, Navigation, Phone, SkipForward, Truck, WifiOff } from "lucide-react";
 import type { RunStop } from "@/server/runner";
 
-type Action = { id: string; visitId: string; to: "EN_ROUTE" | "IN_PROGRESS" | "COMPLETED" | "SKIPPED"; depthCm?: number | null; iceMeltApplied?: boolean | null; skipReason?: string; skipNote?: string; lat?: number | null; lng?: number | null };
+type Action = { id: string; visitId: string; to: "EN_ROUTE" | "IN_PROGRESS" | "COMPLETED" | "SKIPPED" | "RETURN"; depthCm?: number | null; iceMeltApplied?: boolean | null; iceMeltBags?: number | null; billable?: boolean; skipReason?: string; skipNote?: string; lat?: number | null; lng?: number | null };
 const QKEY = "etc-run-queue", PKEY = "etc-run-autotext";
 
 // ---- tiny IndexedDB store for queued photos (blobs don't fit in localStorage) ----
@@ -45,6 +45,8 @@ export function RouteRunner({ date, initial }: { date: string; initial: RunStop[
   const [autoText, setAutoText] = useState(false);
   const [depth, setDepth] = useState("");
   const [iceMelt, setIceMelt] = useState(false);
+  const [bags, setBags] = useState("");
+  const [returnFor, setReturnFor] = useState<string | null>(null); // the done stop a return visit is being added after
   const [showList, setShowList] = useState(false);
   const [msg, setMsg] = useState("");
   const [skipNote, setSkipNote] = useState("");
@@ -56,12 +58,20 @@ export function RouteRunner({ date, initial }: { date: string; initial: RunStop[
 
   const flush = useCallback(async () => {
     if (!navigator.onLine) return;
+    let added = false;
     for (const a of queue()) {
       const r = await fetch("/api/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(a) }).catch(() => null);
       if (!r) break; // still offline
       if (r.status === 401) { setMsg("Signed out. Open the app and sign in again to send your saved updates."); break; }
       if (r.ok || r.status === 409 || r.status === 404) localStorage.setItem(QKEY, JSON.stringify(queue().filter((x) => x.id !== a.id)));
       if (r.status === 409) setMsg((await r.json().catch(() => ({}))).error ?? "One action couldn't be applied");
+      added ||= r.ok && a.to === "RETURN";
+    }
+    // A return visit is a new stop: fetch the day again so it shows up (only once nothing is waiting to send).
+    if (added && !queue().length) {
+      const [day, who] = [date.slice(0, 10), date.slice(11)];
+      const fresh = await fetch(`/api/run?date=${day}${who === "all" ? "&who=all" : ""}`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+      if (fresh?.stops) { setStops(fresh.stops); localStorage.setItem(`etc-run-${date}`, JSON.stringify(fresh.stops)); }
     }
     for (const p of await photoQueue("all").catch(() => [])) {
       const body = new FormData(); body.append("visitId", p.visitId); body.append("kind", p.kind); body.append("file", p.blob, "photo.jpg");
@@ -72,7 +82,7 @@ export function RouteRunner({ date, initial }: { date: string; initial: RunStop[
       if (r.ok || r.status < 500) await photoQueue("del", p.id);
     }
     await countPending();
-  }, [countPending]);
+  }, [countPending, date]);
 
   // Fresh stops when online; the last copy when not.
   useEffect(() => {
@@ -94,7 +104,15 @@ export function RouteRunner({ date, initial }: { date: string; initial: RunStop[
   const cur = open[0];
   const done = stops.length - open.length;
 
-  async function act(s: RunStop, to: Action["to"], extra: Partial<Action> = {}) {
+  /** One more trip to a stop that's done (the plough buried the driveway end). It lands on today's route. */
+  async function addReturn(s: RunStop, billable: boolean) {
+    localStorage.setItem(QKEY, JSON.stringify([...queue(), { id: crypto.randomUUID(), visitId: s.visitId, to: "RETURN" as const, billable }]));
+    setReturnFor(null);
+    setMsg(`Return visit added for ${s.address}${navigator.onLine ? "" : " (shows up when you have signal)"}`);
+    await countPending();
+    void flush();
+  }
+  async function act(s: RunStop, to: Exclude<Action["to"], "RETURN">, extra: Partial<Action> = {}) {
     const pos = to === "COMPLETED" || to === "IN_PROGRESS" ? await where() : null;
     const a: Action = { id: crypto.randomUUID(), visitId: s.visitId, to, lat: pos?.lat ?? null, lng: pos?.lng ?? null, ...extra };
     const next = stops.map((x) => (x.visitId === s.visitId ? { ...x, state: to } : x));
@@ -106,7 +124,7 @@ export function RouteRunner({ date, initial }: { date: string; initial: RunStop[
       const n = next.find((x) => !["COMPLETED", "SKIPPED"].includes(x.state));
       if (n && n.state === "SCHEDULED") { localStorage.setItem(QKEY, JSON.stringify([...queue(), { id: crypto.randomUUID(), visitId: n.visitId, to: "EN_ROUTE" as const }])); setStops(next.map((x) => (x.visitId === n.visitId ? { ...x, state: "EN_ROUTE" } : x))); }
     }
-    setDepth(""); setIceMelt(false);
+    setDepth(""); setIceMelt(false); setBags("");
     await countPending();
     void flush();
   }
@@ -138,7 +156,8 @@ export function RouteRunner({ date, initial }: { date: string; initial: RunStop[
         <section className="rounded-2xl border border-line bg-white p-4 shadow-card">
           <p className="text-xs font-bold uppercase tracking-wide text-ink-soft">Stop {done + 1} of {stops.length}{cur.time && ` · ${cur.time}`}{cur.communityName && ` · ${cur.communityName}`}</p>
           <h2 className="font-display text-2xl font-bold">{cur.address}</h2>
-          <p className="text-base">{cur.client} · {cur.job}</p>
+          <p className="text-base">{cur.client} · {cur.job}{cur.usualMin != null && <span className="text-ink-soft"> · usually {cur.usualMin} min</span>}</p>
+          {cur.isReturn && <p className="mt-2 rounded-xl border border-blue/30 bg-blue/5 p-2 text-sm font-semibold">Return visit: we&apos;ve already been here this storm. Clear what came back (usually the driveway end).</p>}
           {cur.sizeNote && <p className="mt-2 rounded-xl border border-amber-300 bg-amber-100 p-2 text-sm font-semibold text-amber-950">{cur.sizeNote}</p>}
           {cur.more && <a href={`/stop/${cur.visitId}`} className="mt-2 flex min-h-11 items-center justify-center rounded-xl border-2 border-navy text-sm font-semibold">Checklist &amp; signature for this stop</a>}
           {cur.extras?.length > 0 && <p className="mt-2 rounded-xl border border-blue/30 bg-blue/5 p-2 text-sm font-semibold">Also this visit: {cur.extras.join(", ")}</p>}
@@ -159,12 +178,13 @@ export function RouteRunner({ date, initial }: { date: string; initial: RunStop[
           </div>
           <input ref={cam} type="file" accept="image/*" capture="environment" multiple className="sr-only" onChange={(e) => addPhoto(e.target.files)} />
           {cur.snow && (
-            <div className="mt-3 flex items-center gap-3 text-base">
+            <div className="mt-3 flex flex-wrap items-center gap-3 text-base">
               <label className="flex items-center gap-2">Snow <input inputMode="numeric" value={depth} onChange={(e) => setDepth(e.target.value.replace(/\D/g, ""))} placeholder="cm" className="h-12 w-20 rounded-xl border-2 border-line px-3 text-lg" /></label>
               <label className="flex items-center gap-2"><input type="checkbox" checked={iceMelt || false} onChange={(e) => setIceMelt(e.target.checked)} className="size-7" />Ice melt</label>
+              {iceMelt && <label className="flex items-center gap-2">Bags <input inputMode="decimal" value={bags} onChange={(e) => setBags(e.target.value.replace(/[^\d.]/g, ""))} placeholder="0.5" className="h-12 w-20 rounded-xl border-2 border-line px-3 text-lg" /></label>}
             </div>
           )}
-          <button onClick={() => act(cur, "COMPLETED", { depthCm: depth ? Number(depth) : null, iceMeltApplied: cur.snow ? iceMelt : null })} className={`${big} mt-3 w-full bg-emerald-600 text-white`}><Check className="size-6" />Done</button>
+          <button onClick={() => act(cur, "COMPLETED", { depthCm: depth ? Number(depth) : null, iceMeltApplied: cur.snow ? iceMelt : null, iceMeltBags: cur.snow && iceMelt && Number(bags) > 0 ? Math.min(999, Number(bags)) : null })} className={`${big} mt-3 w-full bg-emerald-600 text-white`}><Check className="size-6" />Done</button>
           <details className="mt-2">
             <summary className="cursor-pointer list-none text-center text-sm font-semibold text-ink-soft"><SkipForward className="mr-1 inline size-4" />Skip this stop</summary>
             <input value={skipNote} onChange={(e) => setSkipNote(e.target.value)} maxLength={500} placeholder="Note for the office (optional)" className="mt-2 min-h-11 w-full rounded-xl border-2 border-line px-3 text-sm" />
@@ -183,7 +203,19 @@ export function RouteRunner({ date, initial }: { date: string; initial: RunStop[
       <button onClick={() => setShowList(!showList)} className="flex w-full items-center justify-between rounded-xl bg-white p-3 text-sm font-semibold">All stops <ChevronDown className={`size-4 transition ${showList ? "rotate-180" : ""}`} /></button>
       {showList && (
         <ol className="space-y-1 rounded-xl bg-white p-2 text-sm">
-          {stops.map((s, i) => <li key={s.visitId} className={`flex justify-between gap-2 rounded-lg px-2 py-1.5 ${s.visitId === cur?.visitId ? "bg-blue/10 font-semibold" : ""}`}><span>{i + 1}. {s.address}</span><span className="text-ink-soft">{s.state === "COMPLETED" ? "✓" : s.state === "SKIPPED" ? "skipped" : s.state === "EN_ROUTE" ? "on the way" : s.state === "IN_PROGRESS" ? "here" : ""}</span></li>)}
+          {stops.map((s, i) => (
+            <li key={s.visitId} className={`rounded-lg px-2 py-1.5 ${s.visitId === cur?.visitId ? "bg-blue/10 font-semibold" : ""}`}>
+              <div className="flex justify-between gap-2"><span>{i + 1}. {s.address}{s.isReturn && " (return visit)"}{s.usualMin != null && <span className="font-normal text-ink-soft"> · usually {s.usualMin} min</span>}</span><span className="text-ink-soft">{s.state === "COMPLETED" ? "✓" : s.state === "SKIPPED" ? "skipped" : s.state === "EN_ROUTE" ? "on the way" : s.state === "IN_PROGRESS" ? "here" : ""}</span></div>
+              {/* Done storm stops can get one more trip. Crew pick whether it's billable; the office sets what that costs. */}
+              {s.state === "COMPLETED" && s.storm && (returnFor === s.visitId ? (
+                <div className="mt-1 grid grid-cols-3 gap-2 font-semibold">
+                  <button onClick={() => addReturn(s, false)} className="min-h-11 rounded-xl border-2 border-line">Included</button>
+                  <button onClick={() => addReturn(s, true)} className="min-h-11 rounded-xl border-2 border-line">Billable</button>
+                  <button onClick={() => setReturnFor(null)} className="min-h-11 rounded-xl text-ink-soft">Cancel</button>
+                </div>
+              ) : <button onClick={() => setReturnFor(s.visitId)} className="mt-1 min-h-9 text-sm font-semibold text-blue">Plough came back? Add a return visit</button>)}
+            </li>
+          ))}
         </ol>
       )}
     </div>

@@ -3,11 +3,11 @@ import { TZ } from "../dates";
 
 /**
  * `driveMin[i]` is the drive to stop i from the one before (the first from the start point). Each stop then takes
- * `serviceMin`. Returns minutes-after-setting-off for each arrival, and the totals (`homeMin` = the drive back).
+ * `serviceMin` (one number for every stop, or one per stop). Returns minutes-after-setting-off for each arrival, and the totals (`homeMin` = the drive back).
  */
-export function routeTimes(driveMin: number[], serviceMin: number, homeMin = 0) {
+export function routeTimes(driveMin: number[], serviceMin: number | number[], homeMin = 0) {
   let t = 0;
-  const arrive = driveMin.map((d) => { t += d; const at = t; t += serviceMin; return at; });
+  const arrive = driveMin.map((d, i) => { t += d; const at = t; t += typeof serviceMin === "number" ? serviceMin : serviceMin[i]; return at; });
   return { arrive, driveMin: driveMin.reduce((a, b) => a + b, 0) + homeMin, totalMin: t + homeMin };
 }
 
