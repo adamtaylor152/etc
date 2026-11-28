@@ -7,7 +7,7 @@ import { getStream } from "@/server/storage";
 export async function GET(req: Request, ctx: RouteContext<"/api/media/[id]/[variant]">) {
   const { id, variant } = await ctx.params;
   const url = new URL(req.url);
-  if (!(variant in VARIANTS) && variant !== "mms" && variant !== "file") return new Response("Not found", { status: 404 });
+  if (!(variant in VARIANTS) && variant !== "mms" && variant !== "file" && variant !== "logo") return new Response("Not found", { status: 404 });
   const signed = url.searchParams.has("sig");
   if (signed && !verifyMediaSig(id, variant, url.searchParams.get("exp"), url.searchParams.get("sig"))) return new Response("Forbidden", { status: 403 });
   const user = signed ? null : await currentOwner();
@@ -23,10 +23,10 @@ export async function GET(req: Request, ctx: RouteContext<"/api/media/[id]/[vari
       headers: { "Content-Type": "application/octet-stream", "Content-Disposition": `attachment; filename="${name}"`, "Content-Length": String(file.size), "Cache-Control": "private, max-age=86400", "X-Content-Type-Options": "nosniff", "X-Robots-Tag": "noindex" },
     });
   }
-  const mms = variant === "mms";
-  const file = await getStream(`${a.storageKey}/${mms ? "mms.jpg" : `${variant}.webp`}`);
+  const [name, type] = variant === "mms" ? ["mms.jpg", "image/jpeg"] : variant === "logo" ? ["logo.png", "image/png"] : [`${variant}.webp`, "image/webp"];
+  const file = await getStream(`${a.storageKey}/${name}`);
   if (!file) return new Response("Not found", { status: 404 });
   return new Response(file.stream, {
-    headers: { "Content-Type": mms ? "image/jpeg" : "image/webp", "Content-Length": String(file.size), "Cache-Control": "private, max-age=31536000, immutable", "X-Robots-Tag": "noindex" },
+    headers: { "Content-Type": type, "Content-Length": String(file.size), "Cache-Control": "private, max-age=31536000, immutable", "X-Robots-Tag": "noindex" },
   });
 }

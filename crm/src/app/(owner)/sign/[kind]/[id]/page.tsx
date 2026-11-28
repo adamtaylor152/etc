@@ -1,7 +1,11 @@
 // Hand the phone to the client: they read the statement, type their name and sign.
 import { requireOwner } from "@/server/auth";
 import { notFound } from "next/navigation";
+import Link from "next/link";
+import { ChevronLeft } from "lucide-react";
+import { Flash } from "@/components/flash";
 import { SignaturePad } from "@/components/signature-pad";
+import { Card, Field, Input, btn } from "@/components/ui";
 import { businessId, db } from "@/server/db";
 import { money } from "@/server/money";
 import { STATEMENTS } from "@/server/ops/signatures";
@@ -21,21 +25,26 @@ export default async function Sign({ params, searchParams }: PageProps<"/sign/[k
   else if (kind === "visit") { const v = await db.visit.findFirst({ where: { id, businessId: bid }, include: { job: { include: { client: true } }, property: true } }); if (!v) notFound(); title = v.job.kind === "SNOW_PLAN" ? "Snow clearing" : v.job.title; sub = v.property.formatted; who = clientName(v.job.client); }
   else notFound();
   const statement = STATEMENTS[kind === "quote" ? "QUOTE" : kind === "invoice" ? "INVOICE" : "VISIT"];
+  const backHref = kind === "quote" ? `/quotes/${id}` : kind === "invoice" ? `/invoices/${id}` : `/visits/${id}`;
   return (
     <div className="mx-auto max-w-lg">
-      <section className="rounded-lg border border-line bg-white p-5 shadow-card">
-        <p className="text-xs font-semibold uppercase tracking-wide text-ink-soft">Please sign</p>
-        <h1 className="font-display text-2xl font-bold">{title}</h1>
-        <p className="text-sm text-ink-soft">{sub}</p>
-        {typeof sp.error === "string" && <p role="alert" className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-medium text-red-800">{sp.error}</p>}
-        <form action={signInPerson} className="mt-4 space-y-3">
+      <Link href={backHref} className="no-print -ml-1 mb-2 inline-flex min-h-11 items-center gap-0.5 rounded-md pr-2 text-sm font-medium text-ink-soft hover:text-navy"><ChevronLeft className="size-4" aria-hidden />Back without signing</Link>
+      <Card>
+        <p className="text-sm font-medium text-ink-soft">Please sign</p>
+        <h1 className="mt-0.5 font-display text-[1.7rem] font-semibold leading-tight [overflow-wrap:anywhere]">{title}</h1>
+        <p className="mt-1 text-base tabular-nums text-ink-soft">{sub}</p>
+        <div className="mt-4"><Flash error={sp.error} /></div>
+        <form action={signInPerson} className="space-y-4">
           <input type="hidden" name="kind" value={kind} /><input type="hidden" name="id" value={id} />
-          <p className="rounded-lg bg-tint p-3 text-sm font-semibold">“{statement}”</p>
-          <label className="block text-sm font-semibold">Name<input name="name" required defaultValue={who} autoComplete="off" className="mt-1 min-h-11 w-full rounded-lg border border-line px-3" /></label>
-          <SignaturePad height={200} />
-          <button className="min-h-12 w-full rounded-lg bg-blue font-semibold text-white">Save signature</button>
+          <p className="max-w-[70ch] rounded-lg bg-tint p-4 text-base leading-relaxed">“{statement}”</p>
+          <Field label="Name"><Input name="name" required defaultValue={who} autoComplete="off" className="min-h-12" /></Field>
+          <div>
+            <span className="mb-1 block text-sm font-semibold">Signature</span>
+            <SignaturePad height={240} />
+          </div>
+          <button className={btn("primary", "min-h-14! w-full text-base!")}>Save signature</button>
         </form>
-      </section>
+      </Card>
     </div>
   );
 }

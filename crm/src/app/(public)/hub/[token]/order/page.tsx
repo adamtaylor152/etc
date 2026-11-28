@@ -2,6 +2,8 @@
 // from, and "book this again" pre-filled from a past job. Same services, prices and pipeline as /book.
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { ArrowLeft } from "lucide-react";
+import { PageTitle, textLink } from "@/components/public/kit";
 import { BookingForm } from "@/components/booking-form";
 import { bookingMenu } from "@/server/booking/create";
 import { OTHER, reorderLabels } from "@/server/booking/validate";
@@ -30,12 +32,10 @@ export default async function HubOrderPage({ params, searchParams }: PageProps<"
     : null;
   const labels = job ? reorderLabels({ requested: job.request?.services ?? [], lines: job.lineItems.map((l) => l.name), title: job.title }, services) : [];
   return (
-    <div className="space-y-4">
-      <div>
-        <Link href={`/hub/${token}`} className="text-sm font-semibold text-blue">← Back to your page</Link>
-        <h1 className="mt-1 font-display text-3xl font-bold">{job ? "Book it again" : "Book a service"}</h1>
-        <p className="mt-1 text-ink-soft">{job ? `Same as "${job.title}". Change anything you like.` : `Hi ${c.firstName}! Pick what you need and where.`} Prices include tax; pay after the job.</p>
-      </div>
+    <>
+      <p className="mb-1"><Link href={`/hub/${token}`} className={textLink}><ArrowLeft className="size-4" strokeWidth={1.75} aria-hidden />Back to your page</Link></p>
+      <PageTitle title={job ? "Book it again" : "Book a service"}
+        sub={<>{job ? `Same as "${job.title}". Change anything you like.` : `Hi ${c.firstName}. Pick what you need and where.`} Prices include tax; pay after the job.</>} />
       <BookingForm services={list} phone={env.phone} mapsKey={mapsKey()} hub={{
         back: `/hub/${token}`, payment: c.preferredPayment === "CASH" ? "Cash" : "e-Transfer", order: hubOrder.bind(null, token),
         properties: c.properties.map((p) => ({ id: p.id, address: p.formatted, size: p.driveSize ? SIZES[p.driveSize].short : null })),
@@ -44,6 +44,6 @@ export default async function HubOrderPage({ params, searchParams }: PageProps<"
           note: labels.includes(OTHER) ? `Same as last time: ${job.title}` : undefined,
         } } : {}),
       }} />
-    </div>
+    </>
   );
 }

@@ -1,6 +1,7 @@
 // Invoices and payments: unbilled charges -> draft invoice -> send -> payment (cash / e-Transfer / card) -> receipt.
 import type { PaymentMethod, PaymentTerms, Prisma } from "@/generated/prisma/client";
-import { billingEmail, depositCents, depositCredit, draftEditProblem, dueDate, lateFeeDue, etransferRef, invoiceTotals, isCreditLine, statusAfterPayments } from "../billing/invoice";
+import { billingEmail, depositCents, depositCredit, draftEditProblem, dueDate, lateFeeDue, etransferRef, invoiceTotals, invoiceTotalsWithCredits, isCreditLine, statusAfterPayments } from "../billing/invoice";
+import { splitOverpayment } from "../billing/adjustments";
 import { instalmentKey, instalmentSchedule } from "../billing/instalments";
 import { periodKey, periodLabel, periodsDue } from "../billing/periods";
 import { dateOnly, todayLocal, toDbDate } from "../dates";
@@ -31,19 +32,34 @@ async function createDraft(tx: Tx, user: Actor, input: {
   const jobIds = [...new Set([input.jobId, ...input.lines.map((l) => l.jobId)].filter((x): x is string => !!x))];
   const quotes = jobIds.length ? await tx.quote.findMany({ where: { jobId: { in: jobIds } }, select: { id: true } }) : [];
   const deposits = quotes.length ? await tx.invoice.findMany({ where: { kind: "DEPOSIT", quoteId: { in: quotes.map((q) => q.id) }, appliedToInvoiceId: null, amountPaidCents: { gt: 0 } }, orderBy: { number: "asc" } }) : [];
-  const credits = depositCredit(input.lines.reduce((n, l) => n + l.totalCents, 0), deposits.map((d) => ({ id: d.id, paidCents: d.amountPaidCents })));
-  input = { ...input, lines: [...input.lines, ...credits.map((c) => ({ name: `Less deposit (invoice #${deposits.find((d) => d.id === c.id)!.number})`, quantity: 1, unitPriceCents: -c.cents, totalCents: -c.cents }))] };
-  // Account credits (referral rewards) come off next, each used once.
+  const work = input.lines.map((l) => l.totalCents);
+  // A discount agreed on the quote this job came from comes off the job's first invoice, once.
+  let discountCents = 0;
+  if (jobIds.length === 1) {
+    const job = await tx.job.findUnique({ where: { id: jobIds[0] }, select: { discountCents: true } });
+    const used = job?.discountCents ? await tx.invoice.count({ where: { status: { not: "VOID" }, discountCents: { gt: 0 }, OR: [{ jobId: jobIds[0] }, { lineItems: { some: { jobId: jobIds[0] } } }] } }) : 1;
+    if (job?.discountCents && !used) discountCents = Math.min(job.discountCents, work.reduce((a, b) => a + b, 0));
+  }
+  // Deposits and credits are money already paid (tax included), so they come off what the work totals WITH tax.
+  let owing = invoiceTotals(work, discountCents, biz).totalCents;
+  const credits = depositCredit(owing, deposits.map((d) => ({ id: d.id, paidCents: d.amountPaidCents })));
+  owing -= credits.reduce((n, c) => n + c.cents, 0);
+  // Account credits (referral rewards, overpayments, goodwill) come off next.
   const openCredits = await tx.clientCredit.findMany({ where: { clientId: input.clientId, appliedToInvoiceId: null }, orderBy: { createdAt: "asc" } });
-  const creditUse = depositCredit(input.lines.reduce((n, l) => n + l.totalCents, 0), openCredits.map((c) => ({ id: c.id, paidCents: c.amountCents })));
-  input = { ...input, lines: [...input.lines, ...creditUse.map((c) => ({ name: openCredits.find((x) => x.id === c.id)!.reason, quantity: 1, unitPriceCents: -c.cents, totalCents: -c.cents }))] };
+  const creditUse = depositCredit(owing, openCredits.map((c) => ({ id: c.id, paidCents: c.amountCents })));
+  const creditCents = [...credits, ...creditUse].reduce((n, c) => n + c.cents, 0);
+  input = { ...input, lines: [
+    ...input.lines,
+    ...credits.map((c) => ({ name: `Less deposit (invoice #${deposits.find((d) => d.id === c.id)!.number})`, quantity: 1, unitPriceCents: -c.cents, totalCents: -c.cents })),
+    ...creditUse.map((c) => ({ name: openCredits.find((x) => x.id === c.id)!.reason, quantity: 1, unitPriceCents: -c.cents, totalCents: -c.cents })),
+  ] };
   const number = await nextNumber(tx, user.businessId, "INVOICE");
-  const totals = invoiceTotals(input.lines.map((l) => l.totalCents), 0, biz);
+  const totals = invoiceTotalsWithCredits(work, creditCents, discountCents, biz);
   const inv = await tx.invoice.create({
     data: {
       businessId: user.businessId, number, clientId: input.clientId, propertyId: input.propertyId, jobId: input.jobId, snowEventId: input.snowEventId,
       subject: input.subject, instalmentKey: input.instalmentKey, paymentTerms: biz.defaultPaymentTerms, etransferRef: etransferRef(number), allowPartial: parseSettings(biz.settings).allowPartialPayments,
-      subtotalCents: totals.subtotalCents, taxCents: totals.taxCents, totalCents: totals.totalCents,
+      subtotalCents: totals.subtotalCents, discountCents, taxCents: totals.taxCents, totalCents: totals.totalCents,
     },
   });
   for (const [i, l] of input.lines.entries()) {
@@ -55,9 +71,20 @@ async function createDraft(tx: Tx, user: Actor, input: {
       if (res.count !== 1) throw new TransitionError("Some charges were already invoiced. Refresh and try again.");
     }
   }
-  if (credits.length) await tx.invoice.updateMany({ where: { id: { in: credits.map((c) => c.id) } }, data: { appliedToInvoiceId: inv.id } });
+  // Claim each one only if it is still unused (two invoices made at once can't both take it), and never lose the part
+  // this invoice didn't need: what is left of a deposit or a credit stays on the client's account for the next invoice.
+  const taken = new TransitionError("A deposit or credit was just used on another invoice. Refresh and try again.");
+  for (const c of credits) {
+    const d = deposits.find((x) => x.id === c.id)!;
+    if ((await tx.invoice.updateMany({ where: { id: d.id, appliedToInvoiceId: null }, data: { appliedToInvoiceId: inv.id } })).count !== 1) throw taken;
+    if (c.cents < d.amountPaidCents) await tx.clientCredit.create({ data: { businessId: user.businessId, clientId: input.clientId, amountCents: d.amountPaidCents - c.cents, reason: `Rest of deposit (invoice #${d.number})` } });
+  }
+  for (const c of creditUse) {
+    const row = openCredits.find((x) => x.id === c.id)!;
+    if ((await tx.clientCredit.updateMany({ where: { id: row.id, appliedToInvoiceId: null }, data: { appliedToInvoiceId: inv.id, amountCents: c.cents } })).count !== 1) throw taken;
+    if (c.cents < row.amountCents) await tx.clientCredit.create({ data: { businessId: user.businessId, clientId: input.clientId, amountCents: row.amountCents - c.cents, reason: row.reason, paymentId: row.paymentId } });
+  }
   if (creditUse.length) {
-    await tx.clientCredit.updateMany({ where: { id: { in: creditUse.map((c) => c.id) } }, data: { appliedToInvoiceId: inv.id } });
     const refIds = openCredits.filter((c) => creditUse.some((u) => u.id === c.id) && c.referralId).map((c) => c.referralId!);
     if (refIds.length) await tx.referral.updateMany({ where: { id: { in: refIds }, status: "QUALIFIED" }, data: { status: "REWARDED" } });
   }
@@ -243,19 +270,34 @@ export async function applyLateFees() {
   return added;
 }
 
+/**
+ * A draft becomes a real invoice: issued today, due per its terms. Used by every path that issues one (send, mark sent,
+ * invoice-on-Done), so they all agree on two things:
+ * - nothing left to pay (a deposit or credit covered it) means it is PAID now, not "awaiting payment" forever;
+ * - a client who opted in to auto-pay gets the day their card is charged stamped here (the scheduler does the charging).
+ *   Not when their email bounces: they couldn't be told first.
+ */
+export async function issueInvoice(t: Tx, invoiceId: string) {
+  const inv = await t.invoice.findUniqueOrThrow({ where: { id: invoiceId }, include: { client: true } });
+  if (inv.status !== "DRAFT") return inv;
+  const today = todayLocal(), due = dueDate(today, inv.paymentTerms);
+  const settled = inv.totalCents - inv.amountPaidCents <= 0;
+  const s = !settled && stripeEnabled() && inv.client.autoPayConsentAt && !inv.client.emailBouncedAt ? parseSettings((await t.business.findUniqueOrThrow({ where: { id: inv.businessId } })).settings) : null;
+  const chargeOn = s && autoPayChargeOn({ kind: inv.kind, issuedOn: today, dueOn: due }, autoPayReady(inv.client, s, true), s.autoPayGraceDays);
+  return t.invoice.update({
+    where: { id: inv.id },
+    data: {
+      status: settled ? "PAID" : "AWAITING_PAYMENT", paidAt: settled ? new Date() : null, issuedOn: toDbDate(today), dueOn: toDbDate(due), sentAt: new Date(),
+      ...(chargeOn ? { autoPayState: "SCHEDULED" as const, autoPayOn: toDbDate(chargeOn) } : {}),
+    },
+  });
+}
+
 export async function sendInvoice(user: Actor, invoiceId: string, tx?: Tx) {
   const run = async (t: Tx) => {
     const inv = await t.invoice.findFirstOrThrow({ where: { id: invoiceId, businessId: user.businessId }, include: { client: true } });
     if (inv.status === "VOID" || inv.status === "BAD_DEBT") throw new TransitionError("Void invoices can't be sent");
-    const today = todayLocal();
-    if (inv.status === "DRAFT") {
-      await t.invoice.update({ where: { id: inv.id }, data: { status: "AWAITING_PAYMENT", issuedOn: toDbDate(today), dueOn: toDbDate(dueDate(today, inv.paymentTerms)), sentAt: new Date() } });
-      // Client opted in to auto-pay: stamp the day their card is charged. The email says so, and the scheduler does the charging.
-      // (Not when their email bounces: they couldn't be told first.)
-      const s = stripeEnabled() && inv.client.autoPayConsentAt && !inv.client.emailBouncedAt ? parseSettings((await t.business.findUniqueOrThrow({ where: { id: user.businessId } })).settings) : null;
-      const chargeOn = s && autoPayChargeOn({ kind: inv.kind, issuedOn: today, dueOn: dueDate(today, inv.paymentTerms) }, autoPayReady(inv.client, s, true), s.autoPayGraceDays);
-      if (chargeOn) await t.invoice.update({ where: { id: inv.id }, data: { autoPayState: "SCHEDULED", autoPayOn: toDbDate(chargeOn) } });
-    }
+    if (inv.status === "DRAFT") await issueInvoice(t, inv.id);
     await enqueue(t, {
       businessId: user.businessId, template: "invoice.sent", to: await billingEmailFor(t, inv.client), replyTo: env.helpEmail, priority: 3, props: { invoiceId: inv.id },
       dedupeKey: `invoice:${inv.id}:sent:${Date.now()}`, clientId: inv.clientId, entityType: "Invoice", entityId: inv.id,
@@ -271,8 +313,7 @@ export async function sendInvoice(user: Actor, invoiceId: string, tx?: Tx) {
 export async function markSent(user: Actor, invoiceId: string) {
   const inv = await db.invoice.findFirstOrThrow({ where: { id: invoiceId, businessId: user.businessId } });
   if (inv.status !== "DRAFT") return;
-  const today = todayLocal();
-  await db.invoice.update({ where: { id: inv.id }, data: { status: "AWAITING_PAYMENT", issuedOn: toDbDate(today), dueOn: toDbDate(dueDate(today, inv.paymentTerms)), sentAt: new Date() } });
+  await db.$transaction((tx) => issueInvoice(tx, inv.id));
 }
 
 /** Re-derive paid amount and status after a payment or refund changes. */
@@ -303,14 +344,23 @@ export async function recordPayment(user: Actor, input: {
     const inv = await tx.invoice.findFirstOrThrow({ where: { id: input.invoiceId, businessId: user.businessId } });
     if (inv.status === "VOID") throw new TransitionError("This invoice is void");
     if (input.stripePaymentIntentId && await tx.payment.findUnique({ where: { stripePaymentIntentId: input.stripePaymentIntentId } })) return null; // webhook replay
+    // More than is owed (two payments crossing, an e-Transfer for the wrong amount): the invoice takes its balance and
+    // the rest is kept as account credit, linked to this payment. The owner's own form asks first (recordPaymentKeepingExtra).
+    const { appliedCents, creditCents: extraCents } = splitOverpayment(inv.totalCents - inv.amountPaidCents, input.amountCents);
     const p = await tx.payment.create({
       data: {
-        businessId: user.businessId, clientId: inv.clientId, invoiceId: inv.id, method: input.method, amountCents: input.amountCents,
+        businessId: user.businessId, clientId: inv.clientId, invoiceId: inv.id, method: input.method, amountCents: appliedCents,
         reference: input.reference || null, note: input.note || null, stripePaymentIntentId: input.stripePaymentIntentId,
         stripeCheckoutSessionId: input.stripeCheckoutSessionId, feeCents: input.feeCents, tipCents: input.tipCents || null, recordedById: user.id ?? undefined,
         unmatchedPaymentId: input.unmatchedPaymentId, ...(input.receivedAt ? { receivedAt: input.receivedAt } : {}),
       },
     });
+    if (extraCents > 0) {
+      const reason = `Credit from overpayment on invoice #${inv.number}`;
+      await tx.clientCredit.create({ data: { businessId: user.businessId, clientId: inv.clientId, amountCents: extraCents, reason, paymentId: p.id } });
+      await logActivity(tx, { businessId: user.businessId, type: "payment.credit_added", entityType: "Client", entityId: inv.clientId, actorType: user.id ? "USER" : "SYSTEM", actorUserId: user.id ?? undefined, clientId: inv.clientId, data: { amountCents: extraCents, reason } });
+      for (const to of env.ownerEmails) await enqueue(tx, { businessId: user.businessId, template: "owner.notice", to, priority: 4, dedupeKey: `payment:${p.id}:overpaid:${to}`, props: { title: `Invoice #${inv.number} was overpaid`, body: `$${(extraCents / 100).toFixed(2)} more than it owed came in. It is saved as account credit and comes off their next invoice; refund it instead if you prefer.`, path: `/invoices/${inv.id}` } });
+    }
     await recompute(tx, inv.id);
     await qualifyReferral(tx, inv.clientId);
     const client = await tx.client.findUniqueOrThrow({ where: { id: inv.clientId } });
@@ -325,7 +375,7 @@ export async function recordPayment(user: Actor, input: {
     }
     await logActivity(tx, {
       businessId: user.businessId, type: "payment.received", entityType: "Invoice", entityId: inv.id, actorType: user.id ? "USER" : "SYSTEM",
-      actorUserId: user.id ?? undefined, clientId: inv.clientId, jobId: inv.jobId ?? undefined, data: { method: input.method, amountCents: input.amountCents },
+      actorUserId: user.id ?? undefined, clientId: inv.clientId, jobId: inv.jobId ?? undefined, data: { method: input.method, amountCents: appliedCents },
     });
     return p;
   };
@@ -357,7 +407,12 @@ export async function voidInvoice(user: Actor, invoiceId: string, reason: string
     if (inv.payments.some((p) => p.refundedCents < p.amountCents)) throw new TransitionError("Remove or refund its payments first"); // fully refunded payments hold no money
     await tx.visitCharge.updateMany({ where: { invoiceLineItem: { invoiceId } }, data: { invoiceLineItemId: null } });
     // Deposits and account credits this invoice used up go back to unused, so the re-issued invoice gets them again.
-    await tx.invoice.updateMany({ where: { kind: "DEPOSIT", appliedToInvoiceId: invoiceId }, data: { appliedToInvoiceId: null } });
+    const negatives = await tx.invoiceLineItem.findMany({ where: { invoiceId, totalCents: { lt: 0 } } });
+    for (const d of await tx.invoice.findMany({ where: { kind: "DEPOSIT", appliedToInvoiceId: invoiceId } })) {
+      const used = -(negatives.find((l) => l.name === `Less deposit (invoice #${d.number})`)?.totalCents ?? -d.amountPaidCents);
+      if (used >= d.amountPaidCents) await tx.invoice.update({ where: { id: d.id }, data: { appliedToInvoiceId: null } });
+      else if (used > 0) await tx.clientCredit.create({ data: { businessId: user.businessId, clientId: inv.clientId, amountCents: used, reason: `Deposit returned (void invoice #${inv.number})` } });
+    }
     const credits = await tx.clientCredit.findMany({ where: { appliedToInvoiceId: invoiceId } });
     await tx.clientCredit.updateMany({ where: { appliedToInvoiceId: invoiceId }, data: { appliedToInvoiceId: null } });
     const refIds = credits.flatMap((c) => (c.referralId ? [c.referralId] : []));
@@ -386,7 +441,7 @@ export async function updateDraftInvoice(user: Actor & { id: string }, invoiceId
     const biz = await tx.business.findUniqueOrThrow({ where: { id: user.businessId } });
     const problem = draftEditProblem(lines.map((l) => l.totalCents), -credits.reduce((n, c) => n + c.totalCents, 0), input.discountCents, inv.amountPaidCents, biz);
     if (problem) throw new TransitionError(problem);
-    const totals = invoiceTotals([...lines, ...credits].map((l) => l.totalCents), input.discountCents, biz);
+    const totals = invoiceTotalsWithCredits(lines.map((l) => l.totalCents), -credits.reduce((n, c) => n + c.totalCents, 0), input.discountCents, biz);
     // Checked again in the write, so an invoice sent a moment ago can't be changed under the client.
     const res = await tx.invoice.updateMany({
       where: { id: inv.id, status: "DRAFT", kind: "STANDARD" },

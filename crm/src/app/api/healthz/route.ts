@@ -12,5 +12,6 @@ export async function GET(req: Request) {
     try { await db.$queryRaw`SELECT 1`; return Response.json({ ok: true }); } catch { return Response.json({ ok: false }, { status: 503 }); }
   }
   const h = await health();
-  return Response.json({ ok: h.up && h.checks.emails && h.checks.texts && h.checks.automations, ...h }, { status: h.up ? 200 : 503, headers: { "Cache-Control": "no-store" } });
+  // Automations are reported (h.automations) but don't flip ok: the monitor emails on ok:false, and some jobs only re-run once a day.
+  return Response.json({ ok: h.up && h.checks.emails && h.checks.texts, ...h }, { status: h.up ? 200 : 503, headers: { "Cache-Control": "no-store" } });
 }

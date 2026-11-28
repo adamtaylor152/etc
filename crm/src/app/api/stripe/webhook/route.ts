@@ -4,13 +4,16 @@
 // Card on file: setup_intent.succeeded / checkout.session.completed save a card, payment_intent.succeeded /
 // payment_intent.payment_failed settle an automatic payment, payment_method.detached forgets a card,
 // charge.dispute.created emails the owners. The endpoint in Stripe must be subscribed to all of these.
+import { enqueue, kickOutbox } from "@/server/email/outbox";
+import { env } from "@/server/env";
+import { TransitionError } from "@/server/status/visit";
 import type Stripe from "stripe";
 import { db } from "@/server/db";
 import { sessionTip } from "@/server/billing/adjustments";
 import { cardDetached, disputeOpened, saveCard, settleAttempt } from "@/server/ops/autopay";
-import { recomputeInvoice, recordPayment } from "@/server/ops/invoices";
+import { recordPayment } from "@/server/ops/invoices";
 import { syncStripeRefund } from "@/server/ops/refunds";
-import { checkoutPaymentMethod, decodeAlloc, piResult, splitRefund, stripe, stripeFee } from "@/server/stripe";
+import { checkoutPaymentMethod, decodeAlloc, piResult, stripe, stripeFee } from "@/server/stripe";
 
 export async function POST(req: Request) {
   const secret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -41,11 +44,19 @@ export async function POST(req: Request) {
     for (const [i, a] of alloc.entries()) {
       const inv = await db.invoice.findUnique({ where: { id: a.invoiceId } });
       if (!inv) continue;
-      await recordPayment({ id: null, businessId: inv.businessId }, {
-        invoiceId: inv.id, method: "CARD", amountCents: alloc.length === 1 ? (s.amount_total ?? a.cents) - tip : a.cents, tipCents: tip,
-        stripePaymentIntentId: alloc.length === 1 ? pi : `${pi}:${inv.id}`, stripeCheckoutSessionId: s.id, reference: "Stripe",
-        feeCents: i === 0 ? fee ?? undefined : undefined, // the whole fee sits on the first row
-      });
+      try {
+        await recordPayment({ id: null, businessId: inv.businessId }, {
+          invoiceId: inv.id, method: "CARD", amountCents: alloc.length === 1 ? (s.amount_total ?? a.cents) - tip : a.cents, tipCents: tip,
+          stripePaymentIntentId: alloc.length === 1 ? pi : `${pi}:${inv.id}`, stripeCheckoutSessionId: s.id, reference: "Stripe",
+          feeCents: i === 0 ? fee ?? undefined : undefined, // the whole fee sits on the first row
+        });
+      } catch (e) {
+        // The card was charged but this invoice can't take the money (voided while the client was paying). Tell the
+        // owners to refund it, and carry on: the other invoices in a "pay all" still get theirs, and Stripe stops retrying.
+        if (!(e instanceof TransitionError)) throw e;
+        for (const to of env.ownerEmails) await enqueue(db, { businessId: inv.businessId, template: "owner.notice", to, priority: 2, dedupeKey: `stripe:${pi}:${inv.id}:unrecorded:${to}`, props: { title: `Refund needed: card payment for void invoice #${inv.number}`, body: `A client paid $${(a.cents / 100).toFixed(2)} by card for invoice #${inv.number}, which is void, so it was not recorded. Refund it in Stripe (payment ${pi}).`, path: `/invoices/${inv.id}` } });
+        kickOutbox();
+      }
     }
     await keepCard();
   }
