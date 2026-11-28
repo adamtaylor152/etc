@@ -28,7 +28,7 @@ export function Menu({ label = "More", items, primary = false, align = "right", 
     if (!open && r) setSide(align === "right" ? (r.right - 240 < 8 ? "left" : "right") : (r.left + 240 > window.innerWidth - 8 ? "right" : "left"));
     setOpen(!open);
   };
-  const cls = "flex min-h-10 w-full items-center gap-2.5 rounded-lg px-3 text-left text-sm font-medium [&_svg]:shrink-0";
+  const cls = "flex min-h-10 max-sm:min-h-11 w-full items-center gap-2.5 rounded-lg px-3 text-left text-sm font-medium [&_svg]:shrink-0";
   return (
     <div ref={ref} className="relative">
       <button type="button" onClick={toggle} aria-expanded={open} aria-haspopup="menu" aria-label={icon === "dots" ? label : undefined}

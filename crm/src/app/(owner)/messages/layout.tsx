@@ -4,6 +4,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { Inbox, type Convo } from "@/components/messages/inbox";
 import { businessId, db } from "@/server/db";
 import { clientName } from "@/server/queries";
+import { prettyPhone } from "@/components/phone";
 
 export const metadata = { title: "Messages" };
 
@@ -26,7 +27,7 @@ export default async function MessagesLayout({ children }: LayoutProps<"/message
     const other = t.direction === "IN" ? t.from : t.to;
     const photos = t._count.media || (Array.isArray(t.mediaPending) ? t.mediaPending.length : 0);
     return {
-      key: t.clientId ?? `n${other.replace("+", "")}`, name: t.client ? clientName(t.client) : other.replace(/^\+1(\d{3})(\d{3})(\d{4})$/, "($1) $2-$3"), number: other.replace(/\D/g, ""), known: !!t.client,
+      key: t.clientId ?? `n${other.replace("+", "")}`, name: t.client ? clientName(t.client) : prettyPhone(other), number: other.replace(/\D/g, ""), known: !!t.client,
       preview: t.body || (photos ? (photos > 1 ? `${photos} photos` : "Photo") : ""), mine: t.direction === "OUT", at: t.createdAt.toISOString(), unread: unreadBy.get(t.clientId ?? other) ?? 0, failed: t.status === "failed",
     };
   });

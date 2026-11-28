@@ -3,7 +3,7 @@ import { invoiceAllowPartial } from "../../work2-actions";
 import { SignatureCard } from "@/components/signatures";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { CircleCheck, FileDown } from "lucide-react";
+import { Ban, CircleCheck, CircleSlash, Eye, FileDown, Send, Undo2 } from "lucide-react";
 import { Amount, Ledger, type LedgerRow } from "@/components/billing/money";
 import { ConfirmButton } from "@/components/confirm-button";
 import { DetailHeader } from "@/components/detail-header";
@@ -77,11 +77,11 @@ export default async function InvoicePage({ params, searchParams }: PageProps<"/
 
   // Everything that isn't the next step lives under More.
   const more: MenuItem[] = [
-    ...(inv.status === "DRAFT" ? [{ label: "Mark sent (no email)", action: invoiceMarkSent, fields }] : []),
-    { label: "View as the client", action: viewAsClient, fields },
-    ...(inv.status === "AWAITING_PAYMENT" ? [{ divider: true as const }, { label: "Write off", action: invoiceBadDebt, fields: { ...fields, bad: "1" }, confirm: "Write this invoice off as bad debt? You can undo it later." }] : []),
-    ...(inv.status === "BAD_DEBT" ? [{ divider: true as const }, { label: "Undo write-off", action: invoiceBadDebt, fields: { ...fields, bad: "0" } }] : []),
-    ...(open && !holdsMoney ? [...(inv.status === "DRAFT" ? [{ divider: true as const }] : []), { label: "Void invoice", action: invoiceVoid, fields, danger: true, confirm: "Void this invoice? Its charges go back to unbilled." }] : []),
+    ...(inv.status === "DRAFT" ? [{ label: "Mark sent (no email)", action: invoiceMarkSent, fields, icon: <Send className="size-4 text-ink-soft" aria-hidden /> }] : []),
+    { label: "View as the client", action: viewAsClient, fields, icon: <Eye className="size-4 text-ink-soft" aria-hidden /> },
+    ...(inv.status === "AWAITING_PAYMENT" ? [{ divider: true as const }, { label: "Write off", action: invoiceBadDebt, fields: { ...fields, bad: "1" }, icon: <CircleSlash className="size-4 text-ink-soft" aria-hidden />, confirm: "Write this invoice off as bad debt? You can undo it later." }] : []),
+    ...(inv.status === "BAD_DEBT" ? [{ divider: true as const }, { label: "Undo write-off", action: invoiceBadDebt, fields: { ...fields, bad: "0" }, icon: <Undo2 className="size-4 text-ink-soft" aria-hidden /> }] : []),
+    ...(open && !holdsMoney ? [...(inv.status === "DRAFT" ? [{ divider: true as const }] : []), { label: "Void invoice", action: invoiceVoid, fields, icon: <Ban className="size-4" aria-hidden />, danger: true, confirm: "Void this invoice? Its charges go back to unbilled." }] : []),
   ];
 
   const taxLine = biz.taxRegistered && inv.taxCents > 0;

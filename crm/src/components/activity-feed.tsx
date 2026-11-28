@@ -75,7 +75,7 @@ export function ActivityFeed({ items, base, types, showClient = false, moreHref,
                     </div>
                   </div>
                 );
-                return <li key={`${it.object}:${it.id}`}>{it.href ? <Link href={it.href} className="group block rounded-lg">{body}</Link> : body}</li>;
+                return <li key={`${it.object}:${it.id}`}>{it.href ? <Link href={it.href} className="group block rounded-lg max-sm:min-h-11 max-sm:content-center">{body}</Link> : body}</li>;
               })}
             </ol>
           </section>

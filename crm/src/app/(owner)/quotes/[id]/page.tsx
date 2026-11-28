@@ -20,6 +20,7 @@ import { clientName } from "@/server/queries";
 import { smsEnabled, toE164 } from "@/server/sms";
 import { optionTotals, quoteEditable, quoteExpired, quoteOptions, valuedOption } from "@/server/status/quote";
 import { quoteArchive, quoteConvert, quoteDecline, quoteMarkApproved, quoteReopen, quoteSaveTemplate, quoteSend, quoteUpdate, quoteViewAsClient } from "../../quote-actions";
+import { prettyPhone } from "@/components/phone";
 
 export async function generateMetadata({ params }: PageProps<"/quotes/[id]">) {
   await requireOwner();
@@ -100,7 +101,7 @@ export default async function QuotePage({ params, searchParams }: PageProps<"/qu
         </>}
       />
       <Flash error={sp.error} />
-      {sp.sent && <Notice tone="good">{sp.sent === "text" ? `Quote texted to ${q.client.phone}.` : `Quote emailed to ${q.client.email}.`}</Notice>}
+      {sp.sent && <Notice tone="good">{sp.sent === "text" ? `Quote texted to ${prettyPhone(q.client.phone)}.` : `Quote emailed to ${q.client.email}.`}</Notice>}
       {sp.template && <Notice tone="good">Template saved. Pick it when you start a new quote; rename or delete it in <Link href="/settings" className="underline underline-offset-2">Settings</Link>.</Notice>}
       {q.status === "DRAFT" && <Notice>Draft. Finish the lines below, then save and send it to {first}.</Notice>}
       {q.status === "AWAITING_RESPONSE" && !expired && <Notice>Waiting for {first} to answer.{sentLine && ` ${sentLine}.`}{q.validUntil && ` Good until ${prettyDate(dateOnly(q.validUntil))}.`}</Notice>}

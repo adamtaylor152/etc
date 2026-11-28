@@ -30,6 +30,7 @@ import { cad } from "@/server/money";
 import { notesFor } from "@/server/ops/notes";
 import { clientName, jobsWithStatus } from "@/server/queries";
 import { visitStatus } from "@/server/status/job";
+import { prettyPhone } from "@/components/phone";
 
 export async function generateMetadata({ params }: PageProps<"/clients/[id]">) {
   await requireOwner();
@@ -108,7 +109,7 @@ export default async function ClientPage({ params, searchParams }: PageProps<"/c
 
   const dupRow = (d: (typeof dups)[number]) => (
               <li key={d.id} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 py-2 last:pb-0">
-                <span className="min-w-0"><Link href={`/clients/${d.id}`} className={link}>{clientName(d)}</Link> <span className="break-words text-amber-950/75">{[d.email, d.phone].filter(Boolean).join(" · ")}</span></span>
+                <span className="min-w-0"><Link href={`/clients/${d.id}`} className={link}>{clientName(d)}</Link> <span className="break-words text-amber-950/75">{[d.email, prettyPhone(d.phone)].filter(Boolean).join(" · ")}</span></span>
                 <form action={clientMerge}><input type="hidden" name="id" value={id} /><input type="hidden" name="dupId" value={d.id} />
                   <ConfirmButton message={`Merge ${clientName(d)} into ${clientName(c)}? Their jobs, quotes, invoices, messages and notes move here and ${clientName(d)} is deleted. This can't be undone.`} className="inline-flex min-h-9 items-center rounded-lg border border-amber-300 bg-white px-3 text-sm font-semibold text-amber-950 shadow-sm hover:bg-amber-100">Merge into this client</ConfirmButton>
                 </form>
@@ -168,7 +169,7 @@ export default async function ClientPage({ params, searchParams }: PageProps<"/c
       <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-3">
         <div className="col-span-2 lg:col-span-1">
           <Stat label="Balance owing" value={cad(books.balanceCents)} tone={owing ? "warn" : undefined}
-            sub={<span className="flex flex-wrap gap-x-3 gap-y-1 text-[13px]">{owing ? <Link href={`/clients/${id}/collect`} className={link}>Collect payment</Link> : <span>Nothing owing</span>}<Link href={`/clients/${id}/statement`} className={link}>Statement</Link></span>} />
+            sub={<span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px]">{owing ? <Link href={`/clients/${id}/collect`} className={link}>Collect payment</Link> : <span>Nothing owing</span>}<Link href={`/clients/${id}/statement`} className={link}>Statement</Link></span>} />
         </div>
         <Stat label="Lifetime value" value={cad(lifetime)} sub={`${c.payments.length} payment${c.payments.length === 1 ? "" : "s"} received`} />
         <Stat label="Account credit" value={cad(credit)} tone={credit > 0 ? "good" : undefined} sub={credit > 0 ? "Comes off the next invoice" : "None waiting"} />
@@ -251,7 +252,7 @@ export default async function ClientPage({ params, searchParams }: PageProps<"/c
           <Card title="Contact" className="order-1 lg:order-none" actions={<Link href={`/clients/${id}/edit`} className={`text-sm ${link}`}>Edit</Link>}>
             {c.emailBouncedAt && <p className="mb-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-900">Email bounced: reminders and campaigns are paused. Fix the address to resume.</p>}
             <Dl rows={[
-              ["Phone", phones.length ? <>{phones.map((p) => <span key={p.number} className="block"><a href={`tel:${p.number}`} className={`${link} tabular-nums`}>{p.number}</a> <span className="font-normal text-ink-soft">{p.label}{p.sms ? " · texts" : ""}</span></span>)}</> : <span className="font-normal text-ink-faint">None</span>],
+              ["Phone", phones.length ? <>{phones.map((p) => <span key={p.number} className="block"><a href={`tel:${p.number}`} className={`${link} tabular-nums`}>{prettyPhone(p.number)}</a> <span className="font-normal text-ink-soft">{p.label}{p.sms ? " · texts" : ""}</span></span>)}</> : <span className="font-normal text-ink-faint">None</span>],
               ["Email", emails.length ? <>{emails.map((m) => <span key={m.address} className="block break-all"><a href={`mailto:${m.address}`} className={link}>{m.address}</a> <span className="break-normal font-normal text-ink-soft">{m.label}</span></span>)}</> : <span className="font-normal text-ink-faint">None</span>],
               ["Lead source", <span key="s" className="inline-block font-normal first-letter:uppercase">{c.leadSource ?? c.source.replaceAll("_", " ").toLowerCase()}</span>],
               ["Referrals", <span key="r" className="font-normal">{referredBy ? <>Referred by <Link className={link} href={`/clients/${referredBy.id}`}>{clientName(referredBy)}</Link>. </> : ""}{referredCount ? `Referred ${referredCount}. ` : ""}{c.referralCode ? <span className="text-ink-soft">Code {c.referralCode}</span> : <span className="text-ink-soft">Share code made on first hub visit</span>}</span>],
@@ -308,7 +309,7 @@ export default async function ClientPage({ params, searchParams }: PageProps<"/c
                 {c.contacts.map((x) => (
                   <li key={x.id} className="py-2.5 text-sm">
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1"><span className="font-semibold">{x.firstName} {x.lastName}</span>{x.role && <span className="text-ink-soft">{x.role}</span>}{x.isBilling && <Badge tone="blue">Billing</Badge>}</div>
-                    <div className="mt-0.5 flex flex-wrap gap-x-3 text-[13px]">{x.phone && <a href={`tel:${x.phone}`} className={`${link} tabular-nums`}>{x.phone}</a>}{x.email && <a href={`mailto:${x.email}`} className={`${link} break-all`}>{x.email}</a>}</div>
+                    <div className="mt-0.5 flex flex-wrap gap-x-3 text-[13px]">{x.phone && <a href={`tel:${x.phone}`} className={`${link} tabular-nums`}>{prettyPhone(x.phone)}</a>}{x.email && <a href={`mailto:${x.email}`} className={`${link} break-all`}>{x.email}</a>}</div>
                   </li>
                 ))}
               </ul>

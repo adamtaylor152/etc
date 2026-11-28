@@ -91,6 +91,8 @@ export default async function PublicInvoice({ params, searchParams }: PageProps<
           {inv.message && <p className="mt-4 whitespace-pre-line rounded-lg bg-tint p-3.5">{inv.message}</p>}
           <div className="mt-4 text-sm text-ink-soft">
             <p>{biz.taxRegistered ? `${biz.taxName} ${cad(inv.taxCents)}${biz.pricesIncludeTax ? " included" : ""}${biz.taxNumber ? ` · ${biz.taxName} #${biz.taxNumber}` : ""}` : "Prices include tax."}</p>
+            {/* The "How to pay" card is screen-only (buttons, copy fields); paper gets the one line that matters. */}
+            {owing && etransfer && <p className="mt-2 hidden break-words font-medium text-navy print:block">Pay by Interac e-Transfer to {etransfer}{inv.etransferRef ? `, message ${inv.etransferRef}` : ""}.</p>}
             {/* On screen the page footer already says who we are; the footer isn't printed, so paper keeps these two lines. */}
             <p className="mt-2 hidden font-semibold text-navy print:block">{biz.legalName ?? biz.name}</p>
             <p className="hidden break-words print:block">{(biz.website ?? env.siteUrl).replace(/^https?:\/\//, "")} · {env.helpEmail}</p>

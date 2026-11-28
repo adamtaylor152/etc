@@ -8,18 +8,22 @@ import { RangeBar, Segmented, dateLabel, rangeLabel } from "@/components/reports
 import { ButtonLink, Card, Empty, btn } from "@/components/ui";
 import { requireOwner } from "@/server/auth";
 import { todayLocal } from "@/server/dates";
+import { db } from "@/server/db";
 import { parseRange, PRESETS, reportSeason, REPORTS, totals, type Kind } from "@/server/reports";
 
-// Print: no app chrome, no card, the whole table (not a scroll box), header row repeated on each page.
-const PRINT_CSS = `
+// Print: no app chrome, no card, the whole table (not a scroll box), header row repeated on each page. A wide table
+// (seven columns or more) turns the page on its side so every column fits; cells wrap instead of running off the edge.
+const printCss = (cols: number) => `
 @media print {
-  @page { margin: 14mm 12mm; }
+  @page { margin: 14mm 12mm;${cols >= 7 ? " size: landscape;" : ""} }
   div:has(> #main) { padding-left: 0 !important; }
   #main { max-width: none !important; padding: 0 !important; }
   .report-card { border: 0 !important; box-shadow: none !important; padding: 0 !important; border-radius: 0 !important; }
   .report-scroll { max-height: none !important; overflow: visible !important; }
-  .report-table { font-size: 9.5pt; }
-  .report-table th, .report-table td { position: static !important; background: transparent !important; padding-top: 3pt !important; padding-bottom: 3pt !important; }
+  .report-table { font-size: ${cols >= 12 ? "7.5pt" : cols >= 7 ? "8.5pt" : "9.5pt"}; }
+  .report-table th, .report-table td { position: static !important; background: transparent !important; padding: 3pt ${cols >= 12 ? "2.5pt" : "4pt"} !important; min-width: 0 !important; max-width: none !important; }
+  .report-table th { white-space: normal !important; vertical-align: bottom; font-size: inherit !important; }
+  .report-table td.report-long { white-space: normal !important; }
   .report-table thead { display: table-header-group; }
   .report-table tfoot { display: table-row-group; }
   .report-table tr { break-inside: avoid; }
@@ -46,11 +50,13 @@ export default async function ReportPage({ params, searchParams }: PageProps<"/r
   const words = (v: string) => (v === "ETRANSFER" ? "e-Transfer" : /^[A-Z]{4,}(_[A-Z]+)*$/.test(v) ? v[0] + v.slice(1).toLowerCase().replaceAll("_", " ") : v);
   const show = (v: string | number | null, k: Kind) => (v == null ? "" : k === "money" ? cad(v as number) : k === "num" ? (v as number).toLocaleString("en-CA") : words(String(v)));
   const cell = (k: Kind) => (k === "text" ? "text-left" : "whitespace-nowrap text-right tabular-nums");
-  const short = (v: string | number | null) => typeof v === "string" && v.length <= 24; // dates, numbers, names: keep on one line
+  // Dates, numbers and short labels keep to one line; anything longer may wrap, so a nine-column report fits a laptop.
+  const short = (v: string | number | null) => typeof v === "string" && (v.length <= 16 || !/\s/.test(v));
+  const biz = await db.business.findUniqueOrThrow({ where: { id: user.businessId }, select: { name: true, legalName: true } });
   const scope = def.ranged ? rangeLabel(r.from, r.to) : picked?.season ? picked.season.name : `As of ${dateLabel(todayLocal())}`;
   return (
     <>
-      <style>{PRINT_CSS}</style>
+      <style>{printCss(t.columns.length)}</style>
       <div className="no-print">
         <DetailHeader back={{ href: "/reports", label: "Reports" }} title={def.title} sub={def.sub}
           actions={<>
@@ -67,6 +73,7 @@ export default async function ReportPage({ params, searchParams }: PageProps<"/r
       </div>
       {/* What the printed page opens with: the report, what it covers, when it was run. */}
       <header className="mb-4 hidden border-b-2 border-navy pb-3 print:block">
+        <p className="text-xs font-semibold">{biz.legalName ?? biz.name}</p>
         <h1 className="font-display text-2xl font-semibold">{def.title}</h1>
         <p className="mt-1 text-sm font-medium">{scope}</p>
         <p className="text-xs text-ink-soft">{def.sub} Printed {dateLabel(todayLocal())}.</p>
@@ -80,12 +87,12 @@ export default async function ReportPage({ params, searchParams }: PageProps<"/r
           <div className="report-scroll relative max-h-[70vh] overflow-auto">
             <table className="report-table w-full border-separate border-spacing-0 text-sm">
               <thead>
-                <tr>{t.columns.map(([l, k], j) => <th key={l} scope="col" className={`sticky top-0 z-10 whitespace-nowrap border-b border-line bg-white px-3 py-2.5 shadow-[0_1px_0_var(--color-line)] text-xs font-medium text-ink-soft first:pl-4 last:pr-4 ${cell(k)} ${j === 0 ? "left-0 z-20" : ""}`}>{l}</th>)}</tr>
+                <tr>{t.columns.map(([l, k], j) => <th key={l} scope="col" className={`sticky top-0 z-10 ${t.columns.length >= 10 ? "align-bottom whitespace-normal!" : "whitespace-nowrap"} border-b border-line bg-white px-3 py-2.5 shadow-[0_1px_0_var(--color-line)] text-xs font-medium text-ink-soft first:pl-4 last:pr-4 ${cell(k)} ${j === 0 ? "left-0 z-20" : ""}`}>{l}</th>)}</tr>
               </thead>
               <tbody>
                 {t.rows.map((row, i) => (
                   <tr key={i} className="hover:bg-tint/60">
-                    {row.map((v, j) => <td key={j} className={`border-b border-line-soft px-3 py-2 align-top first:pl-4 last:pr-4 ${cell(t.columns[j][1])} ${j === 0 ? "sticky left-0 max-w-[45vw] bg-white font-medium sm:max-w-none" : ""} ${t.columns[j][1] === "money" && v === 0 ? "text-ink-soft" : ""} ${typeof v !== "string" ? "" : short(v) ? "whitespace-nowrap" : "min-w-44"}`}>{show(v, t.columns[j][1])}</td>)}
+                    {row.map((v, j) => <td key={j} className={`border-b border-line-soft px-3 py-2 align-top first:pl-4 last:pr-4 ${cell(t.columns[j][1])} ${j === 0 ? "sticky left-0 max-w-[45vw] bg-white font-medium sm:max-w-none" : ""} ${t.columns[j][1] === "money" && v === 0 ? "text-ink-soft" : ""} ${typeof v !== "string" ? "" : short(v) ? "whitespace-nowrap" : "report-long min-w-36"}`}>{show(v, t.columns[j][1])}</td>)}
                   </tr>
                 ))}
               </tbody>

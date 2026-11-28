@@ -25,10 +25,10 @@ export default async function RouteSettings({ searchParams }: PageProps<"/settin
       <Saved when={!!sp.saved} />
       <div className="grid gap-5 lg:grid-cols-2">
         <Card title="Community order">
-          <p className="mb-2 max-w-[70ch] text-sm text-ink-soft">Drag the handle or tap the arrows, then save. The route for every day follows this straight away; press Auto-order on the Route page to re-plan the stops inside each community.</p>
+          <p className="mb-2 max-w-[70ch] text-sm text-ink-soft"><span className="max-sm:hidden">Drag the handle or tap the arrows</span><span className="sm:hidden">Use the arrows</span>, then save. The route for every day follows this straight away; press Auto-order on the Route page to re-plan the stops inside each community.</p>
           {area.length === 0 && <Empty>No communities in your service area yet.</Empty>}
           <ReorderList action={saveCommunityOrder} saves={[{ label: "Save order", scope: "order" }]}
-            items={area.map((a, i) => ({ id: a.communityCode, node: <p className="flex min-h-11 items-center py-2 text-sm font-semibold"><span className="mr-3 inline-block w-6 text-right font-medium tabular-nums text-ink-soft">{i + 1}</span>{a.community.name}</p> }))} />
+            items={area.map((a) => ({ id: a.communityCode, node: <p className="flex min-h-11 items-center py-2 text-sm font-semibold"><span className="reorder-n mr-3 inline-block w-6 text-right font-medium tabular-nums text-ink-soft" />{a.community.name}</p> }))} />
         </Card>
         <Card title="Estimated times">
           <form action={saveRouteSettings} className="space-y-3">

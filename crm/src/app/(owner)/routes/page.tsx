@@ -142,7 +142,7 @@ export default async function Routes({ searchParams }: PageProps<"/routes">) {
             {groups.map((g) => (
               <Card key={g.code ?? "none"} title={g.name} actions={<span className="text-xs font-medium tabular-nums text-ink-soft">{g.visits.length} stop{g.visits.length === 1 ? "" : "s"}</span>} className="print:break-inside-avoid">
                 <div className="-my-1">
-                  <RouteReorder action={routeReorder} hidden={{ back: here }}
+                  <RouteReorder action={routeReorder} hidden={{ back: here }} start={stopNo.get(g.visits[0]?.id) ?? 1}
                     saves={[
                       { label: storm ? "This storm only" : "This day only", scope: "day", hint: storm ? "Only this storm's visits move. The standing route stays as it is." : `Only ${prettyDate(day)} changes. The standing route stays as it is.`, primary: true },
                       { label: "Every time", scope: "always", hint: "Becomes the standing route, used for every day and storm from now on." },
@@ -153,7 +153,7 @@ export default async function Routes({ searchParams }: PageProps<"/routes">) {
                       const unchecked = sizeNote(v.job.kind === "SNOW_PLAN" || !!v.snowEventId, v.property);
                       return { id: v.id, node: (
                         <div className={`flex items-start gap-3 py-3 ${done ? "opacity-60" : ""}`}>
-                          <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-navy text-xs font-semibold tabular-nums text-white" aria-label={`Stop ${stopNo.get(v.id)}`}>{stopNo.get(v.id)}</span>
+                          <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-navy text-xs font-semibold tabular-nums text-white"><span className="sr-only">Stop </span><span className="reorder-n" /></span>
                           <Link href={`/visits/${v.id}`} className="group min-w-0 flex-1 rounded-md">
                             <span className="block font-semibold group-hover:text-blue-deep">{v.property.formatted}</span>
                             {(v.property.routePriority || unchecked) && (

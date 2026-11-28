@@ -15,6 +15,7 @@ import { clientName } from "@/server/queries";
 import { quoteExpired, quoteOptions } from "@/server/status/quote";
 import { peekToken } from "@/server/tokens";
 import { clientApprove, clientDecline, clientRequestChanges } from "./actions";
+import { prettyPhone } from "@/components/phone";
 
 export const metadata = { title: { absolute: "Your quote · etc." } };
 
@@ -69,9 +70,9 @@ export default async function PublicQuote({ params, searchParams }: PageProps<"/
             )}
           </>
         ) : q.status === "DECLINED" ? (
-          <Done tone="info" title="This quote was declined.">Changed your mind? Call {env.phone} or email {env.helpEmail}.</Done>
+          <Done tone="info" title="This quote was declined.">Changed your mind? Call {prettyPhone(env.phone)} or email {env.helpEmail}.</Done>
         ) : expired ? (
-          <div className="[&>p]:mb-0"><Notice tone="warn">This quote has expired. Reply to our email or call {env.phone} for an updated price.</Notice></div>
+          <div className="[&>p]:mb-0"><Notice tone="warn">This quote has expired. Reply to our email or call {prettyPhone(env.phone)} for an updated price.</Notice></div>
         ) : null}
         {q.message && <Card title={`A note from ${biz.name}`}><p className="max-w-[65ch] whitespace-pre-line">{q.message}</p></Card>}
         {photos.length > 0 && (

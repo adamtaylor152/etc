@@ -4,8 +4,8 @@ import { MAX_TIERS, type DepthTier } from "@/server/snow/tiers";
 
 export function DepthTierFields({ tiers, hint }: { tiers: DepthTier[]; hint?: string }) {
   return (
-    <fieldset className="rounded-lg border border-line p-3">
-      <legend className="px-1 text-sm font-bold">Deeper snow costs more (optional)</legend>
+    <fieldset className="min-w-0">
+      <legend className="mb-1 block text-sm font-semibold">Deeper snow costs more (optional)</legend>
       <input type="hidden" name="tiersShown" value="1" />
       <div className="grid gap-2 sm:grid-cols-2">
         {Array.from({ length: MAX_TIERS }, (_, i) => tiers[i]).map((t, i) => (

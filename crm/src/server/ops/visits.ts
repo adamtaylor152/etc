@@ -163,19 +163,25 @@ export async function scheduleVisit(user: Actor, visitId: string, date: string |
 
 async function scheduleTx(user: Actor, visitId: string, date: string | null, notify = true) {
   const v = await db.visit.findFirstOrThrow({ where: { id: visitId, businessId: user.businessId }, include: { job: true } });
+  let emailed = false;
   await db.$transaction(async (tx) => {
     const moved = (v.scheduledDate?.toISOString().slice(0, 10) ?? null) !== date;
     // A new day voids the client's confirmation / reschedule request for the old one.
     await tx.visit.update({ where: { id: visitId }, data: { scheduledDate: date ? toDbDate(date) : null, ...(v.recurrenceDate ? { detachedFromRecurrence: true } : {}), ...(moved ? { confirmedAt: null, rescheduleRequest: null, rescheduleRequestedAt: null } : {}) } });
     const client = await tx.client.findUniqueOrThrow({ where: { id: v.job.clientId } });
     if (notify && date && v.job.kind !== "SNOW_PLAN" && (await getSettings(tx, user.businessId)).visitReminders && !client.emailBouncedAt) {
-      await enqueue(tx, {
+      const dedupeKey = `visit:${visitId}:scheduled:${date}`;
+      // Reported back so the calendar can say whether this move told the client (a repeat for the same day queues nothing).
+      const already = await tx.emailMessage.findUnique({ where: { businessId_dedupeKey: { businessId: user.businessId, dedupeKey } }, select: { id: true } });
+      const queued = await enqueue(tx, {
         businessId: user.businessId, template: "visit.scheduled", to: client.email, replyTo: env.helpEmail, priority: 4, props: { visitId },
-        dedupeKey: `visit:${visitId}:scheduled:${date}`, clientId: client.id, entityType: "Visit", entityId: visitId,
+        dedupeKey, clientId: client.id, entityType: "Visit", entityId: visitId,
       });
+      emailed = !already && !!queued;
     }
     await logActivity(tx, { businessId: user.businessId, type: "visit.scheduled_for", entityType: "Visit", entityId: visitId, actorType: "USER", actorUserId: user.id, clientId: v.job.clientId, jobId: v.jobId, data: { date } });
   });
+  return emailed;
 }
 
 export async function addVisit(user: Actor, jobId: string, date: string | null) {
@@ -256,9 +262,10 @@ type VisitSlot = { date: string | null; startAt?: Date | null; endAt?: Date | nu
  * gets a single assignment alert. Every reschedule and every assignee change goes through here.
  */
 export async function moveVisit(user: Actor, visitId: string, when: VisitSlot | null, userIds: string[] | null, opts: { notify?: boolean } = {}) {
-  await withAssignAlert(user, visitSnap(user, visitId), async () => {
+  const emailed = await withAssignAlert(user, visitSnap(user, visitId), async () => {
+    let emailed = false;
     if (when) {
-      await scheduleTx(user, visitId, when.date, opts.notify ?? true);
+      emailed = await scheduleTx(user, visitId, when.date, opts.notify ?? true);
       await db.visit.update({ where: { id: visitId }, data: { startAt: when.startAt ?? null, endAt: when.endAt ?? null, anytime: !when.startAt } });
     }
     if (userIds) {
@@ -269,6 +276,9 @@ export async function moveVisit(user: Actor, visitId: string, when: VisitSlot | 
         db.visitAssignee.createMany({ data: ok.map((u) => ({ visitId, userId: u.id })) }),
       ]);
     }
+    return emailed;
   });
   kickOutbox();
+  /** How the client was told about the new time by this change, if they were. */
+  return { notified: emailed ? ("email" as const) : null };
 }

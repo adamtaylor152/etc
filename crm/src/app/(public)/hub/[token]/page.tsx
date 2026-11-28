@@ -25,6 +25,7 @@ import { parseSettings } from "@/server/settings";
 import { describeTiers, parseTiers } from "@/server/snow/tiers";
 import { autoPayPending, cardLabel } from "@/server/billing/autopay";
 import { hubPausePlan, hubPayAll, hubPlanAddOn, hubRemoveCard, hubRenewPlan, hubRequestWork, hubSaveCard, hubSetAutoPay, hubSetTexts, hubVisitExtra } from "./actions";
+import { prettyPhone } from "@/components/phone";
 
 export const metadata = { title: { absolute: "Your etc. page" } };
 
@@ -279,7 +280,7 @@ export default async function Hub({ params, searchParams }: PageProps<"/hub/[tok
         )}
         {c.phone && (
           <Card title="Text updates" actions={c.smsOptIn ? <Badge tone="green">On</Badge> : <Badge tone="gray">Off</Badge>}>
-            <p>{c.smsOptIn ? `We text ${c.phone} when we're on the way and when the job's done.` : `Want a text at ${c.phone} when we're on the way and when the job's done?`}</p>
+            <p>{c.smsOptIn ? `We text ${prettyPhone(c.phone)} when we're on the way and when the job's done.` : `Want a text at ${prettyPhone(c.phone)} when we're on the way and when the job's done?`}</p>
             <form action={hubSetTexts} className="mt-3">{hidden}<input type="hidden" name="on" value={c.smsOptIn ? "0" : "1"} />
               <Tap className="w-full sm:w-auto">{c.smsOptIn ? "Stop texts" : "Yes, text me"}</Tap>
             </form>

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Check, CheckCheck, TriangleAlert } from "lucide-react";
 import { teamMove } from "@/app/(owner)/schedule-actions";
+import { moveStatus } from "./move-status";
 
 export type BoardCard = { key: string; kind: "visit" | "task" | "event"; id: string; title: string; sub: string; time: string; userIds: string[]; date: string; done: boolean; warnings: string[]; confirmed: boolean; href: string; movable: boolean };
 export type Lane = { id: string | null; name: string; color: string; offByDate: Record<string, string | null> };
@@ -22,17 +23,19 @@ export function TeamBoard({ lanes, dates, cards, today }: { lanes: Lane[]; dates
     const [kind, id] = e.dataTransfer.getData("text/plain").split(":");
     if (!id) return;
     setMsg("Saving…");
-    try { const w = await teamMove(kind as BoardCard["kind"], id, laneId, date); setMsg(w.length ? `Moved, but: ${w.join("; ")}` : "Moved"); router.refresh(); }
+    try { setMsg(moveStatus(await teamMove(kind as BoardCard["kind"], id, laneId, date))); router.refresh(); }
     catch { setMsg("Couldn't move that"); }
   }
   const day = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString("en-CA", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
   const week = dates.length > 1;
   const cap = week ? 4 : 8;
   const head = "border-b border-line bg-tint/60 px-3 py-2 text-xs font-medium text-ink-soft";
-  const msgCls = msg.startsWith("Moved, but") ? "bg-amber-50 text-amber-950" : msg.startsWith("Couldn't") ? "bg-red-50 text-red-900" : "text-ink-soft";
+  const msgCls = msg.startsWith("Saved, but") ? "bg-amber-50 text-amber-950" : msg.startsWith("Couldn't") ? "bg-red-50 text-red-900" : "text-ink-soft";
   return (
-    <div className="min-w-0 overflow-hidden rounded-xl border border-line bg-white shadow-card">
-      <div className="overflow-x-auto">
+    // `overflow-clip`, and no sideways scroller in the day view (it fits a phone): a scroll box here would stop the
+    // person's name from sticking under the top bar while a long lane scrolls past. The week grid still scrolls sideways.
+    <div className="min-w-0 overflow-clip rounded-xl border border-line bg-white shadow-card">
+      <div className={week ? "overflow-x-auto" : ""}>
         <div className="grid" role="table" aria-label="Team schedule" style={{ gridTemplateColumns: week ? `9.5rem repeat(${dates.length}, minmax(9rem, 1fr))` : "minmax(6.5rem, 9.5rem) minmax(13rem, 1fr)" }}>
           <div role="row" className="contents">
             <div role="columnheader" className={`${head} sticky left-0 z-10 bg-tint`}>Person</div>
@@ -45,7 +48,7 @@ export function TeamBoard({ lanes, dates, cards, today }: { lanes: Lane[]; dates
               <div key={c.key} draggable={c.movable} onDragStart={(e) => { e.dataTransfer.setData("text/plain", `${c.kind}:${c.id}`); e.dataTransfer.effectAllowed = "move"; setDragging(true); }} onDragEnd={() => { setDragging(false); setOver(null); }}
                 title={c.movable ? undefined : "This one stays where it is (done, or part of a storm)"}
                 className={`relative rounded-md border-l-[3px] px-2 py-1.5 text-xs ${c.done ? "bg-tint/60 text-ink-soft" : "bg-tint"} ${c.movable ? "cursor-grab hover:bg-line-soft active:cursor-grabbing" : ""}`} style={{ borderLeftColor: l.color }}>
-                <Link href={c.href} className="flex items-baseline gap-1.5 font-semibold hover:text-blue-deep">
+                <Link href={c.href} className="flex items-baseline gap-1.5 font-semibold hover:text-blue-deep tap">
                   {c.done ? <Check className="size-3 shrink-0 self-center text-emerald-700" strokeWidth={2.5} aria-label="Done" /> : c.confirmed && !c.warnings.length ? <CheckCheck className="size-3 shrink-0 self-center text-emerald-700" strokeWidth={2} aria-label="Client confirmed" /> : null}
                   {c.time && <span className="shrink-0 font-medium tabular-nums text-ink-soft">{c.time}</span>}
                   <span className="min-w-0 truncate">{c.title}</span>
@@ -62,8 +65,11 @@ export function TeamBoard({ lanes, dates, cards, today }: { lanes: Lane[]; dates
             return (
               <div key={l.id ?? "none"} role="row" className="contents">
                 <div role="rowheader" className={`sticky left-0 z-10 bg-white px-3 py-2.5 text-sm ${last ? "" : "border-b border-line"}`}>
-                  <span className="flex items-center gap-2 font-semibold"><span className="size-2.5 shrink-0 rounded-full" style={{ background: l.color }} aria-hidden /><span className="truncate">{l.name}</span></span>
-                  <span className="mt-0.5 block pl-[1.125rem] text-xs tabular-nums text-ink-soft">{mine.length} {mine.length === 1 ? "item" : "items"}</span>
+                  {/* Whose lane this is stays in view: beside the grid in the week view, under the top bar down a long day. */}
+                  <div className={week ? "" : "sticky top-[4.25rem]"}>
+                    <span className="flex items-center gap-2 font-semibold"><span className="size-2.5 shrink-0 rounded-full" style={{ background: l.color }} aria-hidden /><span className="truncate">{l.name}</span></span>
+                    <span className="mt-0.5 block pl-[1.125rem] text-xs tabular-nums text-ink-soft">{mine.length} {mine.length === 1 ? "item" : "items"}</span>
+                  </div>
                 </div>
                 {dates.map((d) => {
                   const off = l.offByDate[d];
@@ -80,7 +86,7 @@ export function TeamBoard({ lanes, dates, cards, today }: { lanes: Lane[]; dates
                       {here.slice(0, cap).map(card)}
                       {here.length > cap && (
                         <details className="group">
-                          <summary className="flex min-h-8 list-none items-center rounded-md px-2 text-xs font-semibold text-blue hover:bg-tint hover:text-blue-deep">
+                          <summary className="flex min-h-8 max-sm:min-h-11 list-none items-center rounded-md px-2 text-xs font-semibold text-blue hover:bg-tint hover:text-blue-deep">
                             <span className="tabular-nums group-open:hidden">+{here.length - cap} more</span><span className="hidden group-open:inline">Show fewer</span>
                           </summary>
                           <div className="mt-1.5 space-y-1.5">{here.slice(cap).map(card)}</div>

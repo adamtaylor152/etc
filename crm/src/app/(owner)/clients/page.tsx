@@ -7,6 +7,7 @@ import { addDays, dateOnly, fromLocalInput, localDayStart, prettyDate, todayLoca
 import { businessId, db } from "@/server/db";
 import { cad } from "@/server/money";
 import { clientName, inOrder, like, nameHas, textHas, words } from "@/server/queries";
+import { prettyPhone } from "@/components/phone";
 
 export const metadata = { title: "Clients" };
 const ctl = "min-h-10 rounded-lg border border-line bg-white px-3 text-base outline-none hover:border-ink-faint/60 focus:border-blue focus:ring-2 focus:ring-blue/20 sm:text-sm";
@@ -105,7 +106,7 @@ export default async function Clients({ searchParams }: PageProps<"/clients">) {
         return {
           id: c.id, href: `/clients/${c.id}`,
           cells: {
-            name: <>{clientName(c)}<span className="block truncate text-[13px] font-normal text-ink-soft sm:text-xs">{c.phone ?? c.email}</span></>,
+            name: <>{clientName(c)}<span className="block truncate text-[13px] font-normal text-ink-soft sm:text-xs">{c.phone ? prettyPhone(c.phone) : c.email}</span></>,
             address: <>{c.properties[0]?.formatted.split(",")[0] ?? <span className="text-ink-faint">—</span>}{c.properties[0]?.community && <span className="block text-xs text-ink-soft">{c.properties[0].community.name}</span>}</>,
             tags: <span className="flex flex-wrap gap-1">{c.tags.map((t) => <Badge key={t}>{t}</Badge>)}</span>,
             status: <Badge tone={s === "active" ? "green" : s === "lead" ? "blue" : "gray"}>{s === "lead" ? "Lead" : s === "active" ? "Active" : "Archived"}</Badge>,
