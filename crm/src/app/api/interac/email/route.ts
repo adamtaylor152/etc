@@ -3,7 +3,7 @@
 // interac.ca AND a signed To header naming our e-Transfer address (anyone can forward us a real notice that was
 // sent to them); a bounce report counts only if it quotes the id of an email we sent. Anything else is dropped quietly.
 import { handleBounce } from "@/server/email/bounce";
-import { addressedToUs, autoDeposited, etransferAddresses, handleInteracNotice, inboundAuthorized, interacRecipients, parseRawEmail } from "@/server/billing/interac-email";
+import { addressedToUs, autoDeposited, etransferAddresses, handleInteracNotice, inboundAuthorized, interacRecipients, parseRawEmail, tellNotOurAddress } from "@/server/billing/interac-email";
 
 const MAX = 2 * 1024 * 1024;
 
@@ -19,6 +19,7 @@ export async function POST(req: Request) {
   }
   if (!addressedToUs(to, await etransferAddresses())) {
     console.warn("Interac notice ignored: not addressed to the e-Transfer address", to);
+    await tellNotOurAddress(to);
     return Response.json({ ok: true, ignored: "not addressed to the e-Transfer address" });
   }
   const mail = await parseRawEmail(raw);

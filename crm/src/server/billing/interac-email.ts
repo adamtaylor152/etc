@@ -61,6 +61,11 @@ async function tellOwners(bid: string, title: string, body: string, path = "/inv
 }
 
 /** Shared by both inbound routes: match the notice to an invoice and record it, or hand it to the owners. */
+/** A real Interac notice that wasn't sent to our e-Transfer address: record no money, but don't lose it silently either. */
+export async function tellNotOurAddress(to: string[]) {
+  await tellOwners(await businessId(), "An Interac notice was ignored", `It was addressed to ${to.join(", ") || "an address we couldn't read"}, not your e-Transfer address, so nothing was recorded. If that is the address clients pay, set it in Settings; otherwise someone forwarded you a notice that wasn't yours.`, "/settings");
+}
+
 export async function handleInteracNotice(subject: string, text: string, deposited: boolean) {
   const kind = classifyInterac(subject, text);
   if (kind !== "payment") return { ignored: kind === "setup" ? "Autodeposit set-up email (owner has the forwarded copy)" : "not a payment notice" };
