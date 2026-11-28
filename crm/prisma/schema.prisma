@@ -553,6 +553,8 @@ model Quote {
   convertedAt          DateTime?
   archivedAt           DateTime?
   jobId                String?     @unique
+  options              Json        @default("[]") // good/better/best: [{key,name,recommended}]; empty = one plain list of lines
+  chosenOption         String? // the option key the client approved
   createdAt            DateTime    @default(now())
 
   lineItems   QuoteLineItem[]
@@ -569,6 +571,7 @@ model QuoteTemplate {
   title           String?
   message         String?
   lines           Json     @default("[]")
+  options         Json     @default("[]") // same shape as Quote.options
   discountType    String   @default("FIXED")
   discountValue   Int      @default(0)
   depositType     String   @default("NONE")
@@ -592,6 +595,8 @@ model QuoteLineItem {
   isOptional     Boolean @default(false)
   isSelected     Boolean @default(true)
   sortOrder      Int     @default(0)
+  optionKey      String? // which option this line belongs to; null = common to every option
+  photoId        String? // Attachment id: one picture shown beside the line
 }
 
 // ---------- snow ----------

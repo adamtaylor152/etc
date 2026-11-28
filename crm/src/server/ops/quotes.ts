@@ -9,19 +9,23 @@ import { env } from "../env";
 import { clientName } from "../queries";
 import { logActivity, nextNumber } from "../records";
 import { smsEnabled } from "../sms";
-import { assertQuoteTransition, quoteDiscountCents, quoteEditable, quoteTotal, quoteTotals, type QuoteDiscount, type QuoteLine } from "../status/quote";
+import { assertQuoteTransition, optionLines, quoteDiscountCents, quoteEditable, quoteOptions, quoteTotal, quoteTotals, valuedOption, type QuoteDiscount, type QuoteLine, type QuoteOption } from "../status/quote";
 import { TransitionError } from "../status/visit";
 
 type Actor = { id: string; businessId: string };
-export type QuoteLineInput = { name: string; description?: string; quantity: number; unitPriceCents: number; isOptional: boolean; isSelected: boolean };
+export type QuoteLineInput = { name: string; description?: string; quantity: number; unitPriceCents: number; isOptional: boolean; isSelected: boolean; optionKey?: string | null; photoId?: string | null };
 
 export type DiscountInput = { type: string; value: number }; // value: cents, or percent x100
 const discountOf = (d: DiscountInput): QuoteDiscount => (d.type === "PERCENT"
   ? { discountType: "PERCENT", discountValue: Math.min(10_000, Math.max(0, Math.round(d.value))), discountCents: 0 }
   : { discountType: "FIXED", discountValue: Math.max(0, Math.round(d.value)), discountCents: Math.max(0, Math.round(d.value)) });
 
-/** Stored money fields for a quote: subtotal before discount, the discount in dollars, GST, and the total the client pays. */
-async function money(tx: Tx, businessId: string, lines: QuoteLine[], d: QuoteDiscount) {
+/**
+ * Stored money fields for a quote: subtotal before discount, the discount in dollars, GST, and the total the client pays.
+ * With options, `option` says which one to count (the chosen one; before approval the recommended one, else the cheapest).
+ */
+async function money(tx: Tx, businessId: string, all: QuoteLine[], d: QuoteDiscount, option: string | null = null) {
+  const lines = optionLines(all, option);
   const discountCents = quoteDiscountCents(lines, d);
   const { subtotalCents, taxCents, totalCents } = quoteTotals(lines, discountCents, await tx.business.findUniqueOrThrow({ where: { id: businessId } }));
   return { subtotalCents, discountCents, taxCents, totalCents };
@@ -30,13 +34,26 @@ async function money(tx: Tx, businessId: string, lines: QuoteLine[], d: QuoteDis
 const lineRows = (lines: QuoteLineInput[]) => lines.map((l, i) => ({
   name: l.name, description: l.description || null, quantity: l.quantity, unitPriceCents: l.unitPriceCents,
   totalCents: Math.round(l.quantity * l.unitPriceCents), isOptional: l.isOptional, isSelected: l.isOptional ? l.isSelected : true, sortOrder: i,
+  optionKey: l.optionKey ?? null, photoId: l.photoId ?? null,
 }));
 
+/** What gets stored: the options that have lines (at most 4); a line pointing at anything else is common to all. */
+function optionSet(options: QuoteOption[] | undefined, lines: QuoteLineInput[]) {
+  const used = (options ?? []).filter((o) => lines.some((l) => l.optionKey === o.key)).slice(0, 4);
+  if (used.length === 1) throw new TransitionError('One option isn\'t a choice: put lines in a second option, or set every line back to "Every option"');
+  const rec = used.find((o) => o.recommended)?.key;
+  return {
+    options: used.map((o, i) => ({ key: o.key, name: o.name.trim().slice(0, 60) || `Option ${i + 1}`, recommended: o.key === rec })),
+    lines: lines.map((l) => ({ ...l, optionKey: used.some((o) => o.key === l.optionKey) ? l.optionKey : null })),
+  };
+}
+
 /** `from`: a template or another quote ("create similar") whose discount and deposit settings carry over; the lines come from the form. */
-export async function createQuote(user: Actor, input: { clientId: string; propertyId?: string | null; requestId?: string | null; title: string; message?: string; lines: QuoteLineInput[]; from?: { templateId?: string; quoteId?: string } }) {
+export async function createQuote(user: Actor, input: { clientId: string; propertyId?: string | null; requestId?: string | null; title: string; message?: string; lines: QuoteLineInput[]; options?: QuoteOption[]; from?: { templateId?: string; quoteId?: string } }) {
   await db.client.findFirstOrThrow({ where: { id: input.clientId, businessId: user.businessId } });
+  const set = optionSet(input.options, input.lines);
   return db.$transaction(async (tx) => {
-    const rows = lineRows(input.lines);
+    const rows = lineRows(set.lines.map((l) => ({ ...l, photoId: null }))); // line photos are added on the quote itself
     const tpl = input.from?.templateId ? await tx.quoteTemplate.findFirst({ where: { id: input.from.templateId, businessId: user.businessId } }) : null;
     const like = input.from?.quoteId ? await tx.quote.findFirst({ where: { id: input.from.quoteId, businessId: user.businessId } }) : null;
     const src = tpl ?? like;
@@ -45,7 +62,8 @@ export async function createQuote(user: Actor, input: { clientId: string; proper
       data: {
         businessId: user.businessId, number: await nextNumber(tx, user.businessId, "QUOTE"), clientId: input.clientId,
         propertyId: input.propertyId, requestId: input.requestId, title: input.title, message: input.message || null,
-        discountType: d.discountType, discountValue: d.discountValue, ...(await money(tx, user.businessId, rows, d)),
+        discountType: d.discountType, discountValue: d.discountValue, ...(await money(tx, user.businessId, rows, d, valuedOption(set.options, rows, d))),
+        options: set.options,
         ...(src ? { depositType: src.depositType, depositValue: src.depositValue, depositRequired: src.depositRequired } : {}),
         validUntil: toDbDate(addDays(todayLocal(), 30)), lineItems: { create: rows },
       },
@@ -55,11 +73,16 @@ export async function createQuote(user: Actor, input: { clientId: string; proper
   });
 }
 
-export async function updateQuote(user: Actor, quoteId: string, input: { title: string; message?: string; validUntil: string | null; discount: DiscountInput; lines: QuoteLineInput[]; deposit?: { type: string; value: number; required: boolean } }) {
+export async function updateQuote(user: Actor, quoteId: string, input: { title: string; message?: string; validUntil: string | null; discount: DiscountInput; lines: QuoteLineInput[]; options?: QuoteOption[]; deposit?: { type: string; value: number; required: boolean } }) {
   await db.$transaction(async (tx) => {
     const q = await tx.quote.findFirstOrThrow({ where: { id: quoteId, businessId: user.businessId } });
     if (!quoteEditable(q.status)) throw new TransitionError("Only draft quotes (or ones the client asked to change) can be edited");
-    const rows = lineRows(input.lines);
+    const set = optionSet(input.options, input.lines);
+    // Line photos: only this quote's own pictures; one taken off its line is removed (soft delete, like every photo).
+    const had = (await tx.quoteLineItem.findMany({ where: { quoteId, photoId: { not: null } }, select: { photoId: true } })).map((l) => l.photoId!);
+    const mine = new Set((await tx.attachment.findMany({ where: { id: { in: set.lines.flatMap((l) => l.photoId ?? []) }, businessId: user.businessId, quoteId, mediaType: "IMAGE", deletedAt: null }, select: { id: true } })).map((a) => a.id));
+    const rows = lineRows(set.lines.map((l) => ({ ...l, photoId: l.photoId && mine.has(l.photoId) ? l.photoId : null })));
+    await tx.attachment.updateMany({ where: { quoteId, id: { in: had.filter((id) => !mine.has(id)) } }, data: { deletedAt: new Date() } });
     const d = discountOf(input.discount);
     await tx.quoteLineItem.deleteMany({ where: { quoteId } });
     await tx.quoteLineItem.createMany({ data: rows.map((r) => ({ ...r, quoteId })) });
@@ -67,7 +90,8 @@ export async function updateQuote(user: Actor, quoteId: string, input: { title: 
       where: { id: quoteId },
       data: {
         title: input.title, message: input.message || null, validUntil: input.validUntil ? toDbDate(input.validUntil) : null,
-        discountType: d.discountType, discountValue: d.discountValue, ...(await money(tx, user.businessId, rows, d)),
+        discountType: d.discountType, discountValue: d.discountValue, ...(await money(tx, user.businessId, rows, d, valuedOption(set.options, rows, d))),
+        options: set.options,
         ...(input.deposit ? { depositType: ["PERCENT", "FIXED"].includes(input.deposit.type) ? input.deposit.type : "NONE", depositValue: Math.max(0, Math.round(input.deposit.value)), depositRequired: input.deposit.required } : {}),
       },
     });
@@ -102,19 +126,22 @@ async function notifyOwners(tx: Tx, businessId: string, title: string, body: str
   }
 }
 
-/** Client approves on /q/[token]. `selected` = optional line ids they ticked. */
-export async function approveQuote(quoteId: string, input: { name: string; selected: string[]; ip: string | null }) {
+/** Client approves on /q/[token]. `selected` = optional line ids they ticked; `option` = the one option they chose, when the quote offers options. */
+export async function approveQuote(quoteId: string, input: { name: string; selected: string[]; option?: string; ip: string | null }) {
   await db.$transaction(async (tx) => {
     const q = await tx.quote.findUniqueOrThrow({ where: { id: quoteId }, include: { lineItems: true, client: true } });
     assertQuoteTransition(q.status, "APPROVED");
+    const options = quoteOptions(q.options);
+    const option = options.find((o) => o.key === input.option);
+    if (options.length && !option) throw new TransitionError("Choose one of the options first");
     for (const l of q.lineItems.filter((l) => l.isOptional)) {
       await tx.quoteLineItem.update({ where: { id: l.id }, data: { isSelected: input.selected.includes(l.id) } });
     }
     const lines = q.lineItems.map((l) => ({ ...l, isSelected: !l.isOptional || input.selected.includes(l.id) }));
-    await tx.quote.update({ where: { id: quoteId }, data: { status: "APPROVED", approvedAt: new Date(), approvedByName: input.name, approvedIp: input.ip, ...(await money(tx, q.businessId, lines, q)) } }); // a percent discount follows what they ticked
-    await logActivity(tx, { businessId: q.businessId, type: "quote.approved", entityType: "Quote", entityId: quoteId, actorType: "CLIENT", actorClientId: q.clientId, clientId: q.clientId, data: { name: input.name } });
+    await tx.quote.update({ where: { id: quoteId }, data: { status: "APPROVED", approvedAt: new Date(), approvedByName: input.name, approvedIp: input.ip, chosenOption: option?.key ?? null, ...(await money(tx, q.businessId, lines, q, option?.key)) } }); // a percent discount follows the option and what they ticked
+    await logActivity(tx, { businessId: q.businessId, type: "quote.approved", entityType: "Quote", entityId: quoteId, actorType: "CLIENT", actorClientId: q.clientId, clientId: q.clientId, data: { name: input.name, ...(option ? { option: option.name } : {}) } });
     await createDepositInvoice(tx, quoteId);
-    await notifyOwners(tx, q.businessId, `Quote #${q.number} approved`, `${input.name} approved "${q.title}". Convert it to a job and book a date.`, `/quotes/${quoteId}`, `quote:${quoteId}:approved`);
+    await notifyOwners(tx, q.businessId, `Quote #${q.number} approved`, `${input.name} approved "${q.title}"${option ? ` and chose "${option.name}"` : ""}. Convert it to a job and book a date.`, `/quotes/${quoteId}`, `quote:${quoteId}:approved`);
     await enqueue(tx, {
       businessId: q.businessId, template: "quote.approved", to: q.client.email, replyTo: env.helpEmail, priority: 3, props: { quoteId },
       dedupeKey: `quote:${quoteId}:approved-client`, clientId: q.clientId, entityType: "Quote", entityId: quoteId,
@@ -159,17 +186,21 @@ export async function reopenQuote(user: Actor, quoteId: string) {
   });
 }
 
-export async function markQuoteApproved(user: Actor, quoteId: string) {
+/** `optionKey`: which option the client said yes to, when the quote offers options. */
+export async function markQuoteApproved(user: Actor, quoteId: string, optionKey?: string) {
   await db.$transaction(async (tx) => {
-    const q = await tx.quote.findFirstOrThrow({ where: { id: quoteId, businessId: user.businessId } });
+    const q = await tx.quote.findFirstOrThrow({ where: { id: quoteId, businessId: user.businessId }, include: { lineItems: true } });
     assertQuoteTransition(q.status, "APPROVED");
-    await tx.quote.update({ where: { id: quoteId }, data: { status: "APPROVED", approvedAt: new Date(), approvedByName: "Approved by phone/in person" } });
+    const options = quoteOptions(q.options);
+    const option = options.find((o) => o.key === optionKey);
+    if (options.length && !option) throw new TransitionError("Pick which option the client chose");
+    await tx.quote.update({ where: { id: quoteId }, data: { status: "APPROVED", approvedAt: new Date(), approvedByName: "Approved by phone/in person", ...(option ? { chosenOption: option.key, ...(await money(tx, user.businessId, q.lineItems, q, option.key)) } : {}) } });
     await createDepositInvoice(tx, quoteId);
-    await logActivity(tx, { businessId: user.businessId, type: "quote.approved", entityType: "Quote", entityId: quoteId, actorType: "USER", actorUserId: user.id, clientId: q.clientId });
+    await logActivity(tx, { businessId: user.businessId, type: "quote.approved", entityType: "Quote", entityId: quoteId, actorType: "USER", actorUserId: user.id, clientId: q.clientId, ...(option ? { data: { option: option.name } } : {}) });
   });
 }
 
-/** Approved quote -> one-off job with the chosen lines and a visit to schedule. */
+/** Approved quote -> one-off job with the chosen lines (the chosen option's, the common ones and ticked extras) and a visit to schedule. */
 export async function convertQuote(user: Actor, quoteId: string, input: { date: string | null; billingType: "PER_VISIT" | "FIXED_PRICE"; skipDeposit?: boolean }) {
   return db.$transaction(async (tx) => {
     const q = await tx.quote.findFirstOrThrow({ where: { id: quoteId, businessId: user.businessId }, include: { lineItems: { orderBy: { sortOrder: "asc" } }, request: true } });
@@ -181,13 +212,14 @@ export async function convertQuote(user: Actor, quoteId: string, input: { date: 
     const propertyId = q.propertyId ?? q.request?.propertyId ?? (await tx.property.findFirst({ where: { clientId: q.clientId, archivedAt: null }, orderBy: { isDefault: "desc" } }))?.id;
     if (!propertyId) throw new TransitionError("The client needs an address first");
     await tx.property.findUniqueOrThrow({ where: { id: propertyId } });
-    const lines = q.lineItems.filter((l) => !l.isOptional || l.isSelected);
+    const offered = optionLines(q.lineItems, q.chosenOption);
+    const lines = offered.filter((l) => !l.isOptional || l.isSelected);
     const job = await tx.job.create({
       data: {
         businessId: user.businessId, number: await nextNumber(tx, user.businessId, "JOB"), clientId: q.clientId, propertyId, requestId: q.requestId,
         quoteId: q.id, kind: "ONE_OFF", title: q.title ?? "Job", billingType: input.billingType,
         invoiceSchedule: input.billingType === "PER_VISIT" ? "AFTER_EACH_VISIT" : "ON_COMPLETION",
-        totalCents: input.billingType === "FIXED_PRICE" ? quoteTotal(q.lineItems, q.discountCents) : null, // pre-tax: the invoice adds GST itself
+        totalCents: input.billingType === "FIXED_PRICE" ? quoteTotal(offered, q.discountCents) : null, // pre-tax: the invoice adds GST itself
         lineItems: { create: lines.map((l, i) => ({ name: l.name, description: l.description, quantity: l.quantity, unitPriceCents: l.unitPriceCents, totalCents: l.totalCents, perVisit: input.billingType === "PER_VISIT", sortOrder: i })) },
         visits: { create: [{ businessId: user.businessId, propertyId, scheduledDate: input.date ? toDbDate(input.date) : null }] },
       },
@@ -208,11 +240,11 @@ export async function archiveQuote(user: Actor, quoteId: string) {
 
 // ---------- templates ----------
 const TEMPLATE_MAX = 30;
-const TemplateLines = z.array(z.object({ name: z.string(), description: z.string().optional(), quantity: z.number(), unitPriceCents: z.number(), isOptional: z.boolean(), isSelected: z.boolean() }));
+const TemplateLines = z.array(z.object({ name: z.string(), description: z.string().optional(), quantity: z.number(), unitPriceCents: z.number(), isOptional: z.boolean(), isSelected: z.boolean(), optionKey: z.string().nullish() }));
 /** A template's stored lines (JSON), ready for the quote form. Anything malformed reads as no lines. */
 export const templateLines = (raw: unknown): QuoteLineInput[] => TemplateLines.safeParse(raw).data ?? [];
 
-/** Save a quote's title, message, lines, discount and deposit settings under a name. Saving under an existing name replaces it. */
+/** Save a quote's title, message, lines, options, discount and deposit settings under a name. Saving under an existing name replaces it. */
 export async function saveQuoteTemplate(user: Actor, quoteId: string, name: string) {
   const q = await db.quote.findFirstOrThrow({ where: { id: quoteId, businessId: user.businessId }, include: { lineItems: { orderBy: { sortOrder: "asc" } } } });
   const key = { businessId_name: { businessId: user.businessId, name } };
@@ -222,7 +254,8 @@ export async function saveQuoteTemplate(user: Actor, quoteId: string, name: stri
   const data = {
     title: q.title, message: q.message, depositType: q.depositType, depositValue: q.depositValue, depositRequired: q.depositRequired,
     discountType: q.discountType, discountValue: q.discountType === "PERCENT" ? q.discountValue : q.discountCents,
-    lines: q.lineItems.map((l) => ({ name: l.name, description: l.description ?? "", quantity: Number(l.quantity), unitPriceCents: l.unitPriceCents, isOptional: l.isOptional, isSelected: l.isSelected })),
+    lines: q.lineItems.map((l) => ({ name: l.name, description: l.description ?? "", quantity: Number(l.quantity), unitPriceCents: l.unitPriceCents, isOptional: l.isOptional, isSelected: l.isSelected, optionKey: l.optionKey })),
+    options: quoteOptions(q.options),
   };
   await db.quoteTemplate.upsert({ where: key, create: { ...data, businessId: user.businessId, name }, update: data });
 }

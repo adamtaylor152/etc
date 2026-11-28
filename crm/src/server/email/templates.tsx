@@ -22,6 +22,7 @@ import { CampaignEmail } from "@/emails/campaign";
 import { clickUrl, openPixelUrl, RENEW_LINK, unsubscribeUrl, type Block } from "../ops/campaigns";
 import { env } from "../env";
 import { mintToken } from "../tokens";
+import { optionLines, optionTotals, quoteOptions } from "../status/quote";
 import { currentCharge, dollars, SIZES, type Pending } from "../ops/drive-size";
 import { invoicePdf, quotePdf, statementPdf, type PdfFile } from "../pdf/documents";
 import { loadStatement, type StatementRange } from "../statement";
@@ -228,9 +229,17 @@ const ownerSnowAlert: Template<{ days: { label: string; cm: number }[]; plans: n
 async function quoteData(quoteId: string, businessId: string): Promise<QuoteEmailData> {
   const q = await db.quote.findUniqueOrThrow({ where: { id: quoteId }, include: { client: true, lineItems: { orderBy: { sortOrder: "asc" } } } });
   const raw = await mintToken(db, businessId, "QUOTE", { quoteId: q.id, clientId: q.clientId });
+  // Option sets: until one is chosen, list the common lines and then each option with its full price; after, just what they chose.
+  const options = quoteOptions(q.options);
+  const chosen = options.find((o) => o.key === q.chosenOption);
+  const open = options.length > 0 && !chosen;
+  const biz = open ? await db.business.findUniqueOrThrow({ where: { id: q.businessId } }) : null;
+  const priced = biz ? options.map((o) => ({ ...o, cents: optionTotals(q.lineItems, q, biz, o.key).totalCents })) : [];
   return {
     name: clientName(q.client), number: q.number, title: q.title ?? "Your quote", message: q.message, validUntil: q.validUntil ? prettyDate(dateOnly(q.validUntil)) : null,
-    total: money(q.totalCents), lines: q.lineItems.map((l) => ({ name: Number(l.quantity) !== 1 ? `${l.name} × ${Number(l.quantity)}` : l.name, amount: money(l.totalCents), optional: l.isOptional })),
+    total: open ? `from ${money(Math.min(...priced.map((o) => o.cents)))}` : money(q.totalCents),
+    options: priced.map((o) => ({ name: o.name, total: money(o.cents), recommended: o.recommended })), chosen: chosen?.name,
+    lines: (open ? q.lineItems.filter((l) => !l.optionKey) : optionLines(q.lineItems, q.chosenOption)).map((l) => ({ name: Number(l.quantity) !== 1 ? `${l.name} × ${Number(l.quantity)}` : l.name, amount: money(l.totalCents), optional: l.isOptional })),
     url: `${env.appUrl}/q/${raw}`, site: env.siteUrl, phone: env.phone,
   };
 }
