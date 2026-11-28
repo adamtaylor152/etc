@@ -5,6 +5,7 @@ import {
   Banknote, CalendarCheck, FileText, Hammer, Inbox, Mail, MessageSquare, Phone, PhoneIncoming, PhoneMissed, PhoneOutgoing, Receipt, Snowflake, StickyNote, User, type LucideIcon,
 } from "lucide-react";
 import { FEED_TYPES, type FeedItem, type FeedType } from "@/server/activity";
+import { plainDeclineDetail } from "@/server/billing/decline-words";
 import { prettyTime, TZ } from "@/server/dates";
 import { Empty } from "./ui";
 
@@ -62,7 +63,7 @@ export function ActivityFeed({ items, base, types, showClient = false, moreHref,
                         <span className={`font-medium ${it.tone === "red" ? "text-red-700" : ""}`}>{it.title}</span>
                         {showClient && it.client && <span className="text-ink-soft">{it.client.name}</span>}
                       </p>
-                      {it.detail && <p className="line-clamp-2 max-w-[70ch] whitespace-pre-line text-[13px] leading-5 text-ink-soft">{quote ? "“" : ""}{it.detail}{quote ? "”" : ""}</p>}
+                      {it.detail && <p className="line-clamp-2 max-w-[70ch] whitespace-pre-line text-[13px] leading-5 text-ink-soft">{quote ? "“" : ""}{it.type === "money" || it.type === "work" ? plainDeclineDetail(it.detail) : it.detail}{quote ? "”" : ""}</p>}
                       {it.photos && it.photos.length > 0 && (
                         <div className="mt-1.5 flex gap-1">
                           {it.photos.slice(0, 4).map((p) => (

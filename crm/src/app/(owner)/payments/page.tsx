@@ -39,7 +39,7 @@ export default async function Payments({ searchParams }: PageProps<"/payments">)
         </div>
       )}
       {byMethod.length > 0 && (
-        <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           <Stat label={`Received in ${year}`} value={cad(received)} sub="after refunds" />
           {byMethod.map(([m, c]) => <Stat key={m} label={METHOD[m]} value={cad(c)} sub={received > 0 ? `${Math.round((100 * c) / received)}% of the year` : undefined} />)}
           {tips > 0 && <Stat label="Tips" value={cad(tips)} sub="on top, not invoice money" />}

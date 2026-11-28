@@ -124,7 +124,8 @@ export default async function Thread({ params, searchParams }: PageProps<"/messa
                     {failed && <CircleAlert className="size-3.5 text-red-700" aria-hidden />}
                     <time dateTime={t.createdAt.toISOString()}>{time(t.createdAt)}</time>{t.type !== "SMS" && <span>· {t.type}</span>}{out && <span className={failed ? "font-semibold text-red-700" : ""}>· {STATUS[t.status] ?? t.status}</span>}
                   </p>
-                  {t.error && <p className={`max-w-[85%] px-1 text-[11px] text-red-700 ${out ? "text-right" : ""}`}>{t.error}</p>}
+                  {/* The stored error is the provider's own words: kept on the row and in the logs, never shown. */}
+                  {t.error && <p className={`max-w-[85%] px-1 text-xs text-red-700 ${out ? "text-right" : ""}`}>{out ? "Couldn't send. Try again, or check texting is set up." : "Couldn't download an attachment."}</p>}
                   {t.media.length > 0 && <PhotoLinks messageKey={key} messageId={t.id} media={t.media} jobs={jobs} quotes={quotes} canLink={!!client} out={out} />}
                 </div>
               </li>

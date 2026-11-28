@@ -4,7 +4,7 @@ import { Download } from "lucide-react";
 import { InvoicePay } from "@/components/invoice-pay";
 import { Done, Help, LinkProblem, PageTitle, Tap, textLink } from "@/components/public/kit";
 import { QuoteApprove } from "@/components/quote-approve";
-import { money } from "@/server/money";
+import { cad } from "@/server/money";
 import { mintToken } from "@/server/tokens";
 import { signedMediaPath } from "@/server/media";
 import { Badge, Card, inputCls, Notice } from "@/components/ui";
@@ -60,7 +60,7 @@ export default async function PublicQuote({ params, searchParams }: PageProps<"/
             {deposit && depositToken && (
               <Card title="Pay your deposit">
                 <div className="-mt-1 mb-5 flex flex-wrap items-end justify-between gap-x-6 gap-y-1">
-                  <p><span className="block text-sm font-medium text-ink-soft">Deposit due now</span><span className="mt-1 block font-display text-[2.25rem] font-semibold leading-none tabular-nums">{money(depositDue)}</span></p>
+                  <p><span className="block text-sm font-medium text-ink-soft">Deposit due now</span><span className="mt-1 block font-display text-[2.25rem] font-semibold leading-none tabular-nums">{cad(depositDue)}</span></p>
                   {q.depositRequired && <p className="text-ink-soft">Needed to book your date</p>}
                 </div>
                 <InvoicePay token={depositToken} quoteToken={token} balanceCents={depositDue} allowPartial={deposit.allowPartial} etransfer={biz.etransferEmail || env.etransferEmail || null} etransferRef={deposit.etransferRef} />

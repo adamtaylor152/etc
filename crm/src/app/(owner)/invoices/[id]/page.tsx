@@ -15,6 +15,7 @@ import { Badge, Button, ButtonLink, Card, Dl, Field, Input, Notice, btn, inputCl
 import { refundableCents, refundRoute } from "@/server/billing/adjustments";
 import { TERMS_LABEL, invoiceView } from "@/server/billing/invoice";
 import { MAX_ATTEMPTS, autoPayPending, cardLabel } from "@/server/billing/autopay";
+import { declineWords } from "@/server/billing/decline-words";
 import { dateOnly, prettyDate, prettyDateTime, todayLocal } from "@/server/dates";
 import { business, businessId, db } from "@/server/db";
 import { cad } from "@/server/money";
@@ -23,6 +24,13 @@ import { paymentRefund } from "../../billing-extras-actions";
 import { invoiceBadDebt, invoiceMarkSent, invoiceSend, invoiceVoid, paymentDelete, paymentRecord, viewAsClient } from "../../billing-actions";
 
 const METHOD: Record<string, string> = { CASH: "Cash", ETRANSFER: "e-Transfer", CARD: "Card", CHEQUE: "Cheque", OTHER: "Other" };
+/** Why a try failed, in words (the stored code stays as it is). A paid try keeps its own note: the invoice was voided mid-charge. */
+const attemptNote = (a: { status: string; failureCode: string | null; failureMessage: string | null }) => {
+  if (a.status === "SUCCEEDED") return a.failureMessage ? ` · ${a.failureMessage}` : "";
+  if (!a.failureCode && !a.failureMessage) return "";
+  const why = declineWords(a.failureCode);
+  return ` · ${why[0].toUpperCase()}${why.slice(1)}`;
+};
 const ATTEMPT: Record<string, [string, Tone]> = { PENDING: ["Processing", "gray"], SUCCEEDED: ["Paid", "green"], FAILED: ["Failed", "red"], REQUIRES_ACTION: ["Bank wants the client to approve", "amber"] };
 const AUTOPAY_STATE: Record<string, [string, Tone]> = {
   SCHEDULED: ["Scheduled", "blue"], RETRYING: ["Retrying", "amber"], NEEDS_ACTION: ["Needs the client", "amber"], FAILED: ["Failed", "red"], PAID: ["Paid", "green"], STOPPED: ["Stopped", "gray"],
@@ -108,7 +116,7 @@ export default async function InvoicePage({ params, searchParams }: PageProps<"/
                     <li key={a.id} className="flex items-start justify-between gap-3 py-2.5 last:pb-0">
                       <div className="min-w-0">
                         <span className="font-medium tabular-nums">Try {a.n} of {MAX_ATTEMPTS}</span><span className="text-ink-soft"> · {a.cardLabel}</span>
-                        <span className="block text-xs tabular-nums text-ink-soft">{prettyDateTime(a.createdAt)}{a.failureCode && ` · ${a.failureCode.replaceAll("_", " ")}`}{a.failureMessage && ` · ${a.failureMessage}`}</span>
+                        <span className="block text-xs tabular-nums text-ink-soft">{prettyDateTime(a.createdAt)}{attemptNote(a)}</span>
                       </div>
                       <div className="flex shrink-0 flex-col items-end gap-1"><Amount cents={a.amountCents} className="font-medium" /><Badge tone={ATTEMPT[a.status]?.[1] ?? "gray"}>{ATTEMPT[a.status]?.[0] ?? a.status}</Badge></div>
                     </li>

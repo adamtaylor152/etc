@@ -10,7 +10,7 @@ import { Bars } from "@/components/reports/bars";
 import { RangeBar, rangeLabel } from "@/components/reports/range-bar";
 import { Card, PageHeader, Stat } from "@/components/ui";
 import { instants, parseRange, PRESETS, REPORTS } from "@/server/reports";
-import { TZ, todayLocal, toDbDate } from "@/server/dates";
+import { TZ, addDays, todayLocal, toDbDate } from "@/server/dates";
 import { businessId, db } from "@/server/db";
 import { cad } from "@/server/money";
 
@@ -23,6 +23,18 @@ const GROUPS: [string, string[]][] = [
   ["Clients", ["client-balances", "lead-source"]],
   ["Team", ["timesheets"]],
 ];
+
+/** Each summary card shows this many rows; the rest is in its full report. */
+const CAP = 6;
+/** The foot of a summary card: what part is shown (when it was cut) and the way to the whole thing. */
+function More({ note, href, label = "See full report" }: { note?: string | false; href: string; label?: string }) {
+  return (
+    <p className="no-print mt-3 flex flex-wrap items-center justify-between gap-x-3 border-t border-line-soft pt-1.5 text-xs tabular-nums text-ink-soft">
+      <span>{note}</span>
+      <Link href={href} className="inline-flex min-h-9 items-center text-sm font-semibold text-blue hover:text-blue-deep max-sm:min-h-11">{label}</Link>
+    </p>
+  );
+}
 
 /** Server-side "now" math kept out of the component body. */
 function daysAgo(n: number) { return new Date(Date.now() - n * 86_400_000); }
@@ -72,10 +84,13 @@ export default async function Reports({ searchParams }: PageProps<"/reports">) {
   const byCommunity = new Map<string, number>();
   for (const p of payments) { const c = commOf.get(p.invoice.propertyId ?? "") ?? "No community"; byCommunity.set(c, (byCommunity.get(c) ?? 0) + p.amountCents - p.refundedCents); }
 
-  const top = (m: Map<string, number>, n = 10) => [...m].sort((a, b) => b[1] - a[1]).slice(0, n);
+  const top = (m: Map<string, number>, n = CAP) => [...m].sort((a, b) => b[1] - a[1]).slice(0, n);
+  const cut = (total: number, what: string, lead = "Top") => total > CAP && `${lead} ${CAP} of ${total} ${what}`;
   const sent = quotes.reduce((a, q) => a + q._count, 0);
   const won = quotes.filter((q) => q.status === "APPROVED" || q.status === "CONVERTED").reduce((a, q) => a + q._count, 0);
-  const storms = season?.events.filter((e) => e.status !== "CANCELLED") ?? [];
+  const storms = (season?.events.filter((e) => e.status !== "CANCELLED") ?? []).sort((a, b) => b.number - a.number);
+  const months = [...byMonth];
+  const ranged = `from=${r.from}&to=${r.to}`;
 
   const grouped = new Set(GROUPS.flatMap(([, keys]) => keys));
   const rest = Object.keys(REPORTS).filter((k) => !grouped.has(k));
@@ -114,16 +129,16 @@ export default async function Reports({ searchParams }: PageProps<"/reports">) {
       </Card>
 
       <div className="grid gap-5 lg:grid-cols-2">
-        <Card title="Money in by month"><Bars rows={[...byMonth].map(([k, v]) => [monthLabel(k), v])} empty="No payments in this period." /></Card>
-        <Card title="Invoiced by service"><Bars rows={top(byService)} empty="No invoices issued in this period." /></Card>
-        <Card title="Money in by community"><Bars rows={top(byCommunity)} empty="No payments in this period." /></Card>
+        <Card title="Money in by month"><Bars rows={months.slice(-CAP).map(([k, v]) => [monthLabel(k), v])} empty="No payments in this period." /><More note={cut(months.length, "months", "Latest")} href={`/reports/payments?${ranged}`} /></Card>
+        <Card title="Invoiced by service"><Bars rows={top(byService)} empty="No invoices issued in this period." /><More note={cut(byService.size, "services")} href={`/reports/invoices?${ranged}`} /></Card>
+        <Card title="Money in by community"><Bars rows={top(byCommunity)} empty="No payments in this period." /><More note={cut(byCommunity.size, "communities")} href={`/reports/payments?${ranged}`} /></Card>
         <Card title={`Storms · ${season?.name ?? "no season"}`}>
           {storms.length ? (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead><tr className="border-b border-line text-left text-xs font-medium text-ink-soft"><th scope="col" className="pb-2 font-medium">Storm</th><th scope="col" className="pb-2 pl-3 text-right font-medium">Snow (cm)</th><th scope="col" className="pb-2 pl-3 text-right font-medium">Visits done</th><th scope="col" className="pb-2 pl-3 text-right font-medium">Invoiced</th></tr></thead>
                 <tbody className="divide-y divide-line-soft">
-                  {storms.map((e) => (
+                  {storms.slice(0, CAP).map((e) => (
                     <tr key={e.id}><td className="py-2">{e.name}</td><td className="py-2 pl-3 text-right tabular-nums">{e.measuredCm ?? <span className="text-ink-soft"><span className="sm:hidden" aria-hidden>–</span><span className="sr-only sm:not-sr-only">not measured</span></span>}</td>
                       <td className="whitespace-nowrap py-2 pl-3 text-right tabular-nums">{e.visits.filter((v) => v.state === "COMPLETED").length} of {e.visits.filter((v) => v.state !== "CANCELLED").length}</td>
                       <td className="py-2 pl-3 text-right"><Amount cents={e.invoices.filter((i) => i.status !== "VOID").reduce((a, i) => a + i.totalCents, 0)} /></td></tr>
@@ -132,14 +147,16 @@ export default async function Reports({ searchParams }: PageProps<"/reports">) {
               </table>
             </div>
           ) : <p className="text-sm text-ink-soft">No storms yet this season.</p>}
+          {storms.length > 0 && <More note={cut(storms.length, "storms", "Latest")} href="/snow" label="See all storms" />}
         </Card>
         <Card title="Hours by person · past 30 days">
-          <Bars rows={hours.map((h) => [h.name, h.minutes])} format={hm} empty="No time tracked yet. Start timers on visits." />
+          <Bars rows={hours.sort((a, b) => b.minutes - a.minutes).slice(0, CAP).map((h) => [h.name, h.minutes])} format={hm} empty="No time tracked yet. Start timers on visits." />
+          {hours.length > 0 && <More note={cut(hours.length, "people")} href={`/reports/timesheets?from=${addDays(today, -30)}&to=${today}`} />}
         </Card>
         <Card title="Profit by job · past 90 days">
           {profits.length ? (
             <ul className="divide-y divide-line-soft text-sm">
-              {profits.map((p) => (
+              {profits.slice(0, CAP).map((p) => (
                 <li key={p.id}>
                   <Link href={`/jobs/${p.id}`} className="group flex items-baseline justify-between gap-3 py-2">
                     <span className="min-w-0 truncate group-hover:text-blue-deep"><span className="tabular-nums text-ink-soft">#{p.number}</span> {p.title}</span>
@@ -152,6 +169,7 @@ export default async function Reports({ searchParams }: PageProps<"/reports">) {
               ))}
             </ul>
           ) : <p className="text-sm text-ink-soft">Profit shows once jobs have time or expenses logged.</p>}
+          {profits.length > 0 && <More note={cut(profits.length, "jobs")} href={`/reports/jobs?from=${addDays(today, -90)}&to=${today}`} />}
         </Card>
       </div>
     </>

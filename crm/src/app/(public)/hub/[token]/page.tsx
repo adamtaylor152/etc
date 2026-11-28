@@ -14,7 +14,7 @@ import { dateOnly, prettyDate, todayLocal } from "@/server/dates";
 import { db } from "@/server/db";
 import { env } from "@/server/env";
 import { signedMediaPath } from "@/server/media";
-import { cad, money } from "@/server/money";
+import { cad } from "@/server/money";
 import { mintToken, peekToken } from "@/server/tokens";
 import { currentCharge, snowPrices } from "@/server/ops/drive-size";
 import { renewalSeason } from "@/server/ops/jobs";
@@ -79,7 +79,7 @@ export default async function Hub({ params, searchParams }: PageProps<"/hub/[tok
     <Card title="Quotes">
       <ul className="-my-2 divide-y divide-line-soft">{quotes.map((q, i) => (
         <li key={q.id}><a href={`/q/${quoteLinks[i]}`} className={rowLink}>
-          <span className="min-w-0"><span className="block font-semibold">{q.title}</span><span className="block text-sm text-ink-soft tabular-nums">Quote #{q.number} · {money(q.totalCents)}</span></span>
+          <span className="min-w-0"><span className="block font-semibold">{q.title}</span><span className="block text-sm text-ink-soft tabular-nums">Quote #{q.number} · {cad(q.totalCents)}</span></span>
           <span className="flex shrink-0 items-center gap-1.5">{q.status === "AWAITING_RESPONSE" ? <Badge tone="amber">Waiting for you</Badge> : q.status === "CHANGES_REQUESTED" ? <Badge tone="gray">Being updated</Badge> : <Badge tone="green">Approved</Badge>}<ChevronRight className="size-4 text-ink-faint" strokeWidth={1.75} aria-hidden /></span>
         </a></li>
       ))}</ul>
@@ -136,7 +136,7 @@ export default async function Hub({ params, searchParams }: PageProps<"/hub/[tok
                   </div>
                   {v.extras.map((e) => (
                     <form key={e.id} action={hubVisitExtra} className="mt-2 flex min-h-11 items-center justify-between gap-3 rounded-lg bg-tint px-3.5">{hidden}<input type="hidden" name="removeId" value={e.id} />
-                      <span className="tabular-nums">+ {e.name} · {money(e.unitPriceCents)}</span>
+                      <span className="tabular-nums">+ {e.name} · {cad(e.unitPriceCents)}</span>
                       {open && <button className="min-h-11 flex-none font-semibold text-blue hover:text-blue-deep" aria-label={`Remove ${e.name}`}>Remove</button>}
                     </form>
                   ))}
@@ -146,7 +146,7 @@ export default async function Hub({ params, searchParams }: PageProps<"/hub/[tok
                       <ul className="divide-y divide-line-soft rounded-lg border border-line">{offer.map((a) => (
                         <li key={a.id}><form action={hubVisitExtra} className="flex items-center justify-between gap-3 p-3">{hidden}<input type="hidden" name="visitId" value={v.id} /><input type="hidden" name="serviceId" value={a.id} />
                           <span className="min-w-0"><span className="block font-semibold">{a.name}</span>{a.description && <span className="block text-sm text-ink-soft">{a.description}</span>}</span>
-                          <Tap className="flex-none tabular-nums">Add · {money(a.unitPriceCents!)}</Tap>
+                          <Tap className="flex-none tabular-nums">Add · {cad(a.unitPriceCents!)}</Tap>
                         </form></li>
                       ))}</ul>
                     </details>
@@ -159,8 +159,8 @@ export default async function Hub({ params, searchParams }: PageProps<"/hub/[tok
         {canRenew && (
           <Card title={`Renew your snow plan for ${renewTo!.name}?`}>
             <p>{lastPlan!.snowBillingMode === "SEASONAL"
-              ? `Same address, same ${money(lastPlan!.seasonalPriceCents ?? 0)} season price. We'll send the invoice when the season starts.`
-              : parseTiers(lastPlan!.depthTiers).length ? `Same address, same prices: from ${money(lastPlan!.pricePerPushCents ?? 3000)} per clearing (${describeTiers(parseTiers(lastPlan!.depthTiers), lastPlan!.pricePerPushCents ?? 3000, money)}). Nothing to pay now.`
+              ? `Same address, same ${cad(lastPlan!.seasonalPriceCents ?? 0)} season price. We'll send the invoice when the season starts.`
+              : parseTiers(lastPlan!.depthTiers).length ? `Same address, same prices: from ${cad(lastPlan!.pricePerPushCents ?? 3000)} per clearing (${describeTiers(parseTiers(lastPlan!.depthTiers), lastPlan!.pricePerPushCents ?? 3000, cad)}). Nothing to pay now.`
               : "Same address, same price per clearing. Nothing to pay now."}</p>
             <form action={hubRenewPlan} className="mt-3">{hidden}<Tap className="w-full sm:w-auto">Renew my plan</Tap></form>
           </Card>
@@ -172,9 +172,9 @@ export default async function Hub({ params, searchParams }: PageProps<"/hub/[tok
           return (
           <Card key={p.id} title="Every-snowfall plan" actions={p.planPausedAt ? <Badge tone="amber">Paused</Badge> : <Badge tone="green">Active</Badge>}>
             <p>{p.property.formatted} · {p.season?.name} · we come when {p.triggerCm ?? p.season?.defaultTriggerCm ?? 2} cm or more falls · {p.snowBillingMode === "SEASONAL"
-              ? `${money(p.seasonalPriceCents ?? 0)} for the season${p.iceMelt ? (p.addonsIncluded ? ", ice melt included" : " + ice melt") : ""}`
-              : `${tiers.length ? "from " : ""}${money(p.pricePerPushCents ?? 3000)} per ${p.snowBillingMode === "PER_EVENT" ? "storm" : "clearing"}${p.iceMelt ? " + ice melt" : ""}${walk ? " + extra sidewalk" : ""}`}.</p>
-            {tiers.length > 0 && <p className="mt-1 text-sm text-ink-soft">By snow depth: {describeTiers(tiers, p.pricePerPushCents ?? 3000, money)}.</p>}
+              ? `${cad(p.seasonalPriceCents ?? 0)} for the season${p.iceMelt ? (p.addonsIncluded ? ", ice melt included" : " + ice melt") : ""}`
+              : `${tiers.length ? "from " : ""}${cad(p.pricePerPushCents ?? 3000)} per ${p.snowBillingMode === "PER_EVENT" ? "storm" : "clearing"}${p.iceMelt ? " + ice melt" : ""}${walk ? " + extra sidewalk" : ""}`}.</p>
+            {tiers.length > 0 && <p className="mt-1 text-sm text-ink-soft">By snow depth: {describeTiers(tiers, p.pricePerPushCents ?? 3000, cad)}.</p>}
             {/* Add-ons are charged with each clearing, so not on a season-price plan, and not while a new price is waiting for an OK. */}
             {!p.sizeHoldAt && p.snowBillingMode !== "SEASONAL" && (
               <>
@@ -183,7 +183,7 @@ export default async function Hub({ params, searchParams }: PageProps<"/hub/[tok
                   {([["iceMelt", "Ice melt", p.iceMelt, iceMeltCents], ["extraWalk", "Extra sidewalk (corner lot or long walk)", walk > 0, walk || prices.walk]] as const).map(([key, label, on, cents]) => (
                     <li key={key}>
                       <form action={hubPlanAddOn} className="flex items-center justify-between gap-3 py-2">{hidden}<input type="hidden" name="jobId" value={p.id} /><input type="hidden" name="addon" value={key} /><input type="hidden" name="on" value={on ? "0" : "1"} />
-                        <span className="min-w-0"><span className="block font-semibold">{label}</span><span className="block text-sm text-ink-soft tabular-nums">{on ? "On · " : "+"}{money(cents)} {per}</span></span>
+                        <span className="min-w-0"><span className="block font-semibold">{label}</span><span className="block text-sm text-ink-soft tabular-nums">{on ? "On · " : "+"}{cad(cents)} {per}</span></span>
                         <button role="switch" aria-checked={on} aria-label={`${label}: ${on ? "on, tap to turn off" : "off, tap to add"}`} className="group flex min-h-11 shrink-0 items-center gap-2 rounded-lg pl-2 font-semibold">
                           <span className={`w-7 text-right text-sm ${on ? "text-navy" : "text-ink-soft"}`}>{on ? "On" : "Off"}</span>
                           <span className={`flex h-8 w-14 items-center rounded-full border p-0.5 ${on ? "justify-end border-blue bg-blue" : "justify-start border-line bg-line group-hover:border-ink-faint/60"}`}><span className="size-6 rounded-full bg-white shadow-sm" /></span>
@@ -286,9 +286,9 @@ export default async function Hub({ params, searchParams }: PageProps<"/hub/[tok
           </Card>
         )}
         <Card title="Send a neighbour our way">
-          <p>Share your link. When they book and pay their first invoice, you get {money(refReward)} off your next one.</p>
+          <p>Share your link. When they book and pay their first invoice, you get {cad(refReward)} off your next one.</p>
           <div className="mt-3"><CopyField label="Your link" value={referralLink(refCode)} /></div>
-          {creditLeft > 0 && <p className="mt-3 font-semibold text-emerald-800">You have {money(creditLeft)} in credit for your next invoice.</p>}
+          {creditLeft > 0 && <p className="mt-3 font-semibold text-emerald-800">You have {cad(creditLeft)} in credit for your next invoice.</p>}
         </Card>
       </div>
       <Help phone={env.phone} email={env.helpEmail} />

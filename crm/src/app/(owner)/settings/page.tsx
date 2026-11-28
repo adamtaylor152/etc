@@ -3,7 +3,7 @@
 import { requireOwner } from "@/server/auth";
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { ChevronRight, ListChecks, Megaphone, MessageSquareText, Route, Tags, Users } from "lucide-react";
+import { ChevronDown, ChevronRight, ListChecks, Megaphone, MessageSquareText, Route, Tags, Users } from "lucide-react";
 import { ConfirmButton } from "@/components/confirm-button";
 import { Flash } from "@/components/flash";
 import { InlineField, Saved, SwitchRow, inlineCls, inlineRow, numCls } from "@/components/settings/fields";
@@ -12,6 +12,7 @@ import { Badge, Button, Card, Empty, Field, Input, PageHeader, btn, inputCls } f
 import { dateOnly } from "@/server/dates";
 import { business, businessId, db } from "@/server/db";
 import { parseSettings, SETTING_DAYS, SETTING_LABELS, type ToggleKey } from "@/server/settings";
+import { smsEnabled } from "@/server/sms";
 import { stripeEnabled } from "@/server/stripe";
 import { quoteTemplateDelete, quoteTemplateRename, saveAutomations, saveBusiness, saveSchedule, saveSeason, saveTax } from "./actions";
 
@@ -49,12 +50,25 @@ const AUTOMATION_GROUPS: { title: string; keys: ToggleKey[] }[] = [
 
 const one = (v?: string | string[]) => (Array.isArray(v) ? v[0] : v) ?? "";
 
-function Group({ id, title, sub, children }: { id: string; title: string; sub?: ReactNode; children: ReactNode }) {
+/**
+ * One section. On a desk every section is open and its row is just the heading. Below `lg` each is a closed row until
+ * tapped, so a phone shows the seven sections as a short list instead of one 9,000px page. `open` renders it open on any
+ * screen (the section that was just saved). The CSS keeps a desk open before the script runs; SectionNav then sets the
+ * real `open` state, and opens the section a #hash points at.
+ */
+function Group({ id, title, sub, open, children }: { id: string; title: string; sub?: ReactNode; open?: boolean; children: ReactNode }) {
   return (
     <section id={id} aria-labelledby={`${id}-h`} className="scroll-mt-20">
-      <h2 id={`${id}-h`} className="font-display text-lg font-semibold">{title}</h2>
-      {sub && <p className="mt-0.5 max-w-[70ch] text-sm text-ink-soft">{sub}</p>}
-      <div className="mt-3 space-y-5">{children}</div>
+      <details data-settings-section open={open} className="group/sec open:max-lg:pb-4 lg:[&::details-content]:[content-visibility:visible]">
+        <summary className="list-none flex min-h-14 items-center gap-3 rounded-xl border border-line bg-white px-4 py-3 shadow-card hover:border-ink-faint/60 lg:pointer-events-none lg:min-h-0 lg:cursor-default lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none">
+          <span className="min-w-0 flex-1">
+            <h2 id={`${id}-h`} className="font-display text-[1.05rem] font-semibold lg:text-lg">{title}</h2>
+            {sub && <span className="mt-0.5 block max-w-[70ch] text-sm font-normal text-ink-soft">{sub}</span>}
+          </span>
+          <ChevronDown className="size-5 shrink-0 text-ink-soft transition-transform group-open/sec:rotate-180 lg:hidden" strokeWidth={1.75} aria-hidden />
+        </summary>
+        <div className="mt-3 space-y-5">{children}</div>
+      </details>
     </section>
   );
 }
@@ -77,18 +91,25 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
   const grouped = new Set(AUTOMATION_GROUPS.flatMap((g) => g.keys));
   const rest = allKeys.filter((k) => !grouped.has(k));
   const groups = [...AUTOMATION_GROUPS.map((g) => ({ ...g, keys: g.keys.filter((k) => k in SETTING_LABELS) })), ...(rest.length ? [{ title: "Other", keys: rest }] : [])];
-  const cards = stripeEnabled();
+  const cards = stripeEnabled(), texting = smsEnabled();
+  // The stored descriptions end by naming what a switch depends on. Here that becomes a plain note, and only while it
+  // is actually missing.
+  const describe = (text: string) => {
+    const needsTexting = text.includes("Needs Telnyx keys."), needsCards = text.includes("Needs Stripe keys.");
+    const plain = text.replace(/\s*Needs (Telnyx|Stripe) keys\./g, "");
+    return `${plain}${needsTexting && !texting ? " Texting isn't set up." : ""}${needsCards && !cards ? " Card payments aren't set up." : ""}`;
+  };
 
   const toggle = (k: ToggleKey) => {
     const days = k in SETTING_DAYS ? SETTING_DAYS[k as keyof typeof SETTING_DAYS] : null;
     return (
-      <SwitchRow key={k} name={k} defaultChecked={settings[k]} label={SETTING_LABELS[k][0]} description={SETTING_LABELS[k][1]}>
+      <SwitchRow key={k} name={k} defaultChecked={settings[k]} label={SETTING_LABELS[k][0]} description={describe(SETTING_LABELS[k][1])}>
         {days && <InlineField>{k === "lateFee" ? "Add it" : "Send"} <input name={days} type="number" min={1} max={60} defaultValue={settings[days]} className={numCls} /> {k === "lateFee" ? "days past due" : "days after the quote is sent"}</InlineField>}
         {k === "lateFee" && <InlineField>Fee: $<input name="lateFeeDollars" type="number" min={0} max={1000} step="0.01" defaultValue={(settings.lateFeeCents / 100).toFixed(2)} aria-label="Flat late fee" className={`${inlineCls} w-24`} /> plus <input name="lateFeePercent" type="number" min={0} max={25} step="0.5" defaultValue={settings.lateFeeBps / 100} aria-label="Percent of balance" className={numCls} /> % of what is owing</InlineField>}
         {k === "autoPay" && (
           <>
             <InlineField>Wait <input name="autoPayGraceDays" type="number" min={0} max={14} defaultValue={settings.autoPayGraceDays} aria-label="Auto-pay: days between the invoice email and the charge" className={numCls} /> days between the invoice email and the charge</InlineField>
-            <p className="text-xs text-ink-soft">{cards ? "Time for the client to object. 0 = charged the same day. Never before the invoice is due." : "Card payments aren't set up yet, so nothing is charged."}</p>
+            <p className="text-xs text-ink-soft">{cards ? "Time for the client to object. 0 = charged the same day. Never before the invoice is due." : "Nothing is charged until card payments are set up."}</p>
           </>
         )}
       </SwitchRow>
@@ -113,8 +134,8 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
       <div className="lg:grid lg:grid-cols-[12.5rem_minmax(0,1fr)] lg:gap-8">
         <SectionNav sections={SECTIONS} pages={PAGES.map(({ href, label }) => ({ href, label }))} focus={SAVED_IN[saved]} />
 
-        <div className="max-w-[54rem] space-y-10">
-          <Group id="business" title="Business" sub="Your name and contact details, as clients see them on emails, quotes and invoices.">
+        <div className="max-w-[54rem] space-y-3 lg:space-y-10">
+          <Group id="business" open={SAVED_IN[saved] === "business"} title="Business" sub="Your name and contact details, as clients see them on emails, quotes and invoices.">
             <Card>
               <Saved when={saved === "business"} />
               <form action={saveBusiness} className="grid gap-3 sm:grid-cols-2">
@@ -136,7 +157,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
             </Card>
           </Group>
 
-          <Group id="schedule" title="Schedule & reminders" sub="When visit reminders go out, and the arrival windows clients can pick.">
+          <Group id="schedule" open={SAVED_IN[saved] === "schedule"} title="Schedule & reminders" sub="When visit reminders go out, and the arrival windows clients can pick.">
             <Card>
               <Saved when={saved === "schedule"} />
               <form action={saveSchedule} className="space-y-5">
@@ -145,7 +166,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
                   <div className={inlineRow}>
                     Remind clients <input name="reminderDaysBefore" type="number" min={1} max={7} defaultValue={settings.reminderDaysBefore} aria-label="Days before" className={`${inlineCls} w-16`} /> day(s) before, at
                     <select name="reminderHour" defaultValue={settings.reminderHour} aria-label="Hour" className={inlineCls}>
-                      {Array.from({ length: 16 }, (_, i) => i + 6).map((h) => <option key={h} value={h}>{h % 12 || 12} {h < 12 ? "am" : "pm"}</option>)}
+                      {Array.from({ length: 16 }, (_, i) => i + 6).map((h) => <option key={h} value={h}>{h % 12 || 12} {h < 12 ? "a.m." : "p.m."}</option>)}
                     </select>
                   </div>
                   <p className="text-xs text-ink-soft">Reminders are switched on and off under <a href="#automations" className="font-medium text-blue hover:underline">Automations</a>.</p>
@@ -183,7 +204,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
             </Card>
           </Group>
 
-          <Group id="automations" title="Automations" sub="What the app does on its own. One Save at the bottom covers every switch in this section.">
+          <Group id="automations" open={SAVED_IN[saved] === "automations"} title="Automations" sub="What the app does on its own. One Save at the bottom covers every switch in this section.">
             <Card>
               <Saved when={saved === "automations"} />
               <form action={saveAutomations}>
@@ -200,7 +221,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
             </Card>
           </Group>
 
-          <Group id="quotes" title="Quotes" sub="Templates fill a new quote with your usual line items.">
+          <Group id="quotes" open={SAVED_IN[saved] === "quotes"} title="Quotes" sub="Templates fill a new quote with your usual line items.">
             <Card>
               <Saved when={saved === "templates"} />
               <H3>Quote templates</H3>
@@ -220,7 +241,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
             </Card>
           </Group>
 
-          <Group id="payments" title="Invoices & payments" sub="GST, when invoices fall due and card payments. Late fees, tips and auto-pay are under Automations.">
+          <Group id="payments" open={SAVED_IN[saved] === "payments"} title="Invoices & payments" sub="GST, when invoices fall due and card payments. Late fees, tips and auto-pay are under Automations.">
             <Card>
               <Saved when={saved === "tax"} />
               <form action={saveTax} className="space-y-3">
@@ -238,7 +259,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
                   </Field>
                   <div>
                     <span className="mb-1 block text-sm font-semibold">Card payments</span>
-                    <div className="flex min-h-10 flex-wrap items-center gap-2 text-sm"><Badge tone={cards ? "green" : "gray"}>{cards ? "On" : "Off"}</Badge>{!cards && <span className="text-xs text-ink-soft">Card payments aren&apos;t set up yet. Ask whoever runs your hosting to turn them on.</span>}</div>
+                    <div className="flex min-h-10 flex-wrap items-center gap-2 text-sm"><Badge tone={cards ? "green" : "gray"}>{cards ? "On" : "Off"}</Badge>{!cards && <span className="text-xs text-ink-soft">Card payments aren&apos;t set up. Ask whoever runs your hosting to turn them on.</span>}</div>
                   </div>
                 </div>
                 <div className="pt-1"><Button>Save GST &amp; payments</Button></div>
@@ -246,7 +267,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
             </Card>
           </Group>
 
-          <Group id="snow" title="Snow" sub="A season is the stretch a snow plan covers. The trigger is the snowfall, in centimetres, that calls for a clearing.">
+          <Group id="snow" open={SAVED_IN[saved] === "snow"} title="Snow" sub="A season is the stretch a snow plan covers. The trigger is the snowfall, in centimetres, that calls for a clearing.">
             <Card>
               <Saved when={saved === "season"} />
               <H3>Seasons</H3>
@@ -279,7 +300,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
                   </li>
                 ))}
               </ul>
-              <p className="mt-2 text-xs text-ink-soft">Owner emails were set when the app was installed. Ask whoever runs your hosting to change them.</p>
+              <p className="mt-2 text-xs text-ink-soft">Owner emails were set when the app was installed and can&apos;t be changed here.</p>
             </Card>
           </Group>
         </div>
