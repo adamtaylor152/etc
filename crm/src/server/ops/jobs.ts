@@ -13,6 +13,8 @@ import { seasonFor } from "../booking/create";
 import { currentCharge, setWalkLine, snowPrices } from "./drive-size";
 import { jobEditLocks } from "../status/job";
 import { TransitionError } from "../status/visit";
+import { getSettings } from "../settings";
+import { parseTiers, type DepthTier } from "../snow/tiers";
 
 type Actor = { id: string; businessId: string };
 export type LineInput = { name: string; description?: string; unitPriceCents: number; quantity: number };
@@ -74,16 +76,18 @@ export async function createOneOffJob(user: Actor, input: {
   });
 }
 
-export async function createSnowPlan(user: Actor, input: { clientId: string; propertyId: string; triggerCm: number | null; pricePerPushCents: number; iceMelt: boolean; billing?: PlanBilling }) {
+export async function createSnowPlan(user: Actor, input: { clientId: string; propertyId: string; triggerCm: number | null; pricePerPushCents: number; iceMelt: boolean; billing?: PlanBilling; depthTiers?: DepthTier[] }) {
   const prop = await db.property.findFirstOrThrow({ where: { id: input.propertyId, clientId: input.clientId, businessId: user.businessId } });
   return db.$transaction(async (tx) => {
     const season = await seasonFor(tx, user.businessId, todayLocal());
     const existing = await tx.job.findFirst({ where: { propertyId: prop.id, seasonId: season.id, kind: "SNOW_PLAN", closedAt: null } });
     if (existing) return existing;
+    const tiers = input.depthTiers ?? (await getSettings(tx, user.businessId)).depthTiers; // not given = the business's usual tiers
     const job = await tx.job.create({
       data: {
         businessId: user.businessId, number: await nextNumber(tx, user.businessId, "JOB"), clientId: input.clientId, propertyId: prop.id,
         seasonId: season.id, kind: "SNOW_PLAN", title: "Every snowfall", billingType: "PER_VISIT", invoiceSchedule: "PER_SNOW_EVENT",
+        ...(tiers.length ? { depthTiers: tiers } : {}),
         ...billingColumns(input.billing ?? { mode: "PER_PUSH" }, season), triggerCm: input.triggerCm, pricePerPushCents: input.pricePerPushCents, iceMelt: input.iceMelt,
         lineItems: { create: [{ name: "Snow shovelling, every snowfall (per push)", unitPriceCents: input.pricePerPushCents, totalCents: input.pricePerPushCents }] },
       },
@@ -97,15 +101,16 @@ export async function createSnowPlan(user: Actor, input: { clientId: string; pro
  *  that isn't waiting on a price OK. Nothing already charged moves: ice melt and extra sidewalk are read when a visit is completed.
  *  billing omitted = leave the billing mode alone. Changing mode, season price or instalment plan is refused once the plan is locked. */
 export async function updatePlan(by: Actor | { businessId: string; clientId: string }, jobId: string,
-                                 input: { triggerCm?: number | null; pricePerPushCents?: number; iceMelt?: boolean; extraWalk?: boolean; billing?: PlanBilling }) {
+                                 input: { triggerCm?: number | null; pricePerPushCents?: number; iceMelt?: boolean; extraWalk?: boolean; billing?: PlanBilling; depthTiers?: DepthTier[] }) {
   const client = "clientId" in by ? by.clientId : null;
   const job = await db.job.findFirstOrThrow({
     where: { id: jobId, businessId: by.businessId, kind: "SNOW_PLAN", ...(client ? { clientId: client, closedAt: null, sizeHoldAt: null } : {}) },
     include: { lineItems: true, season: true },
   });
   if (client && job.snowBillingMode === "SEASONAL") throw new TransitionError("Add-ons on a season-price plan are set by the office"); // nothing is charged per visit
-  const { billing, extraWalk, ...rest } = input;
-  let cols: Prisma.JobUncheckedUpdateInput = {};
+  const { billing, extraWalk, depthTiers, ...rest } = input;
+  // Tiers are the office's to set; like the price, a change applies to visits completed from now on.
+  let cols: Prisma.JobUncheckedUpdateInput = depthTiers && !client ? { depthTiers: depthTiers.length ? depthTiers : Prisma.DbNull } : {};
   if (billing && !client) {
     if (!job.season) throw new TransitionError("This plan has no season");
     const next = billingColumns({ ...billing, firstDueOn: billing.firstDueOn || dateOnly(job.seasonalFirstDueOn) }, job.season);
@@ -113,7 +118,7 @@ export async function updatePlan(by: Actor | { businessId: string; clientId: str
       || next.seasonalInstalments !== job.seasonalInstalments || dateOnly(next.seasonalFirstDueOn) !== dateOnly(job.seasonalFirstDueOn);
     if (changed && planBillingLocked(await planBillingUse(job.id))) throw new TransitionError("This plan already has charges or instalment invoices, so its billing can't change. End it and start a new plan instead.");
     // A flat season price replaces any per-push price the client was still being asked to OK.
-    cols = !changed ? { addonsIncluded: next.addonsIncluded } : next.snowBillingMode === "SEASONAL" ? { ...next, sizeHoldAt: null, pendingPrice: Prisma.DbNull } : next;
+    cols = { ...cols, ...(!changed ? { addonsIncluded: next.addonsIncluded } : next.snowBillingMode === "SEASONAL" ? { ...next, sizeHoldAt: null, pendingPrice: Prisma.DbNull } : next) };
   }
   const walkChanged = extraWalk != null && extraWalk !== currentCharge(job.lineItems).walk > 0;
   await db.$transaction(async (tx) => {
@@ -123,7 +128,7 @@ export async function updatePlan(by: Actor | { businessId: string; clientId: str
       await tx.property.update({ where: { id: job.propertyId }, data: { extraWalk } }); // what the size check and the next booking start from
     }
     await logActivity(tx, {
-      businessId: by.businessId, type: "plan.updated", entityType: "Job", entityId: job.id, clientId: job.clientId, jobId: job.id, data: { ...rest, ...(extraWalk != null ? { extraWalk } : {}), ...(billing ?? {}) },
+      businessId: by.businessId, type: "plan.updated", entityType: "Job", entityId: job.id, clientId: job.clientId, jobId: job.id, data: { ...rest, ...(extraWalk != null ? { extraWalk } : {}), ...(billing ?? {}), ...(depthTiers && !client ? { depthTiers } : {}) },
       ...(client ? { actorType: "CLIENT" as const, actorClientId: client } : { actorType: "USER" as const, actorUserId: (by as Actor).id }),
     });
   });
@@ -376,6 +381,7 @@ export async function renewPlan(businessId: string, clientId: string, actor: { u
         businessId, number: await nextNumber(tx, businessId, "JOB"), clientId, propertyId: last.propertyId, seasonId: season.id, kind: "SNOW_PLAN",
         title: "Every snowfall", billingType: "PER_VISIT", invoiceSchedule: last.invoiceSchedule, ...billing,
         triggerCm: last.triggerCm, pricePerPushCents: last.pricePerPushCents, iceMelt: last.iceMelt, instructions: last.instructions,
+        ...(parseTiers(last.depthTiers).length ? { depthTiers: parseTiers(last.depthTiers) } : {}), // same depth tiers as last season
         lineItems: { create: [
           { name: "Snow shovelling, every snowfall (per push)", unitPriceCents: last.pricePerPushCents ?? 3000, totalCents: last.pricePerPushCents ?? 3000 },
           ...last.lineItems.filter((l) => l.name.startsWith(WALK_PREFIX)).map((l) => ({ name: l.name, unitPriceCents: l.unitPriceCents, totalCents: l.totalCents, perVisit: true, sortOrder: 2 })), // the extra sidewalk carries over

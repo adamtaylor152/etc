@@ -15,6 +15,9 @@ export const SettingsSchema = z.object({
   referralRewardCents: z.coerce.number().int().min(0).max(50_000).default(1000), // credit for the referrer
   referralDiscountCents: z.coerce.number().int().min(0).max(50_000).default(0), // credit for the new client // new invoices let clients pay part online       // ask for a Google review after the first job of the season
   serviceMinutes: z.coerce.number().int().min(1).max(240).default(12), // time at a stop, for route ETAs (12 = a snow stop)
+  // Snow pricing (snow/tiers.ts). depthTiers: what a new plan starts from; each plan then keeps its own copy.
+  depthTiers: z.array(z.object({ overCm: z.number().int().min(1).max(300), addCents: z.number().int().min(0).max(100_000) })).max(4).default([]),
+  returnVisitPct: z.coerce.number().int().min(0).max(200).default(50), // a billable return visit = this % of the plan's clearing price
   dailyDigest: z.boolean().default(false),          // 6am summary email to owners
   quoteFollowUp: z.boolean().default(true),         // first nudge for unanswered quotes
   quoteFollowUpDays: z.coerce.number().int().min(1).max(60).default(3), // days after sending

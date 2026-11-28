@@ -7,18 +7,20 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import type { SkipReason, VisitState } from "@/generated/prisma/client";
 import { requireOwner } from "@/server/auth";
-import { addVisit, deleteVisit, scheduleVisit, transitionVisit } from "@/server/ops/visits";
+import { addReturnVisit, addVisit, deleteVisit, scheduleVisit, setIceMeltBags, transitionVisit } from "@/server/ops/visits";
 import { createSnowPlan, renewalCandidates, renewalSeason, setJobClosed, setPlanPaused, updatePlan, type PlanBilling } from "@/server/ops/jobs";
 import { db } from "@/server/db";
 import { enqueue, kickOutbox } from "@/server/email/outbox";
 import { env } from "@/server/env";
 import { addPush, cancelStorm, createStorm, finishStorm, setSnowEnded, setStormDepth, startStorm } from "@/server/ops/storms";
 import { TransitionError } from "@/server/status/visit";
+import { tiersFromRows } from "@/server/snow/tiers";
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 const back = (f: FormData) => { const p = str(f, "back"); return p.startsWith("/") && !p.startsWith("//") ? p : "/"; };
 const date = z.union([z.literal(""), z.string().regex(/^\d{4}-\d{2}-\d{2}$/)]).transform((s) => s || null);
 const cm = z.coerce.number().int().min(0).max(300);
+const bags = z.coerce.number().min(0).max(999).transform((b) => Math.round(b * 100) / 100);
 const dollars = z.coerce.number().min(0).max(100_000).transform((d) => Math.round(d * 100));
 
 async function run(f: FormData, fn: () => Promise<unknown>) {
@@ -50,9 +52,22 @@ export async function visitTransition(f: FormData) {
       skipNote: str(f, "skipNote").slice(0, 500),
       depthCm: str(f, "depthCm") ? cm.parse(str(f, "depthCm")) : undefined,
       iceMeltApplied: f.has("iceMeltShown") ? f.get("iceMeltApplied") === "on" : undefined,
+      iceMeltBags: str(f, "iceMeltBags") ? bags.parse(str(f, "iceMeltBags")) : undefined,
       lat: num("lat"), lng: num("lng"),
     });
   });
+}
+
+/** One more trip on the same storm (the plough came back): included, or billable at the return-visit price. */
+export async function visitReturn(f: FormData) {
+  const user = await requireOwner();
+  await run(f, () => addReturnVisit(user, str(f, "id"), str(f, "billable") === "1"));
+}
+
+/** How much ice melt went down on a finished visit; blank clears it. */
+export async function visitIceMeltBags(f: FormData) {
+  const user = await requireOwner();
+  await run(f, () => setIceMeltBags(user, str(f, "id"), str(f, "bags") ? bags.parse(str(f, "bags")) : null));
 }
 
 export async function visitSchedule(f: FormData) {
@@ -84,6 +99,9 @@ function planBilling(f: FormData): PlanBilling | undefined {
   };
 }
 
+/** Depth-tier rows of the plan forms; a form without them leaves the plan's tiers alone. */
+const planTiers = (f: FormData) => (f.has("tiersShown") ? tiersFromRows(f.getAll("tierCm").map(String), f.getAll("tierAdd").map(String)) : undefined);
+
 export async function planCreate(f: FormData) {
   const user = await requireOwner();
   let job;
@@ -91,7 +109,7 @@ export async function planCreate(f: FormData) {
     job = await createSnowPlan(user, {
       clientId: str(f, "clientId"), propertyId: str(f, "propertyId"),
       triggerCm: str(f, "triggerCm") ? cm.parse(str(f, "triggerCm")) : null,
-      pricePerPushCents: dollars.parse(str(f, "price") || "30"), iceMelt: f.get("iceMelt") === "on", billing: planBilling(f),
+      pricePerPushCents: dollars.parse(str(f, "price") || "30"), iceMelt: f.get("iceMelt") === "on", billing: planBilling(f), depthTiers: planTiers(f),
     });
   } catch (e) {
     if (!(e instanceof TransitionError || e instanceof z.ZodError)) throw e;
@@ -105,7 +123,7 @@ export async function planUpdate(f: FormData) {
   const user = await requireOwner();
   await run(f, () => updatePlan(user, str(f, "id"), {
     triggerCm: str(f, "triggerCm") ? cm.parse(str(f, "triggerCm")) : null,
-    pricePerPushCents: dollars.parse(str(f, "price")), iceMelt: f.get("iceMelt") === "on", extraWalk: f.get("extraWalk") === "on", billing: planBilling(f),
+    pricePerPushCents: dollars.parse(str(f, "price")), iceMelt: f.get("iceMelt") === "on", extraWalk: f.get("extraWalk") === "on", billing: planBilling(f), depthTiers: planTiers(f),
   }));
 }
 

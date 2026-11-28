@@ -21,6 +21,7 @@ import { CampaignEmail } from "@/emails/campaign";
 import { clickUrl, openPixelUrl, unsubscribeUrl, type Block } from "../ops/campaigns";
 import { env } from "../env";
 import { mintToken } from "../tokens";
+import { parseTiers } from "../snow/tiers";
 import { currentCharge, dollars, SIZES, type Pending } from "../ops/drive-size";
 
 type Ctx = { businessId: string; to: string };
@@ -310,7 +311,7 @@ const planRenewal: Template<{ clientId: string; seasonId: string }> = {
       db.job.findFirst({ where: { clientId: p.clientId, kind: "SNOW_PLAN" }, orderBy: { createdAt: "desc" } }),
     ]);
     const raw = await mintToken(db, ctx.businessId, "CLIENT_HUB", { clientId: c.id });
-    return <PlanRenewal name={clientName(c)} season={season.name} price={money(last?.pricePerPushCents ?? 3000)} seasonPrice={last?.snowBillingMode === "SEASONAL" && last.seasonalPriceCents ? money(last.seasonalPriceCents) : undefined} url={`${env.appUrl}/hub/${raw}`} site={env.siteUrl} phone={env.phone} />;
+    return <PlanRenewal name={clientName(c)} season={season.name} price={`${parseTiers(last?.depthTiers).length ? "from " : ""}${money(last?.pricePerPushCents ?? 3000)}`} seasonPrice={last?.snowBillingMode === "SEASONAL" && last.seasonalPriceCents ? money(last.seasonalPriceCents) : undefined} url={`${env.appUrl}/hub/${raw}`} site={env.siteUrl} phone={env.phone} />;
   },
 };
 

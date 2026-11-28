@@ -34,7 +34,7 @@ export async function routeSplit(f: FormData) {
   if (people.length && (storm || /^\d{4}-\d{2}-\d{2}$/.test(date))) {
     const { visits } = await routeVisits(user.businessId, { ...(storm ? { snowEventId: storm } : { scheduledDate: toDbDate(date) }), state: { in: ["SCHEDULED", "EN_ROUTE"] } });
     const times = await routeEtas(user.businessId, visits, new Date(), { oneRoute: true });
-    const plan = splitRoute(visits.map((v) => ({ id: v.id, community: v.property.communityCode, weight: (times.stops.get(v.id)?.driveMin ?? 0) + times.serviceMin })), people);
+    const plan = splitRoute(visits.map((v) => ({ id: v.id, community: v.property.communityCode, weight: (times.stops.get(v.id)?.driveMin ?? 0) + (times.stops.get(v.id)?.serviceMin ?? times.serviceMin) })), people);
     for (const [visitId, uid] of plan) await setVisitAssignees(user, visitId, [uid]);
   }
   revalidatePath("/", "layout");

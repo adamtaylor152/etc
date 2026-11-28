@@ -27,6 +27,8 @@ import { recurringInvoicing, recurringPause, recurringUpdate } from "../../recur
 import { RecurringBillingFields } from "@/components/recurring-billing-fields";
 import { WindowChips } from "@/components/window-chips";
 import { getSettings } from "@/server/settings";
+import { DepthTierFields } from "@/components/depth-tier-fields";
+import { describeTiers, parseTiers } from "@/server/snow/tiers";
 
 const hm = (min: number) => `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
 const SKIP: [string, string][] = [["CLIENT_CANCELLED", "Client asked to skip"], ["WEATHER", "Weather"], ["NO_ACCESS", "Can't get in"], ["OTHER", "Other"]];
@@ -65,6 +67,7 @@ export default async function JobPage({ params, searchParams }: PageProps<"/jobs
   const unbilled = charges.filter((c) => !c.invoiceLineItemId);
   // Snow plan billing: same lock rule as updatePlan; seasonal plans show their instalment schedule against the invoices made so far.
   const mode = job.snowBillingMode ?? "PER_PUSH";
+  const tiers = parseTiers(job.depthTiers);
   const instalmentInvoices = job.invoices.filter((i) => i.instalmentKey);
   const billingLocked = planBillingLocked({ visitCharges: charges.length, instalmentInvoices: instalmentInvoices.length });
   const instalments = plan && mode === "SEASONAL" && job.seasonalPriceCents && job.seasonalInstalments && job.seasonalFirstDueOn
@@ -107,12 +110,14 @@ export default async function JobPage({ params, searchParams }: PageProps<"/jobs
                   <label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" name="extraWalk" defaultChecked={currentCharge(job.lineItems).walk > 0} className="size-5" /> Extra sidewalk</label>
                 </span>
                 <Button variant="secondary">Save</Button>
+                <div className="sm:col-span-4"><DepthTierFields tiers={tiers} /></div>
                 {/* No billing fields once locked: the action then leaves the billing mode alone. */}
                 {!billingLocked && <div className="sm:col-span-4"><PlanBillingFields mode={mode} seasonPriceCents={job.seasonalPriceCents} instalments={job.seasonalInstalments} firstDueOn={dateOnly(job.seasonalFirstDueOn) ?? today} addonsIncluded={mode === "SEASONAL" ? job.addonsIncluded : undefined} /></div>}
               </form>
               <p className="mt-3 text-sm text-ink-soft">{job.season?.name}. A visit is added automatically when a storm reaches the trigger. {mode === "SEASONAL"
                 ? <>Billed a flat <b>{money(job.seasonalPriceCents ?? 0)}</b> for the season{job.addonsIncluded ? ", ice melt included" : "; ice melt is charged per visit"}.</>
                 : mode === "PER_EVENT" ? "Billed once per storm, however many pushes; invoiced when the storm is finished." : "Billed per push, once per storm."}
+                {mode !== "SEASONAL" && tiers.length > 0 && <> By depth: <b>{describeTiers(tiers, job.pricePerPushCents ?? 3000, money)}</b>.</>}
                 {billingLocked && " The billing mode can't change now that this plan has charges or instalment invoices: end it and start a new plan instead."}</p>
               {mode === "SEASONAL" && (
                 <div className="mt-3 border-t border-line pt-3 text-sm">
@@ -199,7 +204,7 @@ export default async function JobPage({ params, searchParams }: PageProps<"/jobs
                     <li key={v.id} className="flex flex-wrap items-center justify-between gap-2 py-3 text-sm">
                       <Link href={`/visits/${v.id}`} className="min-w-0 font-semibold text-blue">
                         {v.scheduledDate ? prettyDate(dateOnly(v.scheduledDate)) : "Not scheduled"}
-                        {v.snowEvent && <span className="font-normal text-ink-soft"> · {v.snowEvent.name}{v.pushNumber ? `, push ${v.pushNumber}` : ""}</span>}
+                        {v.snowEvent && <span className="font-normal text-ink-soft"> · {v.snowEvent.name}{v.pushNumber ? `, push ${v.pushNumber}` : ""}{v.isReturn && ", return visit"}</span>}
                         {v.lineOverrides != null && <span className="font-normal text-ink-soft"> · own price</span>}
                         {v.state === "SKIPPED" && v.skipNote && <span className="font-normal text-ink-soft"> · {v.skipNote}</span>}
                         {v.extras.length > 0 && <span className="font-normal text-ink-soft"> · + {v.extras.map((e) => e.name).join(", ")}</span>}

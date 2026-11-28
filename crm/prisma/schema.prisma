@@ -674,6 +674,7 @@ model Job {
   planPausedAt       DateTime?
   sizeHoldAt         DateTime? // waiting on the client to OK a new price for a bigger driveway; no visits until then
   pendingPrice       Json? // { size, extraWalk, baseCents, walkCents } offered to the client
+  depthTiers         Json? // [{ overCm, addCents }]: deeper snow adds to the per-push / per-storm price (snow/tiers.ts); null = flat price
   closedAt           DateTime?
   closeReason        String?
   createdAt          DateTime         @default(now())
@@ -743,6 +744,9 @@ model Visit {
   iceMeltApplied         Boolean?
   instructions           String?
   lineOverrides          Json? // this visit only: [{ name, description?, quantity, unitPriceCents }] charged instead of the job's lines
+  isReturn               Boolean     @default(false) // a return visit on the same storm (the city plough buried the driveway end)
+  returnPriceCents       Int? // return visit: what it bills when done; null = included, no charge
+  iceMeltBags            Decimal?    @db.Decimal(6, 2) // how much ice melt went down (the charge stays flat per visit)
   createdAt              DateTime    @default(now())
 
   charges      VisitCharge[]
