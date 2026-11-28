@@ -3,6 +3,7 @@
 // and re-encoding through a canvas drops EXIF, so the customer's GPS location never leaves their phone.
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
+import { Camera } from "lucide-react";
 
 export async function shrink(file: File): Promise<Blob> {
   if (!file.type.startsWith("image/")) return file;
@@ -60,12 +61,12 @@ export function PhotoUploader({ endpoint, fields = {}, label, camera = true, don
 
   return (
     <div>
-      <label className={`flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-full border-2 border-dashed border-blue px-4 font-semibold text-blue ${busy ? "opacity-50" : ""}`}>
-        <span aria-hidden>📷</span> {busy ? "Uploading…" : label}
+      <label className={`flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-blue/50 bg-blue/5 px-4 text-sm font-semibold text-blue-deep hover:border-blue hover:bg-blue/10 has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-blue ${busy ? "cursor-progress opacity-60" : ""}`}>
+        <Camera className="size-4 shrink-0" strokeWidth={1.75} aria-hidden />{busy ? "Uploading…" : label}
         <input ref={input} type="file" accept="image/*" multiple disabled={busy} className="sr-only"
           {...(camera ? { capture: "environment" as const } : {})} onChange={(e) => upload(e.target.files)} />
       </label>
-      {status && <p className="mt-2 text-center text-sm text-ink-soft" aria-live="polite">{status}</p>}
+      {status && <p className="mt-1.5 text-center text-xs text-ink-soft" aria-live="polite">{status}</p>}
     </div>
   );
 }
