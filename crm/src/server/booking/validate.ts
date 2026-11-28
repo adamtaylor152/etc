@@ -1,11 +1,9 @@
-// Exact port of validate() / estimate() / service_lines() from the Python site's server.py.
+// Port of validate() / estimate() / service_lines() from the Python site's server.py, except that the services a
+// booking may name now come from the price book (passed in, so this file stays pure).
 // tests/unit/booking.test.ts pins the same cases as tests/test_server.py.
-export const SERVICES = [
-  "Snow shovelling", "Commercial snow removal", "Roof snow removal",
-  "Bin cleaning", "Window cleaning", "Leaf & yard clutter removal", "Trash & junk removal",
-  "Driveway / concrete washing", "Deck & fence cleaning", "House & siding wash",
-  "Rust stain removal", "Building washing", "Fence repair", "Something else",
-] as const;
+export const OTHER = "Something else"; // the catch-all: always accepted, always quoted
+/** Labels a booking may send: each active + bookable service's booking label (or its name), plus the catch-all. */
+export const bookingLabels = (services: { name: string; bookingLabel: string | null }[]) => [...new Set([...services.map((s) => s.bookingLabel || s.name), OTHER])];
 export const PLANS = ["One-time visit", "Every snowfall"] as const;
 export const PAYMENTS = ["Cash", "e-Transfer"] as const;
 export const DRIVE_SIZES = ["Standard", "Large", "Oversized"] as const; // missing = Standard (older forms)
@@ -36,8 +34,8 @@ function text(d: Record<string, unknown>, key: string, limit: number, required =
 // Calgary-ish bounding box: reject geo that's obviously wrong rather than trusting the client.
 const inCalgary = (lat: number, lng: number) => lat > 50.7 && lat < 51.4 && lng > -114.5 && lng < -113.7;
 
-/** todayLocal = Calgary's YYYY-MM-DD. Python allowed 1 day of slack for timezones; we keep it. */
-export function validate(d: Record<string, unknown>, todayLocal: string): Booking {
+/** todayLocal = Calgary's YYYY-MM-DD. Python allowed 1 day of slack for timezones; we keep it. allowed = bookingLabels(...). */
+export function validate(d: Record<string, unknown>, todayLocal: string, allowed: readonly string[]): Booking {
   const b = {
     name: text(d, "name", 100, true),
     email: text(d, "email", 200, true),
@@ -53,7 +51,7 @@ export function validate(d: Record<string, unknown>, todayLocal: string): Bookin
   };
   if (!EMAIL_RE.test(b.email)) throw new BookingError("email doesn't look right");
   const services = d.services;
-  if (!Array.isArray(services) || !services.length || !services.every((s) => (SERVICES as readonly unknown[]).includes(s)))
+  if (!Array.isArray(services) || !services.length || !services.every((s) => (allowed as readonly unknown[]).includes(s)))
     throw new BookingError("pick at least one service");
   if (!(PAYMENTS as readonly string[]).includes(b.payment)) throw new BookingError("payment must be cash or e-Transfer");
   const uniq = [...new Set(services as string[])];
