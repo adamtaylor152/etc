@@ -15,7 +15,7 @@ export const metadata = { title: "Price book" };
 
 // One set of columns for the header and every row, so the figures line up down the page.
 const COLS = "sm:grid sm:grid-cols-[minmax(0,1fr)_3.5rem] lg:grid-cols-[minmax(0,1fr)_5.5rem_5rem_5rem_5.5rem_5.5rem_3.5rem] sm:items-center sm:gap-3";
-const moveBtn = "grid size-8 place-items-center rounded-md border border-line bg-white text-ink-soft hover:border-ink-faint/60 hover:bg-tint hover:text-navy disabled:border-line-soft disabled:bg-transparent disabled:text-ink-faint/50";
+const moveBtn = "grid size-8 max-sm:size-11 place-items-center rounded-md border border-line bg-white text-ink-soft hover:border-ink-faint/60 hover:bg-tint hover:text-navy disabled:border-line-soft disabled:bg-transparent disabled:text-ink-faint/50";
 
 function ServiceForm({ sv, checklists }: { sv?: Service; checklists: { id: string; name: string }[] }) {
   const dollars = (c?: number | null) => (c != null ? c / 100 : "");
@@ -78,14 +78,14 @@ export default async function PriceBook({ searchParams }: PageProps<"/settings/p
                     {firstArchived && <h2 className="border-b border-line-soft bg-tint px-4 py-2 text-xs font-medium text-ink-soft">Archived: kept on past quotes, jobs and invoices, hidden from pickers and booking</h2>}
                     <div className="relative">
                       {sv.active && (
-                        <form action={serviceMove} className="absolute left-3 top-3 flex gap-1">
+                        <form action={serviceMove} className="absolute left-3 top-3 flex gap-1 max-sm:left-2 max-sm:top-1.5">
                           <input type="hidden" name="id" value={sv.id} />
                           <button name="dir" value="up" disabled={i === 0} aria-label={`Move ${sv.name} up`} title="Move up" className={moveBtn}><ArrowUp className="size-4" aria-hidden /></button>
                           <button name="dir" value="down" disabled={!services[i + 1]?.active} aria-label={`Move ${sv.name} down`} title="Move down" className={moveBtn}><ArrowDown className="size-4" aria-hidden /></button>
                         </form>
                       )}
                       <details className="group" open={sp.open === sv.id}>
-                        <summary className={`list-none min-h-14 cursor-pointer py-3 pl-[5.75rem] pr-4 text-sm sm:pr-[6.25rem] hover:bg-tint/60 ${COLS}`}>
+                        <summary className={`list-none min-h-14 cursor-pointer py-3 pl-[5.75rem] pr-4 text-sm max-sm:pl-[6.75rem] sm:pr-[6.25rem] hover:bg-tint/60 ${COLS}`}>
                           <span className="block min-w-0"><span className="flex flex-wrap items-center gap-x-2 gap-y-1">
                             <span className={`font-semibold ${sv.active ? "" : "text-ink-soft"}`}>{sv.name}</span>
                             {sv.active && sv.bookable && <Badge tone="blue">Bookable</Badge>}

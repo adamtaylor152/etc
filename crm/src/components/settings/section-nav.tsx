@@ -1,16 +1,25 @@
 "use client";
-// Settings index navigation: a sticky section list beside the page on desktop, a compact "Jump to" menu on phones.
-// Plain anchor links; the current section is marked as you scroll. Also brings a just-saved section back into view.
+// Settings index navigation: a sticky section list beside the page on desktop. Plain anchor links; the current section
+// is marked as you scroll. Below `lg` there is no list: the sections themselves are closed rows (see Group on the
+// settings page), and this keeps them honest: all open on a desk, and the one a #hash or a save points at open anywhere.
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { ChevronRight } from "lucide-react";
 
 export type NavSection = { id: string; label: string };
 export type NavPage = { href: string; label: string };
 
+/** Opens the settings section that holds (or is) the element with this id, and puts it at the top if it was closed. */
+function reveal(id: string) {
+  const el = document.getElementById(id);
+  const d = el?.closest<HTMLDetailsElement>("details[data-settings-section]") ?? el?.querySelector<HTMLDetailsElement>("details[data-settings-section]");
+  if (!el || !d || d.open) return;
+  d.open = true;
+  el.scrollIntoView({ block: "start", behavior: "instant" });
+}
+
 export function SectionNav({ sections, pages, focus }: { sections: NavSection[]; pages: NavPage[]; focus?: string }) {
   const [active, setActive] = useState(sections[0]?.id);
-  const menu = useRef<HTMLDetailsElement>(null);
   const ids = sections.map((s) => s.id).join(",");
 
   useEffect(() => {
@@ -26,23 +35,35 @@ export function SectionNav({ sections, pages, focus }: { sections: NavSection[];
     return () => window.removeEventListener("scroll", pick);
   }, [ids]);
 
-  // After a save the page reloads at the top; go back to the section that was saved so its notice is in view.
+  useEffect(() => {
+    const wide = window.matchMedia("(min-width: 1024px)");
+    const all = [...document.querySelectorAll<HTMLDetailsElement>("details[data-settings-section]")];
+    const desk = () => { if (wide.matches) for (const d of all) d.open = true; };
+    const hash = () => { if (window.location.hash.length > 1) reveal(decodeURIComponent(window.location.hash.slice(1))); };
+    desk();
+    hash();
+    wide.addEventListener("change", desk);
+    window.addEventListener("hashchange", hash);
+    for (const d of all) d.addEventListener("toggle", desk); // on a desk a section can't be closed from the keyboard either
+    return () => {
+      wide.removeEventListener("change", desk);
+      window.removeEventListener("hashchange", hash);
+      for (const d of all) d.removeEventListener("toggle", desk);
+    };
+  }, []);
+
+  // After a save the page reloads at the top; go back to the section that was saved (the page renders it open) so its
+  // notice is in view.
   useEffect(() => {
     if (focus && !window.location.hash) document.getElementById(focus)?.scrollIntoView({ block: "start", behavior: "instant" });
   }, [focus]);
 
   const link = (s: NavSection, extra = "") => (
-    <a key={s.id} href={`#${s.id}`} aria-current={active === s.id ? "location" : undefined} onClick={() => { if (menu.current) menu.current.open = false; }}
+    <a key={s.id} href={`#${s.id}`} aria-current={active === s.id ? "location" : undefined} onClick={() => reveal(s.id)}
       className={`flex min-h-9 items-center rounded-lg px-3 text-sm ${active === s.id ? "bg-blue/8 font-semibold text-blue-deep" : "font-medium text-ink-soft hover:bg-tint hover:text-navy"} ${extra}`}>{s.label}</a>
   );
   return (
     <>
-      <details ref={menu} className="mb-5 rounded-xl border border-line bg-white shadow-card lg:hidden">
-        <summary className="flex min-h-11 items-center px-4 text-sm font-semibold">Jump to a section</summary>
-        <nav aria-label="Settings sections" className="grid grid-cols-2 gap-x-2 border-t border-line-soft p-2">
-          {sections.map((s) => link(s, "min-h-11"))}
-        </nav>
-      </details>
       <aside className="hidden lg:block">
         <nav aria-label="Settings sections" className="sticky top-20 space-y-0.5">
           <p className="px-3 pb-1 text-xs font-medium text-ink-soft">On this page</p>

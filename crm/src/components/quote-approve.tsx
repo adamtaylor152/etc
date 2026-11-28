@@ -7,13 +7,13 @@
 import { useEffect, useRef, useState } from "react";
 import { Check } from "lucide-react";
 import { depositCents, type TaxSettings } from "@/server/billing/invoice";
+import { cad } from "@/server/money";
 import { optionTotals, type QuoteDiscount, type QuoteOption } from "@/server/status/quote";
 import { Cta, TickRow, TotalRow, tap } from "./public/kit";
 import { SignaturePad } from "./signature-pad";
 import { Badge, Card, inputCls } from "./ui";
 
 type Line = { id: string; name: string; description: string | null; totalCents: number; isOptional: boolean; isSelected: boolean; qty: string; optionKey: string | null; photo: { sm: string; lg: string } | null };
-const money = (c: number) => `$${(c / 100).toLocaleString("en-CA", { minimumFractionDigits: c % 100 ? 2 : 0, maximumFractionDigits: 2 })}`;
 // Two or four options pair up on a wide screen; three stay stacked (a third of the reading column is too narrow for a line and its price).
 const COLS: Record<number, string> = { 2: "sm:grid-cols-2", 4: "sm:grid-cols-2" };
 
@@ -56,7 +56,7 @@ export function QuoteApprove({ token, lines, options, chosen, discount, tax, tax
   const row = (l: Line) => l.isOptional ? (
     <li key={l.id} className="py-1.5">
       <TickRow name="selected" value={l.id} checked={picked.has(l.id)} disabled={!canAct} onChange={(e) => toggle(l.id, e.target.checked)} aria-label={`Add ${l.name}`}
-        price={<span className={picked.has(l.id) ? "" : "font-medium text-ink-soft"}>+{money(l.totalCents)}</span>}>
+        price={<span className={picked.has(l.id) ? "" : "font-medium text-ink-soft"}>+{cad(l.totalCents)}</span>}>
         {body(l)}{l.optionKey && <span className="block text-sm text-ink-soft">Optional</span>}
       </TickRow>
     </li>
@@ -64,7 +64,7 @@ export function QuoteApprove({ token, lines, options, chosen, discount, tax, tax
     <li key={l.id} className="flex items-start gap-3 py-3">
       <Check className="mt-1 size-4 shrink-0 text-emerald-600" strokeWidth={2} aria-hidden />
       <span className="min-w-0 flex-1">{body(l)}</span>
-      <span className="shrink-0 font-semibold tabular-nums">{money(l.totalCents)}</span>
+      <span className="shrink-0 font-semibold tabular-nums">{cad(l.totalCents)}</span>
     </li>
   );
 
@@ -88,7 +88,7 @@ export function QuoteApprove({ token, lines, options, chosen, discount, tax, tax
                         {o.recommended && <Badge tone="blue">Recommended</Badge>}
                         {chosen === o.key && <Badge tone="green">Your choice</Badge>}
                       </span>
-                      <span className="mt-1.5 block font-display text-[1.75rem] font-semibold leading-none tabular-nums">{money(optionTotals(ticked, discount, tax, o.key).totalCents)}</span>
+                      <span className="mt-1.5 block font-display text-[1.75rem] font-semibold leading-none tabular-nums">{cad(optionTotals(ticked, discount, tax, o.key).totalCents)}</span>
                       {common.length > 0 && <span className="mt-1 block text-sm text-ink-soft">with everything below</span>}
                     </span>
                   </label>
@@ -115,11 +115,11 @@ export function QuoteApprove({ token, lines, options, chosen, discount, tax, tax
       ) : (
         <Card title={canAct ? "Your total" : undefined}>
           <dl className="space-y-2">
-            {(discountCents > 0 || (taxCents > 0 && !taxIncluded)) && <TotalRow muted label="Subtotal" value={money(subtotalCents)} />}
-            {discountCents > 0 && <TotalRow muted label={<>Discount{discount.discountType === "PERCENT" && ` (${discount.discountValue / 100}%)`}</>} value={`−${money(discountCents)}`} />}
-            {taxCents > 0 && !taxIncluded && <TotalRow muted label={taxName} value={money(taxCents)} />}
-            <TotalRow strong label={<>Total{taxIncluded && <span className="block text-sm font-normal text-ink-soft">includes {taxName} {money(taxCents)}</span>}</>} value={money(total)} />
-            {canAct && dueNow > 0 && <TotalRow label={<>Deposit due when you approve{deposit?.required && <span className="block text-sm text-ink-soft">Needed to book your date</span>}</>} value={<span className="font-semibold">{money(dueNow)}</span>} />}
+            {(discountCents > 0 || (taxCents > 0 && !taxIncluded)) && <TotalRow muted label="Subtotal" value={cad(subtotalCents)} />}
+            {discountCents > 0 && <TotalRow muted label={<>Discount{discount.discountType === "PERCENT" && ` (${discount.discountValue / 100}%)`}</>} value={`−${cad(discountCents)}`} />}
+            {taxCents > 0 && !taxIncluded && <TotalRow muted label={taxName} value={cad(taxCents)} />}
+            <TotalRow strong label={<>Total{taxIncluded && <span className="block text-sm font-normal text-ink-soft">includes {taxName} {cad(taxCents)}</span>}</>} value={cad(total)} />
+            {canAct && dueNow > 0 && <TotalRow label={<>Deposit due when you approve{deposit?.required && <span className="block text-sm text-ink-soft">Needed to book your date</span>}</>} value={<span className="font-semibold">{cad(dueNow)}</span>} />}
           </dl>
         </Card>
       )}
@@ -130,7 +130,7 @@ export function QuoteApprove({ token, lines, options, chosen, discount, tax, tax
               <label className="block"><span className="mb-1 block font-semibold">Your name</span><input name="name" required maxLength={100} autoComplete="name" className={`${inputCls} min-h-12`} /></label>
               <div><span className="mb-1 block font-semibold">Signature</span><SignaturePad /></div>
               <TickRow required>I approve this quote and authorize etc. to do the work described.</TickRow>
-              <Cta disabled={undecided} title={undecided ? "Choose one of the options first" : undefined}>{undecided ? "Choose an option to approve" : `Approve quote (${money(total)})`}</Cta>
+              <Cta disabled={undecided} title={undecided ? "Choose one of the options first" : undefined}>{undecided ? "Choose an option to approve" : `Approve quote (${cad(total)})`}</Cta>
             </div>
           </Card>
         </div>
@@ -140,7 +140,7 @@ export function QuoteApprove({ token, lines, options, chosen, discount, tax, tax
           <div className="flex items-center justify-between gap-3">
             <p className="min-w-0 leading-tight">
               <span className="block text-sm text-ink-soft">{undecided ? "Choose an option" : "Total"}</span>
-              {!undecided && <span className="font-display text-xl font-semibold tabular-nums">{money(total)}</span>}
+              {!undecided && <span className="font-display text-xl font-semibold tabular-nums">{cad(total)}</span>}
             </p>
             <a href="#approve" className={tap("secondary", "shrink-0")}>Go to approve</a>
           </div>

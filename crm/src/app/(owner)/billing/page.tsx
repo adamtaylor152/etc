@@ -7,6 +7,7 @@ import { Amount } from "@/components/billing/money";
 import { StepDot, Steps } from "@/components/billing/steps";
 import { Flash } from "@/components/flash";
 import { Button, ButtonLink, Card, Empty, Notice, PageHeader } from "@/components/ui";
+import { declineWords } from "@/server/billing/decline-words";
 import { dateOnly, prettyDate } from "@/server/dates";
 import { businessId, db } from "@/server/db";
 import { cad } from "@/server/money";
@@ -57,7 +58,7 @@ export default async function Billing({ searchParams }: PageProps<"/billing">) {
         <div className="min-w-0 flex-1 basis-64">
           <Link href={`/invoices/${i.id}`} className="font-semibold text-navy hover:text-blue-deep"><span className="tabular-nums">#{i.number}</span> {clientName(i.client)}</Link>
           <p className="max-w-[70ch] text-sm text-amber-950">
-            {i.autoPayState === "RETRYING" ? `Card declined${i.autoPayAttempts[0]?.failureCode ? ` (${i.autoPayAttempts[0].failureCode.replaceAll("_", " ")})` : ""}. Next try ${prettyDate(dateOnly(i.autoPayOn))}; the client was emailed.`
+            {i.autoPayState === "RETRYING" ? `The card payment failed${i.autoPayAttempts[0]?.failureCode ? `: ${declineWords(i.autoPayAttempts[0].failureCode)}` : ""}. Next try ${prettyDate(dateOnly(i.autoPayOn))}; the client was emailed.`
               : i.autoPayState === "NEEDS_ACTION" ? "The bank wants the client to approve it. They were emailed a link to pay."
               : "The automatic payment failed and we've stopped trying. Collect this one another way."}
           </p>

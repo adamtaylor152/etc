@@ -59,7 +59,7 @@ export default async function Invoices({ searchParams }: PageProps<"/invoices">)
       actions={<ButtonLink href="/billing">Billing run</ButtonLink>}
       overview={tiles.map((v, n) => ({ label: INVOICE_LABEL[v], count: counts[n], dot: DOT[v], active: view === v, href: listHref("/invoices", params, { status: v }) }))}
       metrics={[
-        { label: "Issued", value: cad(issuedCents), sub: `${issued._count._all} invoices · past 30 days` },
+        { label: "Issued", value: cad(issuedCents), sub: `${issued._count._all.toLocaleString("en-CA")} invoice${issued._count._all === 1 ? "" : "s"} · past 30 days` },
         { label: "Average invoice", value: issued._count._all ? cad(Math.round(issuedCents / issued._count._all)) : "—", sub: "past 30 days" },
         { label: "Average time to get paid", value: avgDays != null ? `${avgDays} day${avgDays === 1 ? "" : "s"}` : "—", sub: "from issue to paid" },
       ]}

@@ -30,7 +30,7 @@ export function Inbox({ convos }: { convos: Convo[] }) {
   const unreadCount = convos.filter((c) => c.unread).length;
   const tab = (f: typeof filter, label: string) => (
     <button type="button" onClick={() => setFilter(f)} aria-pressed={filter === f}
-      className={`min-h-9 whitespace-nowrap rounded-full border px-3 text-sm font-medium ${filter === f ? "border-blue/25 bg-blue/8 font-semibold text-blue-deep" : "border-line bg-white text-ink-soft hover:bg-tint hover:text-navy"}`}>{label}</button>
+      className={`min-h-9 whitespace-nowrap rounded-full border px-3 text-sm font-medium max-sm:min-h-11 max-sm:px-3.5 ${filter === f ? "border-blue/25 bg-blue/8 font-semibold text-blue-deep" : "border-line bg-white text-ink-soft hover:bg-tint hover:text-navy"}`}>{label}</button>
   );
   const Heading = atList ? "h1" : "h2";
   return (

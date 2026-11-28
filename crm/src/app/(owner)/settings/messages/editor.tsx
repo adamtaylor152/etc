@@ -21,8 +21,8 @@ function Vars({ k }: { k: string }) {
         {allowedVars(k).map((v) => (
           <li key={v} className="flex items-start gap-2 text-xs">
             <button type="button" onClick={() => copy(v)} aria-label={`Copy {{${v}}}`}
-              className="min-h-7 shrink-0 rounded-full border border-line bg-tint px-2.5 font-mono text-xs text-navy hover:border-blue/40 hover:bg-blue/8">{`{{${v}}}`}</button>
-            <span className="pt-1.5 text-ink-soft">{copied === v ? <span role="status" className="font-medium text-emerald-800">Copied</span> : VAR_HELP[v]}</span>
+              className="min-h-7 shrink-0 rounded-full border border-line bg-tint px-2.5 font-mono text-xs max-sm:min-h-11 max-sm:px-3.5 text-navy hover:border-blue/40 hover:bg-blue/8">{`{{${v}}}`}</button>
+            <span className="pt-1.5 text-ink-soft max-sm:pt-3.5">{copied === v ? <span role="status" className="font-medium text-emerald-800">Copied</span> : VAR_HELP[v]}</span>
           </li>
         ))}
       </ul>

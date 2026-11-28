@@ -36,7 +36,7 @@ export default async function Marketing({ searchParams }: PageProps<"/marketing"
   const avg = rated.length ? (rated.reduce((n, r) => n + r.rating!, 0) / rated.length).toFixed(1) : "—";
   const ids = [...new Set([...referrals.flatMap((r) => [r.referrerId, r.refereeId]), ...reviews.map((r) => r.clientId)])];
   const names = new Map((ids.length ? await db.client.findMany({ where: { id: { in: ids } } }) : []).map((c) => [c.id, clientName(c)]));
-  const hours = Array.from({ length: 25 }, (_, h) => h), hourLabel = (h: number) => (h === 0 || h === 24 ? "midnight" : h === 12 ? "noon" : `${h % 12} ${h < 12 ? "am" : "pm"}`);
+  const hours = Array.from({ length: 25 }, (_, h) => h), hourLabel = (h: number) => (h === 0 || h === 24 ? "midnight" : h === 12 ? "noon" : `${h % 12} ${h < 12 ? "a.m." : "p.m."}`);
   const sentOn = (d: Date) => prettyDate(d.toLocaleDateString("en-CA", { timeZone: "America/Edmonton" }));
   return (
     <>
@@ -44,9 +44,9 @@ export default async function Marketing({ searchParams }: PageProps<"/marketing"
       <Flash error={sp.error} />
       <Saved when={!!sp.saved} />
       <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="Review requests sent" value={reviews.length} sub={`${rated.length} rated · average ${avg}${rated.length ? " out of 5" : ""}`} />
-        <Stat label="Went to Google" value={reviews.filter((r) => r.googleClickedAt).length} sub="clicked “Leave a Google review”" />
-        <Stat label="Referrals" value={referrals.length} sub={`${referrals.filter((r) => r.status !== "PENDING").length} qualified`} />
+        <Stat label="Review requests sent" value={reviews.length.toLocaleString("en-CA")} sub={`${rated.length.toLocaleString("en-CA")} rated · average ${avg}${rated.length ? " out of 5" : ""}`} />
+        <Stat label="Went to Google" value={reviews.filter((r) => r.googleClickedAt).length.toLocaleString("en-CA")} sub="clicked “Leave a Google review”" />
+        <Stat label="Referrals" value={referrals.length.toLocaleString("en-CA")} sub={`${referrals.filter((r) => r.status !== "PENDING").length.toLocaleString("en-CA")} qualified`} />
         <Stat label="Credits issued" value={cad(credits._sum.amountCents ?? 0)} sub="all time" />
       </div>
       <div className="grid gap-5 lg:grid-cols-2 [&>*]:min-w-0">
@@ -103,7 +103,7 @@ export default async function Marketing({ searchParams }: PageProps<"/marketing"
         <Card title="New clients by source">
           {leads.length > 0 ? (
             <ul className="divide-y divide-line-soft text-sm">
-              {leads.sort((a, b) => b._count - a._count).map((l) => <li key={l.leadSource ?? "none"} className="flex justify-between gap-3 py-2"><span className={l.leadSource ? "" : "text-ink-soft"}>{l.leadSource ?? "Not set"}</span><span className="font-semibold tabular-nums">{l._count}</span></li>)}
+              {leads.sort((a, b) => b._count - a._count).map((l) => <li key={l.leadSource ?? "none"} className="flex justify-between gap-3 py-2"><span className={l.leadSource ? "" : "text-ink-soft"}>{l.leadSource ?? "Not set"}</span><span className="font-semibold tabular-nums">{l._count.toLocaleString("en-CA")}</span></li>)}
             </ul>
           ) : <Empty>No new clients in the last 90 days.</Empty>}
         </Card>

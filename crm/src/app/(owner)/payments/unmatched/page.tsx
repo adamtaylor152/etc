@@ -39,6 +39,11 @@ export default async function Unmatched({ searchParams }: PageProps<"/payments/u
   const open: OpenInvoice[] = invoices.map((i) => ({
     id: i.id, number: i.number, etransferRef: i.etransferRef, balanceCents: i.totalCents - i.amountPaidCents, clientName: clientName(i.client), email: i.client.email, issuedOn: dateOnly(i.issuedOn),
   })).filter((i) => i.balanceCents > 0);
+  // A long backlog is a wall of forms: the newest ten first, the rest one tap away. After an error the page comes back
+  // to that payment's own form (#u-id), so then every one is listed.
+  const FIRST = 10;
+  const all = sp.all === "1" || !!sp.error || items.length <= FIRST;
+  const shown = all ? items : items.slice(0, FIRST);
   return (
     <div className="max-w-4xl">
       <Flash error={sp.error} />
@@ -47,7 +52,7 @@ export default async function Unmatched({ searchParams }: PageProps<"/payments/u
         actions={<ButtonLink href="/payments">All payments</ButtonLink>} />
       {items.length ? (
         <div className="space-y-5">
-          {items.map((u) => {
+          {shown.map((u) => {
             const used = u.payments.reduce((a, p) => a + p.amountCents, 0);
             const remaining = u.amountCents - used;
             const sugg = suggestInvoices(u, open);
@@ -137,6 +142,12 @@ export default async function Unmatched({ searchParams }: PageProps<"/payments/u
               </Card>
             );
           })}
+          {!all && (
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-xl border border-line bg-white px-4 py-3 text-sm shadow-card">
+              <p className="tabular-nums text-ink-soft">Showing the newest {FIRST} of {items.length}.</p>
+              <ButtonLink href="/payments/unmatched?all=1">Show all {items.length}</ButtonLink>
+            </div>
+          )}
         </div>
       ) : <div><Empty>Nothing to match. Every payment found its invoice. New e-Transfers that can&apos;t be tied to an invoice will wait here.</Empty></div>}
       {recent.length > 0 && (

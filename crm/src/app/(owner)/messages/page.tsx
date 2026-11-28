@@ -12,7 +12,7 @@ export default async function MessagesHome() {
       <div className="max-w-sm">
         <span className="mx-auto mb-3 grid size-11 place-items-center rounded-full bg-tint text-ink-soft"><MessageSquare className="size-5" strokeWidth={1.75} aria-hidden /></span>
         <p className="font-display text-lg font-semibold">Texts with clients</p>
-        <p className="mt-1 text-sm text-ink-soft">{on ? "Pick a conversation on the left, or start a new one. Photos clients text in can be filed on their job or quote." : "Texting isn't set up yet. Ask whoever runs your hosting to turn it on."}</p>
+        <p className="mt-1 text-sm text-ink-soft">{on ? "Pick a conversation on the left, or start a new one. Photos clients text in can be filed on their job or quote." : "Texting isn't set up yet. You can still read past conversations."}</p>
         {on && <div className="mt-4 flex justify-center"><ButtonLink href="/messages/new">New message</ButtonLink></div>}
       </div>
     </section>

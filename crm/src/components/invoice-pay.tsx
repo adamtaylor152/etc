@@ -3,7 +3,7 @@
 // One block for the invoice page and for the quote page, where the deposit is due right after approving. It draws no
 // card of its own: the page puts it inside one.
 import { payByCard } from "@/app/(public)/i/[token]/actions";
-import { money } from "@/server/money";
+import { cad } from "@/server/money";
 import { TIP_PERCENTS, tipCents } from "@/server/billing/adjustments";
 import { stripeEnabled } from "@/server/stripe";
 import { CopyField } from "./public/copy-field";
@@ -24,7 +24,7 @@ export function InvoicePay({ token, quoteToken, balanceCents, allowPartial, etra
       {etransfer && (
         <section aria-labelledby="pay-etransfer">
           <h3 id="pay-etransfer" className={h3}>Interac e-Transfer</h3>
-          <p className="mt-1 text-ink-soft">Send <b className="font-semibold text-navy tabular-nums">{money(balanceCents)}</b> from your bank&apos;s app or website.</p>
+          <p className="mt-1 text-ink-soft">Send <b className="font-semibold text-navy tabular-nums">{cad(balanceCents)}</b> from your bank&apos;s app or website.</p>
           <div className="mt-3 space-y-3">
             <CopyField label="Send to" value={etransfer} />
             {etransferRef && <CopyField label="Message" value={etransferRef} hint="Put this in the message so we can match it." />}
@@ -44,7 +44,7 @@ export function InvoicePay({ token, quoteToken, balanceCents, allowPartial, etra
               <legend className="mb-2 font-semibold">Add a tip for the crew? <span className="font-normal text-ink-soft">Optional</span></legend>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                 <label className={chip}><input type="radio" name="tip" value="" defaultChecked className="sr-only" />No tip</label>
-                {TIP_PERCENTS.map((p) => <label key={p} className={chip}><input type="radio" name="tip" value={p} className="sr-only" />{p}%<span className="text-sm font-normal tabular-nums opacity-80">{money(tipCents(tipOn, String(p)))}</span></label>)}
+                {TIP_PERCENTS.map((p) => <label key={p} className={chip}><input type="radio" name="tip" value={p} className="sr-only" />{p}%<span className="text-sm font-normal tabular-nums opacity-80">{cad(tipCents(tipOn, String(p)))}</span></label>)}
               </div>
               <label className="mt-2 flex items-center justify-between gap-3 font-semibold">Other amount
                 <span className="flex items-center gap-1.5">$<input name="tipCustom" type="number" step="0.01" min="0" max="500" inputMode="decimal" className={`${inputCls} min-h-11 w-28 text-right tabular-nums`} /></span>
@@ -57,7 +57,7 @@ export function InvoicePay({ token, quoteToken, balanceCents, allowPartial, etra
               <TickRow name="autopay">Charge this card automatically for my future invoices. We&apos;ll email each invoice first, with the date the card will be charged; you can turn this off any time on your etc. page.</TickRow>
             </div>
           )}
-          <Cta>{allowPartial || tipOn != null ? "Pay by card" : `Pay ${money(balanceCents)} by card`}</Cta>
+          <Cta>{allowPartial || tipOn != null ? "Pay by card" : `Pay ${cad(balanceCents)} by card`}</Cta>
           <p className="text-center text-sm text-ink-soft">You&apos;ll type your card on Stripe&apos;s secure page.</p>
         </form>
       )}
