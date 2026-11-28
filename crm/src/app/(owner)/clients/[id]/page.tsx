@@ -32,6 +32,7 @@ import { clientName, jobsWithStatus } from "@/server/queries";
 import { visitStatus } from "@/server/status/job";
 
 export async function generateMetadata({ params }: PageProps<"/clients/[id]">) {
+  await requireOwner();
   const c = await db.client.findFirst({ where: { id: (await params).id, businessId: await businessId() }, select: { firstName: true, lastName: true, companyName: true } });
   return { title: c ? clientName(c) : "Client" };
 }
