@@ -726,6 +726,7 @@ model Visit {
   createdAt              DateTime    @default(now())
 
   charges      VisitCharge[]
+  extras       VisitExtra[]
   attachments  Attachment[]
   invoiceLines InvoiceLineItem[]
 
@@ -735,6 +736,22 @@ model Visit {
 }
 
 // Created when a visit completes; "unbilled" = invoiceLineItemId IS NULL.
+// A one-off add-on for a single visit (e.g. ice melt this time), ordered from the client hub. Becomes a VisitCharge
+// when the visit is completed, so it is billed once like any other charge.
+model VisitExtra {
+  id              String   @id @default(cuid())
+  businessId      String
+  visitId         String
+  visit           Visit    @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  serviceKey      String // price-book key (keys never change)
+  name            String
+  unitPriceCents  Int // the price the client saw when they added it
+  addedByClientId String?
+  createdAt       DateTime @default(now())
+
+  @@unique([visitId, serviceKey])
+}
+
 model VisitCharge {
   id                String           @id @default(cuid())
   businessId        String
