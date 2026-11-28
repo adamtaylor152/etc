@@ -10,6 +10,7 @@ export type RunStop = {
   state: string; time: string | null; people: string[]; communityName: string | null;
   sizeNote: string | null; // snow stop whose driveway size nobody has checked yet
   extras: string[]; // one-off add-ons the client ordered for this visit: names only, crew never see prices
+  more: boolean; // this job has a checklist or needs the client's signature: the runner links to the stop page for them
 };
 
 /** Crew work their own stops plus ones nobody is assigned to; owners work any. Spread into a visit `where`. */
@@ -32,6 +33,7 @@ export async function runStops(businessId: string, date: string, userId: string 
     people: who.filter((a) => a.visitId === v.id).map((a) => a.user.name || a.user.email.split("@")[0]), communityName: v.property.community?.name ?? null,
     sizeNote: sizeNote(v.job.kind === "SNOW_PLAN" || !!v.snowEventId, v.property),
     extras: extras.filter((e) => e.visitId === v.id).map((e) => e.name),
+    more: !!v.job.checklistTemplateId || v.job.requireSignature,
   }));
 }
 

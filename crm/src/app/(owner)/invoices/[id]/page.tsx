@@ -3,16 +3,19 @@ import { invoiceAllowPartial } from "../../work2-actions";
 import { SignatureCard } from "@/components/signatures";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { ConfirmButton } from "@/components/confirm-button";
 import { Flash } from "@/components/flash";
 import { InvoiceBadge } from "@/components/status";
 import { RecordPanel } from "@/components/record-panel";
-import { Button, ButtonLink, Card, Dl, Input, PageHeader, inputCls } from "@/components/ui";
+import { Button, ButtonLink, Card, Dl, Input, PageHeader, btn, inputCls } from "@/components/ui";
+import { refundableCents, refundRoute } from "@/server/billing/adjustments";
 import { TERMS_LABEL, invoiceView } from "@/server/billing/invoice";
 import { MAX_ATTEMPTS, autoPayPending, cardLabel } from "@/server/billing/autopay";
 import { dateOnly, prettyDate, prettyDateTime, todayLocal } from "@/server/dates";
 import { business, businessId, db } from "@/server/db";
 import { money } from "@/server/money";
 import { clientName } from "@/server/queries";
+import { paymentRefund } from "../../billing-extras-actions";
 import { invoiceBadDebt, invoiceMarkSent, invoiceSend, invoiceVoid, paymentDelete, paymentRecord, viewAsClient } from "../../billing-actions";
 
 const METHOD: Record<string, string> = { CASH: "Cash", ETRANSFER: "e-Transfer", CARD: "Card", CHEQUE: "Cheque", OTHER: "Other" };
@@ -42,10 +45,15 @@ export default async function InvoicePage({ params, searchParams }: PageProps<"/
   const balance = Math.max(0, inv.totalCents - inv.amountPaidCents);
   const here = `/invoices/${id}`;
   const open = inv.status === "DRAFT" || inv.status === "AWAITING_PAYMENT";
+  const refunded = inv.payments.reduce((n, p) => n + p.refundedCents, 0);
+  const holdsMoney = inv.payments.some((p) => p.refundedCents < p.amountCents); // a fully refunded payment doesn't block a void
+  const kept = await db.clientCredit.findMany({ where: { paymentId: { in: inv.payments.map((p) => p.id) } } }); // overpayments kept as credit
   const hidden = <><input type="hidden" name="id" value={inv.id} /><input type="hidden" name="back" value={here} /></>;
   return (
     <>
       <Flash error={sp.error} />
+      {sp.refunded && <p className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-medium text-emerald-800">Refund recorded. A refund receipt is on its way to the client.</p>}
+      {refunded > 0 && inv.status === "AWAITING_PAYMENT" && <p className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">{money(refunded)} was refunded, so this invoice shows {money(balance)} owing again. If nothing more is owed, write it off below{holdsMoney ? "" : " or void it"}. No automatic reminders go out for it.</p>}
       {sp.sent && <p className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-medium text-emerald-800">Invoice emailed to {inv.client.email}.</p>}
       <PageHeader
         title={<>{inv.kind === "DEPOSIT" ? "Deposit invoice" : "Invoice"} #{inv.number} <InvoiceBadge s={view} /></>}
@@ -54,7 +62,8 @@ export default async function InvoicePage({ params, searchParams }: PageProps<"/
           {open && <form action={invoiceSend}>{hidden}<Button>{inv.status === "DRAFT" ? "Send invoice" : "Resend"}</Button></form>}
           {inv.status === "DRAFT" && inv.kind !== "DEPOSIT" && <ButtonLink href={`${here}/edit`}>Edit</ButtonLink>}
           {inv.status === "DRAFT" && <form action={invoiceMarkSent}>{hidden}<Button variant="secondary">Mark sent (no email)</Button></form>}
-          <form action={viewAsClient}>{hidden}<Button variant="secondary">Client view / print</Button></form>
+          <form action={viewAsClient}>{hidden}<Button variant="secondary">Client view</Button></form>
+          <a href={`/api/export/pdf/invoice/${inv.id}`} target="_blank" rel="noreferrer" className={btn("secondary")}>PDF</a>
         </>}
       />
       <div className="grid gap-5 lg:grid-cols-3">
@@ -96,6 +105,7 @@ export default async function InvoicePage({ params, searchParams }: PageProps<"/
                 </label>
                 <label className="text-sm font-semibold">Reference<Input name="reference" placeholder={inv.etransferRef} /></label>
                 <Button>Record</Button>
+                <label className="flex items-center gap-2 text-sm sm:col-span-4"><input type="checkbox" name="keepExtra" className="size-4" /> If this is more than the balance, keep the extra as account credit for their next invoice</label>
               </form>
               <p className="mt-2 text-xs text-ink-soft">A receipt is emailed automatically. e-Transfers should mention <b>{inv.etransferRef}</b>.</p>
             </Card>
@@ -111,12 +121,40 @@ export default async function InvoicePage({ params, searchParams }: PageProps<"/
           <Card title="Payments">
             {inv.payments.length ? (
               <ul className="divide-y divide-line">
-                {inv.payments.map((p) => (
-                  <li key={p.id} className="flex items-center justify-between gap-3 py-2.5 text-sm">
-                    <span><span className="font-semibold">{money(p.amountCents)}</span> · {METHOD[p.method]}{p.reference && ` · ${p.reference}`}<span className="block text-xs text-ink-soft">{prettyDateTime(p.receivedAt)}</span></span>
-                    {p.method !== "CARD" && <form action={paymentDelete}><input type="hidden" name="id" value={p.id} /><input type="hidden" name="back" value={here} /><button className="text-xs text-ink-soft">Remove</button></form>}
-                  </li>
-                ))}
+                {inv.payments.map((p) => {
+                  const left = refundableCents(p), route = refundRoute(p), extra = kept.filter((k) => k.paymentId === p.id).reduce((n, k) => n + k.amountCents, 0);
+                  return (
+                    <li key={p.id} className="py-2.5 text-sm">
+                      <div className="flex items-center justify-between gap-3">
+                        <span><span className="font-semibold">{money(p.amountCents)}</span> · {METHOD[p.method]}{p.reference && ` · ${p.reference}`}
+                          {p.tipCents ? <span className="text-emerald-700"> · plus {money(p.tipCents)} tip</span> : null}
+                          {extra > 0 && <span className="text-emerald-700"> · plus {money(extra)} kept as credit</span>}
+                          {p.refundedCents > 0 && <span className="font-semibold text-red-700"> · {money(p.refundedCents)} refunded</span>}
+                          <span className="block text-xs text-ink-soft">{prettyDateTime(p.receivedAt)}</span></span>
+                        {p.method !== "CARD" && p.refundedCents === 0 && <form action={paymentDelete}><input type="hidden" name="id" value={p.id} /><input type="hidden" name="back" value={here} /><button className="text-xs text-ink-soft">Remove</button></form>}
+                      </div>
+                      {left > 0 && inv.status !== "VOID" && (
+                        <details className="mt-1">
+                          <summary className="cursor-pointer text-xs font-semibold text-blue">Refund</summary>
+                          {route.via === "none" ? <p className="mt-2 text-xs text-ink-soft">{route.why}</p> : (
+                            <form action={paymentRefund} className="mt-2 grid items-end gap-2 sm:grid-cols-4">
+                              <input type="hidden" name="id" value={p.id} /><input type="hidden" name="back" value={here} /><input type="hidden" name="already" value={p.refundedCents} />
+                              <label className="text-xs font-semibold">Refund ($)<Input name="amount" type="number" step="0.01" min="0.01" max={left / 100} defaultValue={(left / 100).toFixed(2)} required /></label>
+                              <label className="text-xs font-semibold sm:col-span-2">Reason (for your records)<Input name="reason" maxLength={200} /></label>
+                              <ConfirmButton message={route.via === "stripe" ? "Refund this to the client's card through Stripe? This can't be undone." : "Record this refund? Remember to send the money back yourself."} className={btn("danger")}>Refund</ConfirmButton>
+                              <p className="text-xs text-ink-soft sm:col-span-4">
+                                {route.via === "stripe"
+                                  ? `Goes back to the client's card through Stripe (5 to 10 business days). Stripe keeps its fee.${p.tipCents ? " The tip is not included: refund a tip in Stripe." : ""}`
+                                  : `This only records the refund. Send the ${METHOD[p.method].toLowerCase()} back to the client yourself.`}
+                                {" "}The client is emailed a refund receipt, and the invoice shows the refunded amount as owing again.
+                              </p>
+                            </form>
+                          )}
+                        </details>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             ) : <p className="text-sm text-ink-soft">No payments yet.</p>}
           </Card>
@@ -149,7 +187,7 @@ export default async function InvoicePage({ params, searchParams }: PageProps<"/
             <div className="mt-4 flex flex-wrap gap-2">
               {inv.status === "AWAITING_PAYMENT" && <form action={invoiceBadDebt}>{hidden}<input type="hidden" name="bad" value="1" /><Button variant="secondary">Write off</Button></form>}
               {inv.status === "BAD_DEBT" && <form action={invoiceBadDebt}>{hidden}<input type="hidden" name="bad" value="0" /><Button variant="secondary">Undo write-off</Button></form>}
-              {open && !inv.payments.length && <form action={invoiceVoid}>{hidden}<Button variant="danger">Void (charges go back to unbilled)</Button></form>}
+              {open && !holdsMoney && <form action={invoiceVoid}>{hidden}<Button variant="danger">Void (charges go back to unbilled)</Button></form>}
             </div>
           </Card>
         </div>

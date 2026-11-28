@@ -11,7 +11,7 @@ export const metadata = { title: "Campaigns" };
 
 export default async function Campaigns() {
   await requireOwner();
-  const list = await db.campaign.findMany({ where: { businessId: await businessId() }, include: { recipients: { select: { openedAt: true, clickedAt: true } } }, orderBy: { createdAt: "desc" } });
+  const list = await db.campaign.findMany({ where: { businessId: await businessId(), automation: null }, include: { recipients: { select: { openedAt: true, clickedAt: true } } }, orderBy: { createdAt: "desc" } });
   return (
     <>
       <DetailHeader back={{ href: "/marketing", label: "Marketing" }} title="Campaigns" sub="Email or text your clients. Consent, unsubscribe links and quiet hours are handled for you."
@@ -25,7 +25,7 @@ export default async function Campaigns() {
               {c.channel === "EMAIL" ? <Mail className="size-4 text-blue" /> : <MessageSquare className="size-4 text-indigo-700" />}
               <span className="min-w-0 flex-1"><span className="font-semibold">{c.name}</span><span className="block truncate text-xs text-ink-soft">{c.subject ?? c.smsBody ?? "No content yet"} · {c.sentAt ? `sent ${prettyDateTime(c.sentAt)}` : `created ${prettyDateTime(c.createdAt)}`}</span></span>
               {c.recipients.length > 0 && <span className="text-xs text-ink-soft">{c.recipients.length} sent · {c.recipients.filter((r) => r.openedAt).length} opened · {c.recipients.filter((r) => r.clickedAt).length} clicked</span>}
-              <Badge tone={c.status === "SENT" ? "green" : c.status === "DRAFT" ? "gray" : "blue"}>{c.status.toLowerCase()}</Badge>
+              <Badge tone={c.status === "SENT" ? "green" : c.status === "DRAFT" || c.status === "CANCELLED" ? "gray" : "blue"}>{c.status.toLowerCase()}</Badge>
             </Link></li>
           ))}
           {!list.length && <li className="p-8 text-center text-sm text-ink-soft">No campaigns yet.</li>}

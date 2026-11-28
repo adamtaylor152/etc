@@ -140,6 +140,7 @@ export function RouteRunner({ date, initial }: { date: string; initial: RunStop[
           <h2 className="font-display text-2xl font-bold">{cur.address}</h2>
           <p className="text-base">{cur.client} · {cur.job}</p>
           {cur.sizeNote && <p className="mt-2 rounded-xl border border-amber-300 bg-amber-100 p-2 text-sm font-semibold text-amber-950">{cur.sizeNote}</p>}
+          {cur.more && <a href={`/stop/${cur.visitId}`} className="mt-2 flex min-h-11 items-center justify-center rounded-xl border-2 border-navy text-sm font-semibold">Checklist &amp; signature for this stop</a>}
           {cur.extras?.length > 0 && <p className="mt-2 rounded-xl border border-blue/30 bg-blue/5 p-2 text-sm font-semibold">Also this visit: {cur.extras.join(", ")}</p>}
           {(cur.gate || cur.access || cur.pets || cur.hazards) && (
             <ul className="mt-2 space-y-0.5 rounded-xl bg-amber-50 p-2 text-sm text-amber-950">

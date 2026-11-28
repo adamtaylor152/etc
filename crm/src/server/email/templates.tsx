@@ -3,11 +3,12 @@
 import type { ReactElement } from "react";
 import { BookingConfirmation, OwnerNewBooking, type BookingEmailProps } from "@/emails/booking";
 import { OwnerLogin } from "@/emails/login";
-import { AutoPayFailed, InvoiceSent, OwnerPaymentReceived, PaymentReceipt, type InvoiceEmailData } from "@/emails/invoice";
+import { AutoPayFailed, InvoiceSent, OwnerPaymentReceived, PaymentReceipt, RefundReceipt, StatementEmail, type InvoiceEmailData } from "@/emails/invoice";
 import { autoPayPending, cardLabel, declineText } from "../billing/autopay";
 import { HubLink, OwnerNotice, PlanRenewal, PriceChange, QuoteApproved, QuoteSent, type QuoteEmailData } from "@/emails/quote";
 import { DailyDigest, ReviewRequest, VisitScheduled } from "@/emails/schedule";
-import { OnMyWay, OwnerSnowAlert, StormHeadsUp } from "@/emails/snow";
+import { OnMyWay, OwnerSnowAlert, StormHeadsUp, VisitSkipped } from "@/emails/snow";
+import { skipNotice } from "../status/visit";
 import { OwnerPhotosUploaded, PhotoUploadRequest, VisitDone } from "@/emails/visit";
 import { invoiceTotals } from "../billing/invoice";
 import { money } from "../money";
@@ -18,14 +19,17 @@ import { clientName } from "../queries";
 import { dayCount, dayLines } from "../runner";
 import { db } from "../db";
 import { CampaignEmail } from "@/emails/campaign";
-import { clickUrl, openPixelUrl, unsubscribeUrl, type Block } from "../ops/campaigns";
+import { clickUrl, openPixelUrl, RENEW_LINK, unsubscribeUrl, type Block } from "../ops/campaigns";
 import { env } from "../env";
 import { mintToken } from "../tokens";
 import { optionLines, optionTotals, quoteOptions } from "../status/quote";
 import { currentCharge, dollars, SIZES, type Pending } from "../ops/drive-size";
+import { invoicePdf, quotePdf, statementPdf, type PdfFile } from "../pdf/documents";
+import { loadStatement, type StatementRange } from "../statement";
 
 type Ctx = { businessId: string; to: string };
-type Template<P> = { subject: (p: P) => string; render: (p: P, ctx: Ctx) => Promise<ReactElement> };
+// attachments: PDFs made at send time, like the body (the outbox row only stores {template, props}).
+type Template<P> = { subject: (p: P) => string; render: (p: P, ctx: Ctx) => Promise<ReactElement>; attachments?: (p: P, ctx: Ctx) => Promise<(PdfFile | null)[]> };
 
 const ownerLogin: Template<{ userId: string; next: string }> = {
   subject: () => "Sign in to etc. CRM",
@@ -132,11 +136,13 @@ const autoPayFailed: Template<{ invoiceId: string; card: string; code: string; r
 const invoiceSent: Template<{ invoiceId: string }> = {
   subject: () => "Your invoice from etc.",
   async render(p, ctx) { return <InvoiceSent d={await invoiceData(p.invoiceId, ctx.businessId)} />; },
+  attachments: async (p, ctx) => [await invoicePdf(p.invoiceId, ctx.businessId)],
 };
 
 const invoiceReminder: Template<{ invoiceId: string; n: 1 | 2 }> = {
   subject: (p) => (p.n === 1 ? "Friendly reminder: your etc. invoice" : "Second reminder: your etc. invoice"),
   async render(p, ctx) { return <InvoiceSent d={await invoiceData(p.invoiceId, ctx.businessId)} reminder={p.n} />; },
+  attachments: async (p, ctx) => [await invoicePdf(p.invoiceId, ctx.businessId)],
 };
 
 const METHOD: Record<string, string> = { CASH: "cash", ETRANSFER: "e-Transfer", CARD: "card", CHEQUE: "cheque", OTHER: "payment" };
@@ -144,11 +150,34 @@ const paymentReceipt: Template<{ paymentId: string }> = {
   subject: () => "Receipt from etc. Thank you!",
   async render(p, ctx) {
     const pay = await db.payment.findUniqueOrThrow({ where: { id: p.paymentId }, include: { invoice: true } });
+    // An overpayment's extra sits in account credit; a card tip rides on the payment. The receipt says so.
+    const kept = (await db.clientCredit.aggregate({ where: { paymentId: pay.id }, _sum: { amountCents: true } }))._sum.amountCents ?? 0;
+    const extra = [pay.tipCents ? `Thank you for the ${money(pay.tipCents)} tip!` : "", kept ? `The extra ${money(kept)} you sent is saved as credit toward your next invoice.` : ""].filter(Boolean).join(" ");
     return (
       <PaymentReceipt d={await invoiceData(pay.invoiceId, ctx.businessId)} amount={money(pay.amountCents)} method={METHOD[pay.method]}
-        when={prettyDate(todayLocal(pay.receivedAt))} paidInFull={pay.invoice.amountPaidCents >= pay.invoice.totalCents} />
+        when={prettyDate(todayLocal(pay.receivedAt))} paidInFull={pay.invoice.amountPaidCents >= pay.invoice.totalCents} extra={extra || undefined} />
     );
   },
+};
+
+const paymentRefund: Template<{ paymentId: string; amountCents: number }> = {
+  subject: () => "Your refund from etc.",
+  async render(p, ctx) {
+    const pay = await db.payment.findUniqueOrThrow({ where: { id: p.paymentId } });
+    const how = pay.method === "CARD" ? "to your card (allow 5 to 10 business days for it to show)" : pay.method === "ETRANSFER" ? "by e-Transfer" : pay.method === "CASH" ? "in cash" : "";
+    return <RefundReceipt d={await invoiceData(pay.invoiceId, ctx.businessId)} amount={money(p.amountCents)} how={how} when={prettyDate(todayLocal())} />;
+  },
+};
+
+const clientStatement: Template<{ clientId: string } & StatementRange> = {
+  subject: () => "Your statement from etc.",
+  async render(p, ctx) {
+    const s = await loadStatement(ctx.businessId, p.clientId, p);
+    if (!s) throw new Error("statement: client not found");
+    return <StatementEmail name={clientName(s.client)} balance={money(s.st.balanceCents)} owing={s.st.balanceCents > 0} period={s.since ? `Since ${prettyDate(dateOnly(s.since))}` : "All history"}
+      etransferEmail={s.biz.etransferEmail || env.etransferEmail} site={env.siteUrl} phone={env.phone} />;
+  },
+  attachments: async (p, ctx) => [await statementPdf(p.clientId, ctx.businessId, p)],
 };
 
 const ownerPaymentReceived: Template<{ paymentId: string }> = {
@@ -158,7 +187,17 @@ const ownerPaymentReceived: Template<{ paymentId: string }> = {
     const user = await db.user.findFirst({ where: { businessId: ctx.businessId, email: ctx.to.toLowerCase(), active: true } });
     const path = `/invoices/${pay.invoiceId}`;
     const url = user ? `${env.appUrl}/auth/go?t=${await mintToken(db, ctx.businessId, "OWNER_DEEP_LINK", { userId: user.id, redirectPath: path })}` : `${env.appUrl}${path}`;
-    return <OwnerPaymentReceived name={clientName(pay.client)} amount={money(pay.amountCents)} number={pay.invoice.number} url={url} />;
+    return <OwnerPaymentReceived name={clientName(pay.client)} amount={money(pay.amountCents) + (pay.tipCents ? ` + ${money(pay.tipCents)} tip` : "")} number={pay.invoice.number} url={url} />;
+  },
+};
+
+// A visit was skipped for a reason the client can do something about (Marketing settings: which reasons). The wording is skipNotice().
+const visitSkipped: Template<{ visitId: string }> = {
+  subject: () => "We couldn't do your etc. visit today",
+  async render(p) {
+    const v = await db.visit.findUniqueOrThrow({ where: { id: p.visitId }, include: { job: { include: { client: true } }, property: true } });
+    const n = skipNotice(v.skipReason)!;
+    return <VisitSkipped name={clientName(v.job.client)} address={v.property.formatted} what={n.what} next={n.next} site={env.siteUrl} phone={env.phone} />;
   },
 };
 
@@ -208,10 +247,12 @@ async function quoteData(quoteId: string, businessId: string): Promise<QuoteEmai
 const quoteSent: Template<{ quoteId: string }> = {
   subject: () => "Your quote from etc.",
   async render(p, ctx) { return <QuoteSent d={await quoteData(p.quoteId, ctx.businessId)} />; },
+  attachments: async (p, ctx) => [await quotePdf(p.quoteId, ctx.businessId)],
 };
 const quoteFollowUp: Template<{ quoteId: string }> = {
   subject: () => "Any questions about your etc. quote?",
   async render(p, ctx) { return <QuoteSent d={await quoteData(p.quoteId, ctx.businessId)} followUp />; },
+  attachments: async (p, ctx) => [await quotePdf(p.quoteId, ctx.businessId)],
 };
 const quoteApproved: Template<{ quoteId: string }> = {
   subject: () => "Quote approved. Thanks from etc.!",
@@ -267,13 +308,13 @@ async function scheduledEmail(visitId: string, reminder: boolean) {
 const visitScheduled: Template<{ visitId: string }> = { subject: () => "You're booked with etc.", render: (p) => scheduledEmail(p.visitId, false) };
 const visitReminder: Template<{ visitId: string }> = { subject: () => "Reminder: etc. is coming soon", render: (p) => scheduledEmail(p.visitId, true) };
 
-const reviewRequest: Template<{ clientId: string; reviewId?: string }> = {
-  subject: () => "How did we do?",
+const reviewRequest: Template<{ clientId: string; reviewId?: string; followUp?: boolean }> = {
+  subject: (p) => (p.followUp ? "Still happy to hear how we did" : "How did we do?"),
   async render(p, ctx) {
     const [c, biz] = await Promise.all([db.client.findUniqueOrThrow({ where: { id: p.clientId } }), db.business.findUniqueOrThrow({ where: { id: ctx.businessId } })]);
     // New flow: a rating page first (/r/...), which sends happy clients to Google and others to private feedback.
     const url = p.reviewId ? `${env.appUrl}/r/${await mintToken(db, ctx.businessId, "REVIEW", { clientId: c.id, redirectPath: p.reviewId })}` : biz.googleReviewUrl ?? env.siteUrl;
-    return <ReviewRequest name={clientName(c)} url={url} site={env.siteUrl} phone={env.phone} />;
+    return <ReviewRequest name={clientName(c)} url={url} site={env.siteUrl} phone={env.phone} followUp={p.followUp} />;
   },
 };
 
@@ -285,7 +326,11 @@ const campaignEmail: Template<{ campaignId: string; recipientId: string; clientI
       p.clientId ? db.client.findUnique({ where: { id: p.clientId } }) : null,
     ]);
     const real = p.recipientId !== "test";
-    return <CampaignEmail title={c.subject ?? ""} name={client?.firstName ?? "there"} blocks={(c.blocks as Block[]).map((b) => (b.type === "button" && real ? { ...b, url: clickUrl(p.recipientId, b.url) } : b))}
+    // {renew_link} on a button is the client's own hub page (one-tap plan renewal), minted now so no raw token is stored.
+    const raw = c.blocks as Block[];
+    const hub = client && raw.some((b) => b.url.includes(RENEW_LINK)) ? `${env.appUrl}/hub/${await mintToken(db, ctx.businessId, "CLIENT_HUB", { clientId: client.id })}` : env.siteUrl;
+    const blocks = raw.map((b) => ({ ...b, url: b.url.replace(RENEW_LINK, hub) }));
+    return <CampaignEmail title={c.subject ?? ""} name={client?.firstName ?? "there"} blocks={blocks.map((b) => (b.type === "button" && real ? { ...b, url: clickUrl(p.recipientId, b.url) } : b))}
       unsubscribe={client ? unsubscribeUrl(client.id) : `${env.appUrl}/unsubscribe/test`} address={biz.mailingAddress ?? ""} business={biz.name} pixel={real ? openPixelUrl(p.recipientId) : null} />;
   },
 };
@@ -334,8 +379,11 @@ export const templates = {
   "invoice.reminder": invoiceReminder,
   "autopay.failed": autoPayFailed,
   "payment.receipt": paymentReceipt,
+  "payment.refund": paymentRefund,
+  "client.statement": clientStatement,
   "owner.payment_received": ownerPaymentReceived,
   "visit.on_my_way": visitOnMyWay,
+  "visit.skipped": visitSkipped,
   "storm.heads_up": stormHeadsUp,
   "owner.snow_alert": ownerSnowAlert,
   "quote.sent": quoteSent,

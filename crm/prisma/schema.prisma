@@ -814,6 +814,7 @@ model Invoice {
   taxCents                Int           @default(0)
   totalCents              Int           @default(0)
   amountPaidCents         Int           @default(0)
+  lateFeeAppliedAt        DateTime? // the one late fee this invoice can get (Settings: late fee)
   etransferRef            String
   sentAt                  DateTime?
   firstViewedAt           DateTime?
@@ -912,6 +913,7 @@ model Payment {
   amountCents             Int
   feeCents                Int?
   refundedCents           Int           @default(0)
+  tipCents                Int? // card tip on top of amountCents: never part of the invoice balance or GST
   receivedAt              DateTime      @default(now())
   reference               String?
   note                    String?
@@ -1319,6 +1321,7 @@ model ReviewRequest {
   feedback        String?
   ratedAt         DateTime?
   googleClickedAt DateTime?
+  followUpAt      DateTime? // the one reminder, if it was sent
 
   @@index([businessId, sentAt])
   @@index([clientId])
@@ -1351,6 +1354,7 @@ model ClientCredit {
   amountCents        Int
   reason             String
   referralId         String?
+  paymentId          String? // overpayment: the payment whose excess became this credit
   appliedToInvoiceId String?
   createdAt          DateTime @default(now())
 
@@ -1385,8 +1389,11 @@ model Campaign {
   sentAt       DateTime?
   createdById  String?
   createdAt    DateTime        @default(now())
+  automation   String? // "WINBACK" | "RENEWAL": sent by the hourly scheduler, not by hand; its numbers live in `audience`
+  automationOn Boolean         @default(false)
   recipients   CampaignRecipient[]
 
+  @@unique([businessId, automation])
   @@index([businessId, createdAt])
 }
 

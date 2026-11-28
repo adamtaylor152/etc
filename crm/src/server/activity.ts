@@ -24,6 +24,7 @@ const EVENT_TITLE: Record<string, string> = {
   "visit.scheduled": "Visit reopened", "visit.cancelled": "Visit cancelled", "visit.scheduled_for": "Visit rescheduled",
   "invoice.created": "Invoice created", "invoice.sent": "Invoice sent", "invoice.edited": "Invoice edited", "invoice.voided": "Invoice voided",
   "payment.received": "Payment received", "payment.matched": "Payment matched", "payment.deleted": "Payment removed",
+  "invoice.late_fee": "Late fee added", "payment.refunded": "Payment refunded", "payment.credit_added": "Account credit added", "payment.credit_removed": "Account credit removed",
   "card.saved": "Card saved", "card.removed": "Card removed", "autopay.on": "Auto-pay turned on", "autopay.off": "Auto-pay turned off", "autopay.failed": "Automatic payment failed",
 };
 const OBJECT_OF: Record<string, FeedItem["object"]> = { Request: "request", Quote: "quote", Job: "job", Visit: "visit", Invoice: "invoice", Payment: "payment", Client: "client", SnowEvent: "storm" };

@@ -18,11 +18,11 @@ export async function GET(req: Request) {
     },
     include: { client: true, invoice: true }, orderBy: { receivedAt: "asc" },
   });
-  const rows = [["Date", "Client", "Invoice", "Method", "Amount", "Refunded", "Stripe fee", "Reference", "Note"]];
+  const rows = [["Date", "Client", "Invoice", "Method", "Amount", "Refunded", "Tip", "Stripe fee", "Reference", "Note"]];
   for (const p of payments) {
     rows.push([
       p.receivedAt.toLocaleDateString("en-CA", { timeZone: TZ }), clientName(p.client), `#${p.invoice.number}`, p.method,
-      (p.amountCents / 100).toFixed(2), (p.refundedCents / 100).toFixed(2), p.feeCents != null ? (p.feeCents / 100).toFixed(2) : "", p.reference ?? "", p.note ?? "",
+      (p.amountCents / 100).toFixed(2), (p.refundedCents / 100).toFixed(2), p.tipCents ? (p.tipCents / 100).toFixed(2) : "", p.feeCents != null ? (p.feeCents / 100).toFixed(2) : "", p.reference ?? "", p.note ?? "",
     ]);
   }
   return new Response(rows.map((r) => r.map(csv).join(",")).join("\n") + "\n", {

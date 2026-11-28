@@ -1,0 +1,6 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    { "name": "crm-dev", "runtimeExecutable": "sh", "runtimeArgs": ["-c", "cd crm && DATABASE_URL=postgres://etc:etc@localhost:5433/etc CRON_DISABLED=1 MEDIA_SIGNING_SECRET=dev-secret-for-local-preview-only pnpm next dev -p 3917"], "port": 3917 }
+  ]
+}
