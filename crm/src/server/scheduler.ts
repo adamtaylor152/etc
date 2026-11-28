@@ -13,7 +13,7 @@ import { generateRecurringVisits } from "./ops/jobs";
 import { invoiceUnbilled } from "./ops/invoices";
 import { parseSettings } from "./settings";
 import { plansTriggered } from "./snow/select";
-import { enqueue, processOutbox } from "./email/outbox";
+import { enqueue, enqueueSms, processOutbox } from "./email/outbox";
 
 const TICK_MS = 60_000;
 const g = globalThis as unknown as { etcScheduler?: NodeJS.Timeout };
@@ -86,6 +86,7 @@ async function visitReminders() {
       businessId: v.businessId, template: "visit.reminder", to: v.job.client.email, replyTo: env.helpEmail, priority: 5, props: { visitId: v.id },
       dedupeKey: `visit:${v.id}:reminder:${tomorrow}`, clientId: v.job.clientId, entityType: "Visit", entityId: v.id,
     });
+    await enqueueSms(db, { businessId: v.businessId, template: "sms.visit_reminder", client: v.job.client, props: { visitId: v.id }, dedupeKey: `visit:${v.id}:reminder-sms:${tomorrow}` });
   }
 }
 

@@ -112,12 +112,14 @@ export async function scheduleVisit(user: Actor, visitId: string, date: string |
   kickOutbox();
 }
 
-async function scheduleTx(user: Actor, visitId: string, date: string | null) {
+async function scheduleTx(user: Actor, visitId: string, date: string | null, notify = true) {
   const v = await db.visit.findFirstOrThrow({ where: { id: visitId, businessId: user.businessId }, include: { job: true } });
   await db.$transaction(async (tx) => {
-    await tx.visit.update({ where: { id: visitId }, data: { scheduledDate: date ? toDbDate(date) : null, ...(v.recurrenceDate ? { detachedFromRecurrence: true } : {}) } });
+    const moved = (v.scheduledDate?.toISOString().slice(0, 10) ?? null) !== date;
+    // A new day voids the client's confirmation / reschedule request for the old one.
+    await tx.visit.update({ where: { id: visitId }, data: { scheduledDate: date ? toDbDate(date) : null, ...(v.recurrenceDate ? { detachedFromRecurrence: true } : {}), ...(moved ? { confirmedAt: null, rescheduleRequest: null, rescheduleRequestedAt: null } : {}) } });
     const client = await tx.client.findUniqueOrThrow({ where: { id: v.job.clientId } });
-    if (date && v.job.kind !== "SNOW_PLAN" && (await getSettings(tx, user.businessId)).visitReminders && !client.emailBouncedAt) {
+    if (notify && date && v.job.kind !== "SNOW_PLAN" && (await getSettings(tx, user.businessId)).visitReminders && !client.emailBouncedAt) {
       await enqueue(tx, {
         businessId: user.businessId, template: "visit.scheduled", to: client.email, replyTo: env.helpEmail, priority: 4, props: { visitId },
         dedupeKey: `visit:${visitId}:scheduled:${date}`, clientId: client.id, entityType: "Visit", entityId: visitId,
@@ -142,8 +144,8 @@ export async function deleteVisit(user: Actor, visitId: string) {
 }
 
 /** Calendar drag with times (week/day view): date + optional start/end; no time = anytime that day. */
-export async function rescheduleVisitTimed(user: Actor, visitId: string, m: { date: string | null; startAt?: Date | null; endAt?: Date | null }) {
-  await scheduleTx(user, visitId, m.date);
+export async function rescheduleVisitTimed(user: Actor, visitId: string, m: { date: string | null; startAt?: Date | null; endAt?: Date | null }, opts: { notify?: boolean } = {}) {
+  await scheduleTx(user, visitId, m.date, opts.notify ?? true);
   await db.visit.update({ where: { id: visitId }, data: { startAt: m.startAt ?? null, endAt: m.endAt ?? null, anytime: !m.startAt } });
   kickOutbox();
 }

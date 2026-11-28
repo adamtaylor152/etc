@@ -26,6 +26,11 @@ export const smsTemplates = {
     const raw = await mintToken(db, ctx.businessId, "REVIEW", { clientId: c.id, redirectPath: p.reviewId });
     return `Hi ${first(c.firstName)}, thanks for choosing etc.! How did we do? ${env.appUrl}/r/${raw} - etc.`;
   },
+  "sms.visit_reminder": async (p: { visitId: string }, ctx: Ctx) => {
+    const v = await db.visit.findUniqueOrThrow({ where: { id: p.visitId }, include: { job: { include: { client: true } }, property: true } });
+    const raw = await mintToken(db, ctx.businessId, "VISIT_CONFIRM", { visitId: v.id, clientId: v.job.clientId });
+    return `Hi ${first(v.job.client.firstName)}, etc. is booked for ${v.property.formatted.split(",")[0]} tomorrow. Confirm or change: ${env.appUrl}/c/${raw} - etc.`;
+  },
   "sms.campaign": async (p: { campaignId: string; clientId: string }) => {
     const c = await db.campaign.findUniqueOrThrow({ where: { id: p.campaignId } });
     return `${(c.smsBody ?? "").trim()} Reply STOP to opt out.`;
