@@ -1,6 +1,8 @@
-// Client hub: upcoming & past visits (with photos), quotes, invoices, snow plan pause, ask for more work.
+// Client hub: upcoming & past visits (with photos), quotes, invoices, snow plan pause and add-ons, extras on a visit,
+// ordering more work (./order).
 import Link from "next/link";
 import { Badge, Card } from "@/components/ui";
+import { extrasOffered } from "@/server/billing/charges";
 import { invoiceView } from "@/server/billing/invoice";
 import { dateOnly, prettyDate, todayLocal } from "@/server/dates";
 import { db } from "@/server/db";
@@ -8,11 +10,13 @@ import { env } from "@/server/env";
 import { signedMediaPath } from "@/server/media";
 import { money } from "@/server/money";
 import { mintToken, peekToken } from "@/server/tokens";
+import { currentCharge, snowPrices } from "@/server/ops/drive-size";
 import { renewalSeason } from "@/server/ops/jobs";
+import { addOnServices } from "@/server/ops/visits";
 import { stripeEnabled } from "@/server/stripe";
 import { referralCodeFor, referralLink } from "@/server/ops/marketing";
 import { parseSettings } from "@/server/settings";
-import { hubPausePlan, hubPayAll, hubRenewPlan, hubRequestWork, hubSetTexts } from "./actions";
+import { hubPausePlan, hubPayAll, hubPlanAddOn, hubRenewPlan, hubRequestWork, hubSetTexts, hubVisitExtra } from "./actions";
 
 export const metadata = { title: { absolute: "Your etc. page" } };
 
@@ -28,12 +32,15 @@ export default async function Hub({ params, searchParams }: PageProps<"/hub/[tok
   const [visits, quotes, invoices, plans] = await Promise.all([
     db.visit.findMany({
       where: { job: { clientId: c.id }, state: { not: "CANCELLED" } }, orderBy: [{ scheduledDate: { sort: "desc", nulls: "first" } }], take: 30,
-      include: { job: true, property: true, attachments: { where: { deletedAt: null, sharedWithClient: true }, orderBy: { createdAt: "asc" }, take: 4 } },
+      include: { job: { include: { lineItems: true } }, property: true, extras: { orderBy: { createdAt: "asc" } }, attachments: { where: { deletedAt: null, sharedWithClient: true }, orderBy: { createdAt: "asc" }, take: 4 } },
     }),
     db.quote.findMany({ where: { clientId: c.id, status: { in: ["AWAITING_RESPONSE", "CHANGES_REQUESTED", "APPROVED", "CONVERTED"] } }, orderBy: { number: "desc" } }),
     db.invoice.findMany({ where: { clientId: c.id, status: { in: ["AWAITING_PAYMENT", "PAID"] } }, orderBy: { number: "desc" } }),
-    db.job.findMany({ where: { clientId: c.id, kind: "SNOW_PLAN", closedAt: null }, include: { property: true, season: true } }),
+    db.job.findMany({ where: { clientId: c.id, kind: "SNOW_PLAN", closedAt: null }, include: { property: true, season: true, lineItems: true } }),
   ]);
+  // Add-ons and their prices, straight from the price book.
+  const [addOns, prices] = await Promise.all([addOnServices(c.businessId), snowPrices(db, c.businessId)]);
+  const iceMeltCents = addOns.find((a) => a.key === "ice_melt")?.unitPriceCents ?? 500;
   const refCode = await referralCodeFor(c.id);
   const refReward = parseSettings((await db.business.findUniqueOrThrow({ where: { id: c.businessId } })).settings).referralRewardCents;
   const creditLeft = (await db.clientCredit.aggregate({ where: { clientId: c.id, appliedToInvoiceId: null }, _sum: { amountCents: true } }))._sum.amountCents ?? 0;
@@ -54,6 +61,8 @@ export default async function Hub({ params, searchParams }: PageProps<"/hub/[tok
     <div className="space-y-4">
       {sp.plan && <p className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 font-medium text-emerald-800">Your snow plan is {String(sp.plan)}. We&apos;ve let Silas know.</p>}
       {sp.requested && <p className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 font-medium text-emerald-800">Thanks! We got your request and will be in touch.</p>}
+      {sp.addon && <p className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 font-medium text-emerald-800">Done: {String(sp.addon)}, starting with your next clearing. We&apos;ve let Silas know.</p>}
+      {sp.extra && <p className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 font-medium text-emerald-800">{String(sp.extra)}. We&apos;ve let Silas know.</p>}
       {sp.error && <p className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">{String(sp.error)}</p>}
       <h1 className="font-display text-3xl font-bold">Hi {c.firstName}!</h1>
       {sp.paid && <p className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 font-medium text-emerald-800">Payment received. Thank you!</p>}
@@ -63,6 +72,17 @@ export default async function Hub({ params, searchParams }: PageProps<"/hub/[tok
           {stripeEnabled() && <form action={hubPayAll} className="mt-2"><input type="hidden" name="t" value={token} /><button className="min-h-12 rounded-full bg-blue px-6 font-semibold text-white">Pay {money(owing)} by card</button></form>}
         </Card>
       )}
+      <Card title="Need something done?">
+        <p className="text-sm">Pick a service, the address and a time that works. Same prices as our booking page; pay after the job.</p>
+        <a href={`/hub/${token}/order`} className="mt-3 flex min-h-12 items-center justify-center rounded-full bg-blue px-6 font-semibold text-white">Book a service</a>
+        <details className="mt-3">
+          <summary className="cursor-pointer py-1 text-sm font-semibold text-blue">Not on the list? Just tell us</summary>
+          <form action={hubRequestWork} className="mt-2 space-y-3">{hidden}
+            <textarea name="notes" rows={3} required maxLength={2000} placeholder="e.g. Could you clean out the gutters and power wash the deck in spring?" className="w-full rounded-xl border border-line p-3" />
+            <button className="min-h-11 rounded-full border-2 border-line bg-white px-5 font-semibold">Send request</button>
+          </form>
+        </details>
+      </Card>
       <Card title="Send a neighbour our way">
         <p className="text-sm">Share your link. When they book and pay their first invoice, you get {money(refReward)} off your next one.</p>
         <p className="mt-2 select-all break-all rounded-lg bg-tint p-2 text-sm font-semibold">{referralLink(refCode)}</p>
@@ -82,20 +102,62 @@ export default async function Hub({ params, searchParams }: PageProps<"/hub/[tok
           <form action={hubRenewPlan} className="mt-3">{hidden}<button className="min-h-12 rounded-full bg-blue px-6 font-semibold text-white">Renew my plan</button></form>
         </Card>
       )}
-      {plans.map((p) => (
+      {plans.map((p) => {
+        const walk = currentCharge(p.lineItems).walk;
+        const per = p.snowBillingMode === "PER_EVENT" ? "per storm" : "per clearing";
+        return (
         <Card key={p.id} title="Every-snowfall plan">
-          <p className="text-sm">{p.property.formatted} · {p.season?.name} · we come when {p.triggerCm ?? p.season?.defaultTriggerCm ?? 2} cm or more falls · {money(p.pricePerPushCents ?? 3000)} per clearing{p.iceMelt ? " + ice melt" : ""}.</p>
+          <p className="text-sm">{p.property.formatted} · {p.season?.name} · we come when {p.triggerCm ?? p.season?.defaultTriggerCm ?? 2} cm or more falls · {money(p.pricePerPushCents ?? 3000)} per clearing{p.iceMelt ? " + ice melt" : ""}{walk ? " + extra sidewalk" : ""}.</p>
+          {/* Add-ons are charged with each clearing, so not on a season-price plan, and not while a new price is waiting for an OK. */}
+          {!p.sizeHoldAt && p.snowBillingMode !== "SEASONAL" && (
+            <ul className="mt-3 divide-y divide-line rounded-xl border border-line">
+              {([["iceMelt", "Ice melt", p.iceMelt, iceMeltCents], ["extraWalk", "Extra sidewalk (corner lot or long walk)", walk > 0, walk || prices.walk]] as const).map(([key, label, on, cents]) => (
+                <li key={key} className="flex items-center justify-between gap-3 p-3 text-sm">
+                  <span><b>{label}</b><span className="block text-ink-soft">{on ? "On · " : "+"}{money(cents)} {per}</span></span>
+                  <form action={hubPlanAddOn}>{hidden}<input type="hidden" name="jobId" value={p.id} /><input type="hidden" name="addon" value={key} /><input type="hidden" name="on" value={on ? "0" : "1"} />
+                    <button className={`min-h-11 rounded-full px-5 font-semibold ${on ? "border-2 border-line bg-white" : "bg-blue text-white"}`}>{on ? "Turn off" : "Add"}</button>
+                  </form>
+                </li>
+              ))}
+            </ul>
+          )}
           <form action={hubPausePlan} className="mt-3">{hidden}<input type="hidden" name="jobId" value={p.id} /><input type="hidden" name="pause" value={p.planPausedAt ? "0" : "1"} />
             {p.planPausedAt
               ? <><Badge tone="amber">Paused</Badge> <button className="ml-2 min-h-11 rounded-full bg-blue px-5 font-semibold text-white">Resume my plan</button></>
               : <button className="min-h-11 rounded-full border-2 border-line bg-white px-5 font-semibold">Pause (I&apos;m away)</button>}
           </form>
         </Card>
-      ))}
+        );
+      })}
 
       <Card title="Upcoming">
         {upcoming.length ? (
-          <ul className="divide-y divide-line">{upcoming.map((v) => <li key={v.id} className="py-2.5 text-sm"><b>{v.scheduledDate ? prettyDate(dateOnly(v.scheduledDate)) : "Date to be confirmed"}</b> · {v.job.kind === "SNOW_PLAN" ? "Snow clearing" : v.job.title} · {v.property.formatted}</li>)}</ul>
+          <ul className="divide-y divide-line">{upcoming.map((v) => {
+            // Extras only while the visit hasn't started, and only ones this job doesn't already charge.
+            const open = v.state === "SCHEDULED" && !v.job.closedAt && !v.job.sizeHoldAt;
+            const offer = open ? extrasOffered(addOns, v.job, v.extras) : [];
+            return (
+              <li key={v.id} className="py-2.5 text-sm"><b>{v.scheduledDate ? prettyDate(dateOnly(v.scheduledDate)) : "Date to be confirmed"}</b> · {v.job.kind === "SNOW_PLAN" ? "Snow clearing" : v.job.title} · {v.property.formatted}
+                {v.extras.map((e) => (
+                  <form key={e.id} action={hubVisitExtra} className="mt-2 flex items-center justify-between gap-3 rounded-xl bg-tint px-3 py-1">{hidden}<input type="hidden" name="removeId" value={e.id} />
+                    <span>+ {e.name} · {money(e.unitPriceCents)}</span>
+                    {open && <button className="min-h-11 flex-none font-semibold text-blue">Remove</button>}
+                  </form>
+                ))}
+                {offer.length > 0 && (
+                  <details className="mt-1">
+                    <summary className="cursor-pointer py-2 font-semibold text-blue">Add an extra to this visit</summary>
+                    <div className="space-y-2">{offer.map((a) => (
+                      <form key={a.id} action={hubVisitExtra} className="flex items-center justify-between gap-3 rounded-xl border border-line p-3">{hidden}<input type="hidden" name="visitId" value={v.id} /><input type="hidden" name="serviceId" value={a.id} />
+                        <span><b>{a.name}</b>{a.description && <span className="block text-ink-soft">{a.description}</span>}</span>
+                        <button className="min-h-11 flex-none rounded-full bg-blue px-4 font-semibold text-white">Add · {money(a.unitPriceCents!)}</button>
+                      </form>
+                    ))}</div>
+                  </details>
+                )}
+              </li>
+            );
+          })}</ul>
         ) : <p className="text-sm text-ink-soft">Nothing booked{plans.length ? "; we'll come when it snows" : ""}.</p>}
       </Card>
 
@@ -110,6 +172,9 @@ export default async function Hub({ params, searchParams }: PageProps<"/hub/[tok
                     {/* eslint-disable-next-line @next/next/no-img-element -- private media via signed URL */}
                     {v.attachments.map((a) => <img key={a.id} src={signedMediaPath(a.id, "sm", 7)} alt={a.kind} className="h-16 w-20 rounded-lg object-cover" />)}
                   </div>
+                )}
+                {v.job.kind === "ONE_OFF" && past.findIndex((x) => x.jobId === v.jobId) === i && (
+                  <a href={`/hub/${token}/order?again=${v.jobId}`} className="mt-2 flex min-h-11 w-fit items-center rounded-full border-2 border-line px-5 text-sm font-semibold">Book this again</a>
                 )}
               </li>
             ))}
@@ -142,12 +207,6 @@ export default async function Hub({ params, searchParams }: PageProps<"/hub/[tok
           </form>
         </Card>
       )}
-      <Card title="Need something else?">
-        <form action={hubRequestWork} className="space-y-3">{hidden}
-          <textarea name="notes" rows={3} required maxLength={2000} placeholder="e.g. Could you clean out the gutters and power wash the deck in spring?" className="w-full rounded-xl border border-line p-3" />
-          <button className="min-h-11 rounded-full bg-blue px-5 font-semibold text-white">Send request</button>
-        </form>
-      </Card>
       <p className="text-center text-sm text-ink-soft">Questions? Call {env.phone} or email {env.helpEmail}. This page is private to you.</p>
     </div>
   );

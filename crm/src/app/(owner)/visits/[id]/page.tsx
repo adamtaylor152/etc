@@ -38,7 +38,7 @@ export default async function VisitPage({ params, searchParams }: PageProps<"/vi
   const v = await db.visit.findFirst({
     where: { id, businessId: bid },
     include: {
-      job: { include: { client: true, lineItems: true } }, property: { include: { community: true } }, snowEvent: true, charges: true, assignees: true,
+      job: { include: { client: true, lineItems: true } }, property: { include: { community: true } }, snowEvent: true, charges: true, assignees: true, extras: { orderBy: { createdAt: "asc" } },
       attachments: { where: { deletedAt: null }, orderBy: { createdAt: "asc" } },
     },
   });
@@ -93,6 +93,12 @@ export default async function VisitPage({ params, searchParams }: PageProps<"/vi
       )}
 
 
+      {v.extras.length > 0 && (
+        <Card title="Extras the client added" className="mb-4 border-blue/30">
+          <ul className="text-sm">{v.extras.map((e) => <li key={e.id} className="flex justify-between gap-2 py-0.5"><span className="font-semibold">{e.name}</span><span className="text-ink-soft">{money(e.unitPriceCents)}</span></li>)}</ul>
+          <p className="mt-1 text-xs text-ink-soft">Added from their client page. Billed once, with this visit, when it&apos;s marked done.</p>
+        </Card>
+      )}
       <VisitChecklistCard businessId={v.businessId} visitId={v.id} editable={v.state !== "CANCELLED"} />
       {(v.job.requireSignature || v.state === "COMPLETED") && <div className="my-4"><SignatureCard where={{ visitId: v.id }} signHref={`/sign/visit/${v.id}`} title={v.job.requireSignature ? "Client signature (needed before Done)" : "Client signature"} /></div>}
       <Card title="Time" className="my-4">

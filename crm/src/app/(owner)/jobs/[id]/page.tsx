@@ -19,6 +19,7 @@ import { visitStatus } from "@/server/status/job";
 import { invoiceCreate } from "../../billing-actions";
 import { RepeatFields } from "@/components/repeat-fields";
 import { describeRule } from "@/server/recurrence";
+import { currentCharge } from "@/server/ops/drive-size";
 import { jobClose, planPause, recurringUpdate, planUpdate, visitAdd, visitDelete, visitSchedule } from "../../work-actions";
 
 export default async function JobPage({ params, searchParams }: PageProps<"/jobs/[id]">) {
@@ -32,7 +33,7 @@ export default async function JobPage({ params, searchParams }: PageProps<"/jobs
     where: { id },
     include: {
       lineItems: { orderBy: { sortOrder: "asc" } }, season: true, request: true, property: { include: { community: true } },
-      visits: { orderBy: [{ scheduledDate: { sort: "desc", nulls: "first" } }, { createdAt: "desc" }], include: { charges: true, snowEvent: true } },
+      visits: { orderBy: [{ scheduledDate: { sort: "desc", nulls: "first" } }, { createdAt: "desc" }], include: { charges: true, snowEvent: true, extras: true } },
       invoices: { orderBy: { number: "desc" } },
     },
   });
@@ -80,7 +81,10 @@ export default async function JobPage({ params, searchParams }: PageProps<"/jobs
                 <input type="hidden" name="id" value={job.id} /><input type="hidden" name="back" value={here} />
                 <label className="text-sm font-semibold">Trigger (cm)<Input name="triggerCm" type="number" min={0} max={100} defaultValue={job.triggerCm ?? ""} placeholder={`${job.season?.defaultTriggerCm ?? 2} (season)`} /></label>
                 <label className="text-sm font-semibold">Per push ($)<Input name="price" type="number" step="0.01" min={0} defaultValue={(job.pricePerPushCents ?? 3000) / 100} /></label>
-                <label className="flex min-h-11 items-center gap-2 text-sm font-semibold"><input type="checkbox" name="iceMelt" defaultChecked={job.iceMelt} className="size-5" /> Ice melt</label>
+                <span className="space-y-1">
+                  <label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" name="iceMelt" defaultChecked={job.iceMelt} className="size-5" /> Ice melt</label>
+                  <label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" name="extraWalk" defaultChecked={currentCharge(job.lineItems).walk > 0} className="size-5" /> Extra sidewalk</label>
+                </span>
                 <Button variant="secondary">Save</Button>
               </form>
               <p className="mt-3 text-sm text-ink-soft">{job.season?.name}. A visit is added automatically when a storm reaches the trigger. Billed per push, once per storm.</p>
@@ -129,6 +133,7 @@ export default async function JobPage({ params, searchParams }: PageProps<"/jobs
                       <Link href={`/visits/${v.id}`} className="min-w-0 font-semibold text-blue">
                         {v.scheduledDate ? prettyDate(dateOnly(v.scheduledDate)) : "Not scheduled"}
                         {v.snowEvent && <span className="font-normal text-ink-soft"> · {v.snowEvent.name}{v.pushNumber ? `, push ${v.pushNumber}` : ""}</span>}
+                        {v.extras.length > 0 && <span className="font-normal text-ink-soft"> · + {v.extras.map((e) => e.name).join(", ")}</span>}
                       </Link>
                       <span className="flex items-center gap-2">
                         {open && !v.snowEventId && (

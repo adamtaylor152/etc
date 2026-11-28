@@ -2,7 +2,7 @@
 import { assertChecklistDone } from "./checklists";
 import { assertSigned } from "./signatures";
 import type { SkipReason, VisitState } from "@/generated/prisma/client";
-import { chargesForVisit } from "../billing/charges";
+import { chargesForVisit, extrasOffered } from "../billing/charges";
 import { dueDate } from "../billing/invoice";
 import { todayLocal, toDbDate } from "../dates";
 import { invoiceUnbilled } from "./invoices";
@@ -60,7 +60,9 @@ function transitionTx(user: Actor, visitId: string, to: VisitState, extra: Trans
 
     if (to === "COMPLETED") {
       const job = { ...v.job, lineItems: v.job.lineItems.map((l) => ({ ...l, quantity: Number(l.quantity) })) };
-      const lines = chargesForVisit(job, { pushNumber: v.pushNumber, iceMeltApplied: updated.iceMeltApplied }, await iceMeltPrice(tx, user.businessId));
+      // Read after the update above: it holds the visit's row lock, so an extra the client is adding right now is either in or refused.
+      const extras = await tx.visitExtra.findMany({ where: { visitId }, orderBy: { createdAt: "asc" } });
+      const lines = chargesForVisit(job, { pushNumber: v.pushNumber, iceMeltApplied: updated.iceMeltApplied }, await iceMeltPrice(tx, user.businessId), extras);
       if (lines.length) await tx.visitCharge.createMany({ data: lines.map((l) => ({ ...l, businessId: user.businessId, visitId })) });
       // Billed per visit (one-off jobs): invoice it now so the "all done" email can carry a pay link.
       if (lines.length && v.job.invoiceSchedule === "AFTER_EACH_VISIT") {
@@ -105,6 +107,37 @@ function transitionTx(user: Actor, visitId: string, to: VisitState, extra: Trans
       data: extra.skipReason ? { reason: extra.skipReason, note: extra.skipNote ?? null } : {},
     });
     return updated;
+  });
+}
+
+// ---------- one-off extras from the client hub ----------
+/** Fixed-price add-on services: what a client may add to a visit. */
+export const addOnServices = (businessId: string) =>
+  db.service.findMany({ where: { businessId, active: true, isAddon: true, pricingMode: "FIXED", unitPriceCents: { not: null } }, orderBy: { sortOrder: "asc" } });
+
+/** The client adds an add-on to one of their own visits that hasn't started. Charged when the visit is completed (chargesForVisit). */
+export async function addVisitExtra(client: { id: string; businessId: string }, visitId: string, serviceId: string) {
+  return db.$transaction(async (tx) => {
+    const service = (await addOnServices(client.businessId)).find((s) => s.id === serviceId);
+    // Locks the visit row, so this can't slip in while the visit is being completed (see transitionTx).
+    const locked = await tx.visit.updateMany({ where: { id: visitId, businessId: client.businessId, state: "SCHEDULED", job: { clientId: client.id, closedAt: null, sizeHoldAt: null } }, data: { state: "SCHEDULED" } });
+    if (!service || locked.count !== 1) throw new TransitionError("That can't be added to this visit any more");
+    const v = await tx.visit.findUniqueOrThrow({ where: { id: visitId }, include: { job: { include: { lineItems: true } }, extras: true } });
+    if (!extrasOffered([service], v.job, v.extras).length) throw new TransitionError("That's already part of this visit");
+    await tx.visitExtra.create({ data: { businessId: client.businessId, visitId, serviceKey: service.key, name: service.name, unitPriceCents: service.unitPriceCents!, addedByClientId: client.id } });
+    await logActivity(tx, { businessId: client.businessId, type: "visit.extra_added", entityType: "Visit", entityId: visitId, actorType: "CLIENT", actorClientId: client.id, clientId: client.id, jobId: v.jobId, data: { name: service.name, cents: service.unitPriceCents } });
+    return { visit: v, name: service.name, cents: service.unitPriceCents! };
+  });
+}
+
+/** The client takes one back, while the visit still hasn't started. */
+export async function removeVisitExtra(client: { id: string; businessId: string }, extraId: string) {
+  return db.$transaction(async (tx) => {
+    const e = await tx.visitExtra.findFirst({ where: { id: extraId, visit: { businessId: client.businessId, state: "SCHEDULED", job: { clientId: client.id } } }, include: { visit: true } });
+    if (!e || (await tx.visit.updateMany({ where: { id: e.visitId, state: "SCHEDULED" }, data: { state: "SCHEDULED" } })).count !== 1) throw new TransitionError("That visit has already started");
+    await tx.visitExtra.delete({ where: { id: e.id } });
+    await logActivity(tx, { businessId: client.businessId, type: "visit.extra_removed", entityType: "Visit", entityId: e.visitId, actorType: "CLIENT", actorClientId: client.id, clientId: client.id, jobId: e.visit.jobId, data: { name: e.name } });
+    return e;
   });
 }
 

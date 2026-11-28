@@ -9,6 +9,7 @@ export type RunStop = {
   access: string | null; gate: string | null; pets: string | null; hazards: string | null; job: string; snow: boolean; iceMelt: boolean;
   state: string; time: string | null; people: string[]; communityName: string | null;
   sizeNote: string | null; // snow stop whose driveway size nobody has checked yet
+  extras: string[]; // one-off add-ons the client ordered for this visit: names only, crew never see prices
 };
 
 /** Crew work their own stops plus ones nobody is assigned to; owners work any. Spread into a visit `where`. */
@@ -21,6 +22,7 @@ export async function runStops(businessId: string, date: string, userId: string 
     scheduledDate: toDbDate(date), state: { not: "CANCELLED" },
     ...(userId === "all" ? {} : visitScope({ id: userId, role: "CREW" })),
   });
+  const extras = await db.visitExtra.findMany({ where: { visitId: { in: visits.map((v) => v.id) } }, orderBy: { createdAt: "asc" }, select: { visitId: true, name: true } });
   const who = await db.visitAssignee.findMany({ where: { visitId: { in: visits.map((v) => v.id) } }, include: { user: { select: { name: true, email: true } } } });
   return visits.map((v): RunStop => ({
     visitId: v.id, client: clientName(v.job.client), phone: v.job.client.phone, address: v.property.formatted.replace(/, Calgary.*$/, ""),
@@ -29,6 +31,7 @@ export async function runStops(businessId: string, date: string, userId: string 
     state: v.state, time: v.startAt && !v.anytime ? v.startAt.toLocaleTimeString("en-CA", { timeZone: "America/Edmonton", hour: "numeric", minute: "2-digit" }) : null,
     people: who.filter((a) => a.visitId === v.id).map((a) => a.user.name || a.user.email.split("@")[0]), communityName: v.property.community?.name ?? null,
     sizeNote: sizeNote(v.job.kind === "SNOW_PLAN" || !!v.snowEventId, v.property),
+    extras: extras.filter((e) => e.visitId === v.id).map((e) => e.name),
   }));
 }
 

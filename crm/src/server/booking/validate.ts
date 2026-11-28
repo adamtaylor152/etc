@@ -95,3 +95,17 @@ export function serviceLines(b: Pick<Booking, "services" | "plan" | "icemelt"> &
 export function whenText(b: Pick<Booking, "date" | "plan">): string {
   return b.date || (b.plan === "Every snowfall" ? "after every snowfall" : "as soon as possible");
 }
+
+/** "Book this again": a past job's services as labels that can still be booked (the catch-all when none can).
+ *  services = the active + bookable price book, as for bookingLabels. */
+export function reorderLabels(job: { requested: string[]; lines: string[]; title: string }, services: { name: string; bookingLabel: string | null }[]): string[] {
+  const allowed = bookingLabels(services);
+  const label = (s: string) => {
+    if (allowed.includes(s)) return s;
+    if (s.startsWith("Snow shovelling")) return "Snow shovelling"; // the size and plan variants all book as one service
+    const sv = services.find((x) => x.name === s);
+    return sv ? sv.bookingLabel || sv.name : null;
+  };
+  const out = [...new Set((job.requested.length ? job.requested : [...job.lines, job.title]).map(label))].filter((l): l is string => !!l && l !== OTHER && allowed.includes(l));
+  return out.length ? out : [OTHER];
+}

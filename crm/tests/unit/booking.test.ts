@@ -1,6 +1,6 @@
 // Parity with the Python site's validate()/estimate() (tests/test_server.py cases + the estimate table).
 import { describe, expect, it } from "vitest";
-import { BookingError, bookingLabels, estimate, serviceLines, validate, whenText } from "@/server/booking/validate";
+import { BookingError, bookingLabels, estimate, reorderLabels, serviceLines, validate, whenText } from "@/server/booking/validate";
 
 const TODAY = "2026-11-27";
 const good = {
@@ -74,5 +74,18 @@ describe("estimate", () => {
     expect(serviceLines(b)).toEqual(["Snow shovelling (Every snowfall, + ice melt)", "Bin cleaning"]);
     expect(whenText(b)).toBe("after every snowfall");
     expect(whenText({ date: "", plan: "One-time visit" })).toBe("as soon as possible");
+  });
+});
+
+describe("reorderLabels (book this again)", () => {
+  const book = [{ name: "Snow shovelling (one-time)", bookingLabel: "Snow shovelling" }, { name: "Window cleaning", bookingLabel: null }, { name: "Gutters (2 storey)", bookingLabel: "Gutter cleaning" }];
+  it("uses what was booked, dropping services that can't be booked any more", () => {
+    expect(reorderLabels({ requested: ["Window cleaning", "Bin cleaning"], lines: [], title: "x" }, book)).toEqual(["Window cleaning"]);
+  });
+  it("maps an owner-made job's line items to booking labels", () => {
+    expect(reorderLabels({ requested: [], lines: ["Snow shovelling (one-time), large driveway", "Ice melt", "Gutters (2 storey)"], title: "Snow" }, book)).toEqual(["Snow shovelling", "Gutter cleaning"]);
+  });
+  it("falls back to the catch-all", () => {
+    expect(reorderLabels({ requested: ["Something else"], lines: ["Fence repair"], title: "Fence repair" }, book)).toEqual(["Something else"]);
   });
 });
