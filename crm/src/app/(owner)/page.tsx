@@ -28,9 +28,9 @@ function WorkCard({ title, icon, color, href, lead, rows }: { title: string; ico
           <ChevronRight className="ml-auto size-4 text-ink-faint" strokeWidth={1.75} aria-hidden />
         </Link>
       </h2>
-      <Link href={lead.href} className="flex items-baseline justify-between gap-3 px-4 pb-3.5 pt-1.5 hover:bg-tint">
-        <span className="text-sm font-medium">{lead.label}{n(lead.count)}</span>
-        <span className="font-display text-[1.7rem] font-semibold leading-none tabular-nums">{lead.value}</span>
+      <Link href={lead.href} className="block px-4 pb-3.5 pt-1.5 hover:bg-tint">
+        <span className="block text-sm font-medium">{lead.label}{n(lead.count)}</span>
+        <span className="mt-1 block font-display text-[1.7rem] font-semibold leading-none tabular-nums">{lead.value}</span>
       </Link>
       <ul className="mt-auto divide-y divide-line-soft border-t border-line-soft text-sm">
         {rows.map((r) => (
@@ -173,10 +173,10 @@ export default async function Home({ searchParams }: PageProps<"/">) {
           <ul className="-mx-2 -mb-1 grid gap-x-6 sm:grid-cols-2 xl:grid-cols-3">
             {todo.map((t) => (
               <li key={t.label}>
-                <Link href={t.href} className="flex min-h-11 items-center gap-3 rounded-lg px-2 text-sm hover:bg-tint">
+                <Link href={t.href} className="flex min-h-11 items-center gap-3 rounded-lg px-2 py-1.5 text-sm hover:bg-tint">
                   <span className={`w-9 shrink-0 text-right font-display text-lg font-semibold leading-none tabular-nums ${t.tone === "red" ? "text-red-700" : ""}`}>{t.n}</span>
                   <t.icon className="size-4 shrink-0 text-ink-faint" strokeWidth={1.75} aria-hidden />
-                  <span className="min-w-0 flex-1 truncate">{t.label}</span>
+                  <span className="min-w-0 flex-1 leading-snug">{t.label}</span>
                   <ChevronRight className="size-4 shrink-0 text-ink-faint" strokeWidth={1.75} aria-hidden />
                 </Link>
               </li>

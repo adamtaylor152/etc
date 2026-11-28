@@ -93,7 +93,7 @@ export default async function ClientPage({ params, searchParams }: PageProps<"/c
 
   const owing = books.balanceCents > 0;
   const counts = { requests: c.requests.length, quotes: c.quotes.length, jobs: jobs.length, invoices: c.invoices.length };
-  const link = "font-semibold text-blue hover:text-blue-deep";
+  const link = "inline-flex items-center font-semibold text-blue hover:text-blue-deep max-sm:min-h-11";
   const quiet = "rounded-md text-xs font-medium text-ink-soft";
   const h3 = "font-display text-[0.95rem] font-semibold";
   const newWork = { requests: ["New request", `/requests/new?client=${id}`], quotes: ["New quote", `/quotes/new?client=${id}`], jobs: ["New job", `/jobs/new?client=${id}`], invoices: ["New invoice", `/invoices/new?client=${id}`] }[work];
