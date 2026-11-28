@@ -52,7 +52,8 @@ export default async function PublicQuote({ params, searchParams }: PageProps<"/
             {deposit?.status === "PAID" && <p className="mb-3 text-sm font-semibold text-emerald-700">Deposit received. Thank you!</p>}
             {sig && <div className="mb-3 flex items-center gap-3"><img src={signedMediaPath(sig.attachmentId, "sm", 30)} alt="Your signature" className="h-14 w-36 rounded border border-line bg-white object-contain" /><span className="text-xs text-ink-soft">Signed {sig.signedAt.toLocaleDateString("en-CA", { timeZone: "America/Edmonton" })}</span></div>}</>
           : expired ? <p className="mb-2 font-semibold text-red-700">This quote has expired. Reply to our email or call {env.phone} for an updated price.</p> : null}
-        <QuoteApprove token={token} action={clientApprove} canAct={canAct} discountCents={q.discountCents}
+        <QuoteApprove token={token} action={clientApprove} canAct={canAct} discountCents={q.discountCents} taxName={biz.taxName}
+          tax={{ taxRegistered: biz.taxRegistered, taxRateBps: biz.taxRateBps, pricesIncludeTax: biz.pricesIncludeTax }}
           lines={q.lineItems.map((l) => ({ id: l.id, name: l.name, description: l.description, totalCents: l.totalCents, isOptional: l.isOptional, isSelected: l.isSelected, qty: Number(l.quantity) !== 1 ? String(Number(l.quantity)) : "" }))} />
       </Card>
       {canAct && (

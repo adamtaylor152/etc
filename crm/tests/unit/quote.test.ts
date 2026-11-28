@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assertQuoteTransition, quoteEditable, quoteExpired, quoteTotal } from "@/server/status/quote";
+import { assertQuoteTransition, quoteEditable, quoteExpired, quoteTotal, quoteTotals } from "@/server/status/quote";
 
 describe("quote transitions", () => {
   it("allows the normal flow", () => {
@@ -35,6 +35,15 @@ describe("quote money", () => {
     expect(quoteTotal(lines)).toBe(14500);
     expect(quoteTotal(lines, 500)).toBe(14000);
     expect(quoteTotal(lines, 99999)).toBe(0);
+  });
+  it("applies GST the way invoices do", () => {
+    const reg = { taxRegistered: true, taxRateBps: 500, pricesIncludeTax: false };
+    // not registered: no tax; optional unticked line is left out
+    expect(quoteTotals(lines, 500, { ...reg, taxRegistered: false })).toMatchObject({ subtotalCents: 14500, taxCents: 0, totalCents: 14000 });
+    // registered, GST on top: 5% of the discounted amount
+    expect(quoteTotals(lines, 500, reg)).toMatchObject({ subtotalCents: 14500, taxCents: 700, totalCents: 14700 });
+    // registered, prices include GST: total unchanged, GST is the portion inside it
+    expect(quoteTotals(lines, 500, { ...reg, pricesIncludeTax: true })).toMatchObject({ taxCents: 667, totalCents: 14000 });
   });
   it("expires after valid-until while awaiting a response", () => {
     expect(quoteExpired({ status: "AWAITING_RESPONSE", validUntil: "2026-12-01" }, "2026-12-02")).toBe(true);

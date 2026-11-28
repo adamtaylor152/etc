@@ -1,16 +1,17 @@
 "use client";
 // Client-side quote approval: tick optional extras (total updates live), type your name, approve.
 import { useState } from "react";
+import { invoiceTotals, type TaxSettings } from "@/server/billing/invoice";
 import { SignaturePad } from "./signature-pad";
 
 type Line = { id: string; name: string; description: string | null; totalCents: number; isOptional: boolean; isSelected: boolean; qty: string };
 const money = (c: number) => `$${(c / 100).toLocaleString("en-CA", { minimumFractionDigits: c % 100 ? 2 : 0, maximumFractionDigits: 2 })}`;
 
-export function QuoteApprove({ token, lines, discountCents, action, canAct }: {
-  token: string; lines: Line[]; discountCents: number; action: (f: FormData) => Promise<void>; canAct: boolean;
+export function QuoteApprove({ token, lines, discountCents, tax, taxName, action, canAct }: {
+  token: string; lines: Line[]; discountCents: number; tax: TaxSettings; taxName: string; action: (f: FormData) => Promise<void>; canAct: boolean;
 }) {
   const [picked, setPicked] = useState(() => new Set(lines.filter((l) => l.isOptional && l.isSelected).map((l) => l.id)));
-  const total = Math.max(0, lines.filter((l) => !l.isOptional || picked.has(l.id)).reduce((a, l) => a + l.totalCents, 0) - discountCents);
+  const { totalCents: total, taxCents, taxIncluded } = invoiceTotals(lines.filter((l) => !l.isOptional || picked.has(l.id)).map((l) => l.totalCents), discountCents, tax);
   return (
     <form action={action} className="space-y-4">
       <input type="hidden" name="t" value={token} />
@@ -31,7 +32,8 @@ export function QuoteApprove({ token, lines, discountCents, action, canAct }: {
         ))}
       </ul>
       {discountCents > 0 && <p className="flex justify-between text-sm text-ink-soft"><span>Discount</span><span>−{money(discountCents)}</span></p>}
-      <p className="flex items-baseline justify-between border-t-2 border-navy pt-3"><span className="font-semibold">Total (tax included)</span><span className="font-display text-3xl font-bold">{money(total)}</span></p>
+      {taxCents > 0 && !taxIncluded && <p className="flex justify-between text-sm text-ink-soft"><span>{taxName}</span><span>{money(taxCents)}</span></p>}
+      <p className="flex items-baseline justify-between border-t-2 border-navy pt-3"><span className="font-semibold">Total{taxIncluded && ` (includes ${taxName} ${money(taxCents)})`}</span><span className="font-display text-3xl font-bold">{money(total)}</span></p>
       {canAct && (
         <div className="space-y-3 rounded-2xl bg-tint p-4">
           <label className="block text-sm font-semibold">Your name<input name="name" required maxLength={100} autoComplete="name" className="mt-1 w-full min-h-11 rounded-xl border border-line bg-white px-3" /></label>

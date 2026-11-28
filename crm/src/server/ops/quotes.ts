@@ -6,11 +6,17 @@ import { db, type Tx } from "../db";
 import { enqueue, kickOutbox } from "../email/outbox";
 import { env } from "../env";
 import { logActivity, nextNumber } from "../records";
-import { assertQuoteTransition, quoteEditable, quoteTotal } from "../status/quote";
+import { assertQuoteTransition, quoteEditable, quoteTotal, quoteTotals, type QuoteLine } from "../status/quote";
 import { TransitionError } from "../status/visit";
 
 type Actor = { id: string; businessId: string };
 export type QuoteLineInput = { name: string; description?: string; quantity: number; unitPriceCents: number; isOptional: boolean; isSelected: boolean };
+
+/** Stored money fields for a quote: subtotal before discount, GST, and the total the client pays. */
+async function money(tx: Tx, businessId: string, lines: QuoteLine[], discountCents: number) {
+  const { subtotalCents, taxCents, totalCents } = quoteTotals(lines, discountCents, await tx.business.findUniqueOrThrow({ where: { id: businessId } }));
+  return { subtotalCents, taxCents, totalCents };
+}
 
 const lineRows = (lines: QuoteLineInput[]) => lines.map((l, i) => ({
   name: l.name, description: l.description || null, quantity: l.quantity, unitPriceCents: l.unitPriceCents,
@@ -21,12 +27,11 @@ export async function createQuote(user: Actor, input: { clientId: string; proper
   await db.client.findFirstOrThrow({ where: { id: input.clientId, businessId: user.businessId } });
   return db.$transaction(async (tx) => {
     const rows = lineRows(input.lines);
-    const total = quoteTotal(rows);
     const q = await tx.quote.create({
       data: {
         businessId: user.businessId, number: await nextNumber(tx, user.businessId, "QUOTE"), clientId: input.clientId,
         propertyId: input.propertyId, requestId: input.requestId, title: input.title, message: input.message || null,
-        subtotalCents: total, totalCents: total, validUntil: toDbDate(addDays(todayLocal(), 30)), lineItems: { create: rows },
+        ...(await money(tx, user.businessId, rows, 0)), validUntil: toDbDate(addDays(todayLocal(), 30)), lineItems: { create: rows },
       },
     });
     await logActivity(tx, { businessId: user.businessId, type: "quote.created", entityType: "Quote", entityId: q.id, actorType: "USER", actorUserId: user.id, clientId: input.clientId });
@@ -41,11 +46,10 @@ export async function updateQuote(user: Actor, quoteId: string, input: { title: 
     const rows = lineRows(input.lines);
     await tx.quoteLineItem.deleteMany({ where: { quoteId } });
     await tx.quoteLineItem.createMany({ data: rows.map((r) => ({ ...r, quoteId })) });
-    const subtotal = rows.filter((l) => !l.isOptional || l.isSelected).reduce((a, l) => a + l.totalCents, 0);
     await tx.quote.update({
       where: { id: quoteId },
       data: {
-        title: input.title, message: input.message || null, validUntil: input.validUntil ? toDbDate(input.validUntil) : null, discountCents: input.discountCents, subtotalCents: subtotal, totalCents: quoteTotal(rows, input.discountCents),
+        title: input.title, message: input.message || null, validUntil: input.validUntil ? toDbDate(input.validUntil) : null, discountCents: input.discountCents, ...(await money(tx, user.businessId, rows, input.discountCents)),
         ...(input.deposit ? { depositType: ["PERCENT", "FIXED"].includes(input.deposit.type) ? input.deposit.type : "NONE", depositValue: Math.max(0, Math.round(input.deposit.value)), depositRequired: input.deposit.required } : {}),
       },
     });
@@ -82,8 +86,7 @@ export async function approveQuote(quoteId: string, input: { name: string; selec
       await tx.quoteLineItem.update({ where: { id: l.id }, data: { isSelected: input.selected.includes(l.id) } });
     }
     const lines = q.lineItems.map((l) => ({ ...l, isSelected: !l.isOptional || input.selected.includes(l.id) }));
-    const total = quoteTotal(lines, q.discountCents);
-    await tx.quote.update({ where: { id: quoteId }, data: { status: "APPROVED", approvedAt: new Date(), approvedByName: input.name, approvedIp: input.ip, totalCents: total, subtotalCents: total + q.discountCents } });
+    await tx.quote.update({ where: { id: quoteId }, data: { status: "APPROVED", approvedAt: new Date(), approvedByName: input.name, approvedIp: input.ip, ...(await money(tx, q.businessId, lines, q.discountCents)) } });
     await logActivity(tx, { businessId: q.businessId, type: "quote.approved", entityType: "Quote", entityId: quoteId, actorType: "CLIENT", actorClientId: q.clientId, clientId: q.clientId, data: { name: input.name } });
     await createDepositInvoice(tx, quoteId);
     await notifyOwners(tx, q.businessId, `Quote #${q.number} approved`, `${input.name} approved "${q.title}". Convert it to a job and book a date.`, `/quotes/${quoteId}`, `quote:${quoteId}:approved`);
@@ -130,7 +133,7 @@ export async function convertQuote(user: Actor, quoteId: string, input: { date: 
         businessId: user.businessId, number: await nextNumber(tx, user.businessId, "JOB"), clientId: q.clientId, propertyId, requestId: q.requestId,
         quoteId: q.id, kind: "ONE_OFF", title: q.title ?? "Job", billingType: input.billingType,
         invoiceSchedule: input.billingType === "PER_VISIT" ? "AFTER_EACH_VISIT" : "ON_COMPLETION",
-        totalCents: input.billingType === "FIXED_PRICE" ? q.totalCents : null,
+        totalCents: input.billingType === "FIXED_PRICE" ? quoteTotal(q.lineItems, q.discountCents) : null, // pre-tax: the invoice adds GST itself
         lineItems: { create: lines.map((l, i) => ({ name: l.name, description: l.description, quantity: l.quantity, unitPriceCents: l.unitPriceCents, totalCents: l.totalCents, perVisit: input.billingType === "PER_VISIT", sortOrder: i })) },
         visits: { create: [{ businessId: user.businessId, propertyId, scheduledDate: input.date ? toDbDate(input.date) : null, routeSort: prop.routeSort }] },
       },
