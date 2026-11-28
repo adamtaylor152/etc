@@ -114,7 +114,8 @@ export async function runAutoPay(deps: AutoPayDeps = real, now = new Date(), whe
   for (const a of stuck) await reconcile(a, deps, now).catch((e) => console.error(`auto-pay reconcile failed (attempt ${a.id})`, e));
   const today = todayLocal(now);
   const due = await db.invoice.findMany({
-    where: { ...where, status: "AWAITING_PAYMENT", autoPayState: { in: ["SCHEDULED", "RETRYING"] }, autoPayOn: { lte: toDbDate(today) } },
+    // Never an invoice with a refund on it: it is owing again because money went back, not because it was never paid.
+    where: { ...where, status: "AWAITING_PAYMENT", autoPayState: { in: ["SCHEDULED", "RETRYING"] }, autoPayOn: { lte: toDbDate(today) }, payments: { none: { refundedCents: { gt: 0 } } } },
     include: { client: true, autoPayAttempts: true }, orderBy: { autoPayOn: "asc" }, take: BATCH,
   });
   const settings = new Map<string, Settings>();
