@@ -19,7 +19,7 @@ function loadPlaces(key: string) {
 }
 
 export function AddressField({ mapsKey, communities, defaults = {}, prefix = "", required = true }: {
-  mapsKey?: string; communities: { code: string; name: string }[]; prefix?: string; required?: boolean;
+  mapsKey?: string; communities?: { code: string; name: string }[]; prefix?: string; required?: boolean; // no communities (public booking): no manual pick
   defaults?: { formatted?: string; communityCode?: string | null; lat?: number | null; lng?: number | null };
 }) {
   const input = useRef<HTMLInputElement>(null);
@@ -54,14 +54,14 @@ export function AddressField({ mapsKey, communities, defaults = {}, prefix = "",
         <input type="hidden" name={n("lat")} value={geo.lat} /><input type="hidden" name={n("lng")} value={geo.lng} />
         <input type="hidden" name={n("placeId")} value={geo.placeId} /><input type="hidden" name={n("postalCode")} value={geo.postalCode} />
       </>}
-      <label className="flex items-center gap-2 text-xs text-ink-soft">
+      {communities && <label className="flex items-center gap-2 text-xs text-ink-soft">
         Community
         <select name={n("communityCode")} defaultValue={defaults.communityCode ?? ""} className="h-8 rounded-lg border border-line bg-white px-2 text-xs text-navy">
           <option value="">{geo || defaults.lat != null ? "From the map pin" : "Not set (pick one)"}</option>
           {communities.map((c) => <option key={c.code} value={c.code}>{c.name}</option>)}
         </select>
         {geo && <span className="text-emerald-700">✓ pinned on the map</span>}
-      </label>
+      </label>}
     </div>
   );
 }
