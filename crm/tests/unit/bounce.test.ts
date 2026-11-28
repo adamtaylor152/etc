@@ -5,6 +5,7 @@ describe("permanentRejection", () => {
   it("is true only for a 55x refusal of the recipient", () => {
     expect(permanentRejection({ responseCode: 550, code: "EENVELOPE", rejected: ["a@x.ca"] })).toBe(true);
     expect(permanentRejection({ responseCode: 550, command: "RCPT TO" })).toBe(true);
+    expect(permanentRejection({ responseCode: 550, code: "EENVELOPE", command: "MAIL FROM" })).toBe(false); // our sender refused, not their mailbox
     expect(permanentRejection({ responseCode: 451, code: "EENVELOPE" })).toBe(false); // try again later
     expect(permanentRejection({ responseCode: 535, code: "EAUTH" })).toBe(false); // our login, not their mailbox
     expect(permanentRejection({ responseCode: 554, command: "DATA" })).toBe(false); // content refused, address may be fine

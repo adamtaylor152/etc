@@ -30,11 +30,22 @@ export const isCreditLine = (l: { totalCents: number }) => l.totalCents < 0;
 export function draftEditProblem(lineTotals: number[], creditCents: number, discountCents: number, paidCents: number, tax: TaxSettings): string | null {
   if (!lineTotals.length) return "Add at least one line";
   if (lineTotals.some((c) => !Number.isInteger(c) || c < 0) || !Number.isInteger(discountCents) || discountCents < 0) return "Check the amounts";
-  const subtotal = lineTotals.reduce((a, b) => a + b, 0) - creditCents;
-  if (subtotal < 0) return "The lines can't total less than the deposit or credit already applied to this invoice";
-  if (discountCents > subtotal) return "The discount is more than the invoice";
-  if (invoiceTotals([subtotal], discountCents, tax).totalCents < paidCents) return "The total can't be less than what's already been paid";
+  // Credits are tax-included money, so they are compared with what the work comes to with tax.
+  if (invoiceTotals(lineTotals, 0, tax).totalCents < creditCents) return "The lines can't total less than the deposit or credit already applied to this invoice";
+  if (discountCents > lineTotals.reduce((a, b) => a + b, 0) || invoiceTotals(lineTotals, discountCents, tax).totalCents < creditCents) return "The discount is more than the invoice";
+  if (invoiceTotalsWithCredits(lineTotals, creditCents, discountCents, tax).totalCents < paidCents) return "The total can't be less than what's already been paid";
   return null;
+}
+
+/**
+ * Totals for an invoice that also takes off money already paid (a deposit, account credit). Tax is worked out on the
+ * work itself (lines less discount); the credits are tax-included money and come off the total afterwards, so GST is
+ * neither under-charged nor under-reported. `lineTotals` are the work lines only (no negative credit lines).
+ * subtotalCents stays "every line added up", credits included, as it is stored and shown.
+ */
+export function invoiceTotalsWithCredits(lineTotals: number[], creditCents: number, discountCents: number, tax: TaxSettings) {
+  const t = invoiceTotals(lineTotals, discountCents, tax);
+  return { ...t, subtotalCents: t.subtotalCents - creditCents, totalCents: Math.max(0, t.totalCents - creditCents) };
 }
 
 export const TERMS_LABEL: Record<PaymentTerms, string> = { DUE_ON_RECEIPT: "On receipt", NET_7: "7 days", NET_15: "15 days", NET_30: "30 days" };
@@ -81,6 +92,7 @@ export function lateFeeDue(
   const owing = inv.totalCents - inv.amountPaidCents;
   if (!s.lateFee || inv.status !== "AWAITING_PAYMENT" || inv.kind !== "STANDARD" || inv.lateFeeAppliedAt || !inv.dueOn || owing <= 0) return 0;
   if (today < addDays(inv.dueOn, s.lateFeeDays)) return 0;
+  if (today > addDays(inv.dueOn, s.lateFeeDays + 7)) return 0; // long overdue before the rule existed (or was switched on): leave it to the owner
   return s.lateFeeCents + Math.round((owing * s.lateFeeBps) / 10_000);
 }
 

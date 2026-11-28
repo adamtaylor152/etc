@@ -5,9 +5,10 @@
 import { requireOwner } from "@/server/auth";
 import type { GeoJsonObject } from "geojson";
 import Link from "next/link";
-import { ReorderList } from "@/components/reorder-list";
+import { ChevronLeft, ChevronRight, Eye, EyeOff, Navigation, Printer, TriangleAlert } from "lucide-react";
+import { RouteReorder } from "@/components/field/route-reorder";
 import { RouteMap } from "@/components/route-map";
-import { Badge, Button, Card, Empty, Input, PageHeader } from "@/components/ui";
+import { Badge, Button, ButtonLink, Card, Empty, Input, PageHeader, btn, inputCls } from "@/components/ui";
 import { addDays, fromLocalInput, prettyDate, todayLocal, toDbDate } from "@/server/dates";
 import { business, businessId, db } from "@/server/db";
 import { clientName } from "@/server/queries";
@@ -48,82 +49,131 @@ export default async function Routes({ searchParams }: PageProps<"/routes">) {
   const multi = next.length > 1
     ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(next.at(-1)!)}&waypoints=${encodeURIComponent(next.slice(0, -1).join("|"))}`
     : null;
+  const dayBtn = "inline-flex size-10 items-center justify-center rounded-lg border border-line bg-white text-ink-soft shadow-sm hover:bg-tint hover:text-navy";
+  const who = (u: { name: string | null; email: string }) => u.name || u.email.split("@")[0];
   return (
     <>
       <PageHeader
         title={storm ? `Route · ${storm.name}` : `Route · ${prettyDate(day)}`}
-        sub={`${visits.length} stop${visits.length === 1 ? "" : "s"}${showDone ? "" : " left"}`}
+        sub={<span className="tabular-nums">{visits.length} stop{visits.length === 1 ? "" : "s"}{showDone ? "" : " left"}</span>}
         actions={<div className="no-print flex flex-wrap items-center gap-2">
-          {!storm && <>
-            <Link href={`/routes?date=${addDays(day, -1)}`} className="rounded-full bg-white px-3 py-2 text-sm font-semibold">←</Link>
-            <form className="flex items-center gap-1"><Input type="date" name="date" defaultValue={day} aria-label="Day" className="w-40" /><Input type="time" name="start" defaultValue={setOff ?? ""} aria-label="Set off at" title="Set off at (for the ETAs)" className="w-28" /><Button variant="secondary">Go</Button></form>
-            <Link href={`/routes?date=${addDays(day, 1)}`} className="rounded-full bg-white px-3 py-2 text-sm font-semibold">→</Link>
-          </>}
-          <Link href={`${base}${showDone ? "" : "&done=1"}`} className="rounded-full bg-white px-3 py-2 text-sm font-semibold">{showDone ? "Hide done" : "Show done"}</Link>
-          <form action={routeAutoOrder}><input type="hidden" name="back" value={here} />
-            {starters.length > 0 && <select name="from" aria-label="Auto-order starting from" className="h-10 rounded-lg border border-line bg-white px-2 text-sm"><option value="">From the depot</option>{starters.map((u) => <option key={u.id} value={u.id}>From {u.name || u.email.split("@")[0]}&apos;s start</option>)}</select>}
-            <Button variant="secondary" title="Re-plans the standing route for every day, and clears any day-only orders">Auto-order</Button></form>
-          <a href="javascript:print()" className="rounded-full bg-navy px-4 py-2 text-sm font-semibold text-white">Print</a>
+          {!storm && (
+            // On a phone the day and its arrows take one row and the set-off time the next; from tablet up it is one line.
+            <div className="flex w-full flex-wrap items-center gap-1 sm:w-auto sm:flex-nowrap">
+              <Link href={`/routes?date=${addDays(day, -1)}`} className={`${dayBtn} order-1`} aria-label="Previous day"><ChevronLeft className="size-4" aria-hidden /></Link>
+              <form className="contents">
+                <Input type="date" name="date" defaultValue={day} aria-label="Day" className="order-2 min-w-0 flex-1 basis-[calc(100%-5.5rem)] sm:w-40! sm:flex-none sm:basis-auto" />
+                <Input type="time" name="start" defaultValue={setOff ?? ""} aria-label="Set off at (for the ETAs)" title="Set off at (for the ETAs)" className="order-4 w-32! flex-none sm:order-3 sm:w-28!" />
+                <Button variant="secondary" className="order-5 sm:order-4">Go</Button>
+              </form>
+              <Link href={`/routes?date=${addDays(day, 1)}`} className={`${dayBtn} order-3 sm:order-5`} aria-label="Next day"><ChevronRight className="size-4" aria-hidden /></Link>
+            </div>
+          )}
+          <ButtonLink href={`${base}${showDone ? "" : "&done=1"}`}>{showDone ? <EyeOff className="size-4" aria-hidden /> : <Eye className="size-4" aria-hidden />}{showDone ? "Hide done" : "Show done"}</ButtonLink>
+          <a href="javascript:print()" className={btn("secondary")}><Printer className="size-4" aria-hidden />Print</a>
         </div>}
       />
-      {visits.length > 1 && team.length > 1 && (
-        <details className="no-print mb-4 rounded-lg border border-line bg-white p-3 text-sm shadow-card">
-          <summary className="cursor-pointer font-semibold">Split this route between people</summary>
-          <form action={routeSplit} className="mt-2 flex flex-wrap items-center gap-3">
-            <input type="hidden" name="back" value={here} />{storm ? <input type="hidden" name="storm" value={storm.id} /> : <input type="hidden" name="date" value={day} />}
-            {team.map((u) => <label key={u.id} className="flex items-center gap-1.5"><input type="checkbox" name="userId" value={u.id} defaultChecked className="size-4" />{u.name || u.email.split("@")[0]}</label>)}
-            <Button variant="secondary">Split</Button>
-            <span className="text-xs text-ink-soft">Keeps each community together and evens out the estimated time (driving plus {times.serviceMin} min a stop). Replaces who&apos;s assigned to open stops.</span>
-          </form>
-        </details>
-      )}
-      {stops.length > 0 && (
-        <div className="no-print mb-4">
-          <RouteMap stops={stops} areas={areas.map((a) => ({ code: a.code, name: a.name, geometry: a.geometry as unknown as GeoJsonObject }))} depot={depotOf(biz)} lines={times.people.map((p) => ({ color: p.color, pts: p.path.map((q) => [q.lat, q.lng] as [number, number]) }))} />
-          {multi && <a href={multi} className="mt-2 flex min-h-12 items-center justify-center rounded-full bg-blue font-semibold text-white">Navigate the next {next.length} stops</a>}
-        </div>
-      )}
-      {times.people.length > 0 && (
-        <div className="mb-4 rounded-lg border border-line bg-white p-3 text-sm shadow-card">
-          {times.people.map((p) => (
-            <p key={p.id}><span className="font-semibold" style={{ color: p.color }}>{p.name}</span>: {p.stops} stop{p.stops === 1 ? "" : "s"} · {duration(p.driveMin)} driving · about {duration(p.totalMin)} in all · back around {clock(p.finish)}</p>
-          ))}
-          <p className="mt-1 text-xs text-ink-soft">Setting off {clock(from)}, {times.serviceMin} min a stop (or what a property usually takes, once it has 3 timed visits), including the drive back. {times.road ? "Road drive times." : "Straight-line estimates at 30 km/h (no road routing)."} Times are estimates.</p>
-        </div>
-      )}
-      {groups.length ? (
-        <div className="space-y-4">
-          {groups.map((g) => (
-            <Card key={g.code ?? "none"} title={<>{g.name} <span className="font-sans text-sm font-normal text-ink-soft">({g.visits.length})</span></>}>
-              <ReorderList action={routeReorder} hidden={{ back: here }} saves={[{ label: storm ? "This storm only" : "This day only", scope: "day" }, { label: "Every time", scope: "always" }]}
-                items={g.visits.map((v) => {
-                  const done = v.state === "COMPLETED";
-                  const eta = times.stops.get(v.id);
-                  return { id: v.id, node: (
-                    <div className={`flex items-start gap-3 py-3 ${done ? "opacity-50" : ""}`}>
-                      <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-navy font-display text-sm font-bold text-white">{stopNo.get(v.id)}</span>
-                      <Link href={`/visits/${v.id}`} className="min-w-0 flex-1">
-                        <span className="block font-semibold">{v.property.formatted}{v.property.routePriority && <span className="ml-2 rounded-full bg-blue/10 px-2 py-0.5 text-xs font-semibold text-blue">do first</span>}{sizeNote(v.job.kind === "SNOW_PLAN" || !!v.snowEventId, v.property) && <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-900">size not checked</span>}</span>
-                        <span className="block text-sm text-ink-soft">
-                          {clientName(v.job.client)} · {v.isReturn ? <b className="text-blue">Return visit</b> : v.job.kind === "SNOW_PLAN" ? "Every snowfall" : v.job.title}
-                          {v.iceMeltApplied || v.job.iceMelt ? " · ice melt" : ""}{v.pushNumber && v.pushNumber > 1 ? ` · push ${v.pushNumber}` : ""}
-                          {times.usual.has(v.id) && ` · usually ${times.usual.get(v.id)} min`}
-                        </span>
-                        {v.property.accessNotes && <span className="block text-sm text-amber-800">{v.property.accessNotes}</span>}
-                      </Link>
-                      {eta && <span className="shrink-0 pt-1 text-sm font-semibold tabular-nums" title={`${duration(eta.driveMin)} drive`}>~{clock(eta.eta)}</span>}
-                      <span className="no-print flex shrink-0 flex-col items-end gap-1">
-                        <a href={mapsLink(v.property.formatted)} className="rounded-full border-2 border-line px-3 py-1.5 text-sm font-semibold">Go</a>
-                        {v.state !== "SCHEDULED" && <Badge tone={done ? "green" : "navy"}>{done ? "Done" : v.state === "SKIPPED" ? "Skipped" : "On it"}</Badge>}
-                      </span>
-                      <span className="hidden size-6 shrink-0 rounded border-2 border-navy print:block" aria-hidden />
-                    </div>
-                  ) };
-                })} />
+      <div className="grid items-start gap-5 lg:grid-cols-2 print:block">
+        <div className="space-y-5 lg:sticky lg:top-20">
+            {stops.length > 0 && (
+              <div className="no-print">
+                <RouteMap stops={stops} areas={areas.map((a) => ({ code: a.code, name: a.name, geometry: a.geometry as unknown as GeoJsonObject }))} depot={depotOf(biz)} lines={times.people.map((p) => ({ color: p.color, pts: p.path.map((q) => [q.lat, q.lng] as [number, number]) }))} />
+                {multi && <a href={multi} className={btn("primary", "mt-3 min-h-12! w-full")}><Navigation className="size-4" aria-hidden />Navigate the next {next.length} stops</a>}
+              </div>
+            )}
+            <Card title="Plan this route" className="no-print">
+                <form action={routeAutoOrder}>
+                  <input type="hidden" name="back" value={here} />
+                  <div className="flex flex-wrap items-center gap-2">
+                    {starters.length > 0 && <select name="from" aria-label="Auto-order starting from" className={`${inputCls} w-auto min-w-44 flex-1`}><option value="">From the depot</option>{starters.map((u) => <option key={u.id} value={u.id}>From {who(u)}&apos;s start</option>)}</select>}
+                    <Button variant="secondary">Auto-order</Button>
+                  </div>
+                  <p className="mt-1.5 text-xs text-ink-soft">Re-plans the standing route for every day by drive time, and clears any day-only orders.</p>
+                </form>
+                {visits.length > 1 && team.length > 1 && (
+                  <details className="mt-4 border-t border-line-soft pt-4">
+                    <summary className="flex min-h-8 items-center text-sm font-semibold">Split this route between people</summary>
+                    <form action={routeSplit} className="mt-2">
+                      <input type="hidden" name="back" value={here} />{storm ? <input type="hidden" name="storm" value={storm.id} /> : <input type="hidden" name="date" value={day} />}
+                      <div className="flex flex-wrap items-center gap-x-4">
+                        {team.map((u) => <label key={u.id} className="flex min-h-11 items-center gap-2 text-sm"><input type="checkbox" name="userId" value={u.id} defaultChecked className="size-5" />{who(u)}</label>)}
+                      </div>
+                      <Button variant="secondary" className="mt-1">Split route</Button>
+                      <p className="mt-2 text-xs text-ink-soft">Keeps each community together and evens out the estimated time (driving plus {times.serviceMin} min a stop). Replaces who&apos;s assigned to open stops.</p>
+                    </form>
+                  </details>
+                )}
             </Card>
-          ))}
         </div>
-      ) : <Empty>{showDone ? "No stops." : "Nothing left on this route."}</Empty>}
+        <div className="space-y-5">
+          {times.people.length > 0 && (
+            <Card title="Time on the road" className="print:mb-4">
+              <div className="-mx-1 overflow-x-auto px-1">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-xs font-medium text-ink-soft"><th scope="col" className="pb-2 text-left font-medium">Person</th><th scope="col" className="pb-2 pl-3 text-right font-medium">Stops</th><th scope="col" className="pb-2 pl-3 text-right font-medium">Driving</th><th scope="col" className="pb-2 pl-3 text-right font-medium">In all</th><th scope="col" className="pb-2 pl-3 text-right font-medium">Back around</th></tr>
+                  </thead>
+                  <tbody className="divide-y divide-line-soft border-t border-line-soft">
+                    {times.people.map((p) => (
+                      <tr key={p.id}>
+                        <th scope="row" className="py-2.5 text-left font-semibold"><span className="inline-flex items-center gap-2"><span className="size-2.5 shrink-0 rounded-full" style={{ background: p.color }} aria-hidden />{p.name}</span></th>
+                        <td className="py-2.5 pl-3 text-right">{p.stops}</td>
+                        <td className="whitespace-nowrap py-2.5 pl-3 text-right">{duration(p.driveMin)}</td>
+                        <td className="whitespace-nowrap py-2.5 pl-3 text-right font-semibold">{duration(p.totalMin)}</td>
+                        <td className="whitespace-nowrap py-2.5 pl-3 text-right">{clock(p.finish)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="mt-3 max-w-[70ch] text-xs text-ink-soft">Setting off {clock(from)}, {times.serviceMin} min a stop (or what a property usually takes, once it has 3 timed visits), including the drive back. {times.road ? "Road drive times." : "Straight-line estimates at 30 km/h (no road routing)."} Times are estimates.</p>
+            </Card>
+          )}
+        {groups.length ? (
+          <div className="space-y-5">
+            {groups.map((g) => (
+              <Card key={g.code ?? "none"} title={g.name} actions={<span className="text-xs font-medium tabular-nums text-ink-soft">{g.visits.length} stop{g.visits.length === 1 ? "" : "s"}</span>} className="print:break-inside-avoid">
+                <div className="-my-1">
+                  <RouteReorder action={routeReorder} hidden={{ back: here }}
+                    saves={[
+                      { label: storm ? "This storm only" : "This day only", scope: "day", hint: storm ? "Only this storm's visits move. The standing route stays as it is." : `Only ${prettyDate(day)} changes. The standing route stays as it is.`, primary: true },
+                      { label: "Every time", scope: "always", hint: "Becomes the standing route, used for every day and storm from now on." },
+                    ]}
+                    items={g.visits.map((v) => {
+                      const done = v.state === "COMPLETED";
+                      const eta = times.stops.get(v.id);
+                      const unchecked = sizeNote(v.job.kind === "SNOW_PLAN" || !!v.snowEventId, v.property);
+                      return { id: v.id, node: (
+                        <div className={`flex items-start gap-3 py-3 ${done ? "opacity-60" : ""}`}>
+                          <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-navy text-xs font-semibold tabular-nums text-white" aria-label={`Stop ${stopNo.get(v.id)}`}>{stopNo.get(v.id)}</span>
+                          <Link href={`/visits/${v.id}`} className="group min-w-0 flex-1 rounded-md">
+                            <span className="block font-semibold group-hover:text-blue-deep">{v.property.formatted}</span>
+                            {(v.property.routePriority || unchecked) && (
+                              <span className="mt-1 flex flex-wrap gap-1.5">{v.property.routePriority && <Badge tone="blue">Do first</Badge>}{unchecked && <Badge tone="amber">Size not checked</Badge>}</span>
+                            )}
+                            <span className="mt-0.5 block text-sm text-ink-soft">
+                              {clientName(v.job.client)} · {v.isReturn ? <span className="font-semibold text-navy">Return visit</span> : v.job.kind === "SNOW_PLAN" ? "Every snowfall" : v.job.title}
+                              {v.iceMeltApplied || v.job.iceMelt ? " · ice melt" : ""}{v.pushNumber && v.pushNumber > 1 ? ` · push ${v.pushNumber}` : ""}
+                              {times.usual.has(v.id) && ` · usually ${times.usual.get(v.id)} min`}
+                            </span>
+                            {v.property.accessNotes && <span className="mt-1 flex gap-1.5 text-sm font-medium text-amber-900"><TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />{v.property.accessNotes}</span>}
+                          </Link>
+                          <span className="flex shrink-0 flex-col items-end gap-1.5">
+                            {eta && <span className="whitespace-nowrap pt-0.5 text-sm font-semibold tabular-nums" title={`${duration(eta.driveMin)} drive`}><span className="sr-only">Arriving about </span><span aria-hidden>~</span>{clock(eta.eta)}</span>}
+                            {v.state !== "SCHEDULED" && <Badge tone={done ? "green" : v.state === "SKIPPED" ? "gray" : "navy"}>{done ? "Done" : v.state === "SKIPPED" ? "Skipped" : "On it"}</Badge>}
+                            <a href={mapsLink(v.property.formatted)} aria-label={`Navigate to ${v.property.formatted}`} className={btn("secondary", "no-print min-h-9! px-3!")}><Navigation className="size-3.5" aria-hidden />Go</a>
+                          </span>
+                          <span className="hidden size-6 shrink-0 rounded border-2 border-navy print:block" aria-hidden />
+                        </div>
+                      ) };
+                    })} />
+                </div>
+              </Card>
+            ))}
+          </div>
+        ) : <Empty action={!showDone && <ButtonLink href={`${base}&done=1`}>Show done stops</ButtonLink>}>{showDone ? `No stops on this route${storm ? "" : ` for ${prettyDate(day)}`}.` : "Nothing left on this route."}</Empty>}
+        </div>
+      </div>
     </>
   );
 }

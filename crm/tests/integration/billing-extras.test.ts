@@ -125,15 +125,16 @@ describe("refunds", () => {
     // charge.refunded for the refund we just made (Stripe's running total = ours): nothing changes, replayed or not.
     expect(await syncStripeRefund(pi, 2500)).toBe(0);
     expect(await syncStripeRefund(pi, 2500)).toBe(0);
-    // A further $10 refunded in the Stripe dashboard: picked up once.
+    // A further $10 refunded in the Stripe dashboard: picked up once. It comes off the $8 tip first (that is how a tip
+    // is refunded), and only the other $2 off the invoice money.
     expect(await syncStripeRefund(pi, 3500)).toBe(1);
     expect(await syncStripeRefund(pi, 3500)).toBe(0);
-    expect(await db.payment.findUniqueOrThrow({ where: { id: p.id } })).toMatchObject({ refundedCents: 3500 });
-    expect((await db.invoice.findUniqueOrThrow({ where: { id: inv.id } })).amountPaidCents).toBe(4500);
+    expect(await db.payment.findUniqueOrThrow({ where: { id: p.id } })).toMatchObject({ refundedCents: 2700, tipRefundedCents: 800 });
+    expect((await db.invoice.findUniqueOrThrow({ where: { id: inv.id } })).amountPaidCents).toBe(5300);
     // The whole charge refunded in the dashboard, tip included: the payment can't go past its own amount.
     expect(await syncStripeRefund(pi, 8800)).toBe(1);
     expect(await db.payment.findUniqueOrThrow({ where: { id: p.id } })).toMatchObject({ refundedCents: 8000, status: "REFUNDED" });
-    expect(await db.activityEvent.count({ where: { entityId: inv.id, type: "payment.refunded" } })).toBe(3);
+    expect(await db.activityEvent.count({ where: { entityId: inv.id, type: "payment.refunded" } })).toBe(4); // ours, the tip, the $2, the rest
     expect(await db.emailMessage.count({ where: { template: "payment.refund", entityId: p.id } })).toBe(3);
     expect(await syncStripeRefund("pi_nobody_has_this", 500)).toBe(0);
   });

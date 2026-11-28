@@ -86,14 +86,33 @@ describe("lateFeeDue", () => {
   it("is the flat fee plus a share of what is owing, from the grace day on", () => {
     expect(lateFeeDue(inv, "2026-12-14", s)).toBe(0);
     expect(lateFeeDue(inv, "2026-12-15", s)).toBe(1000 + 300); // 2% of the $150 still owing
+    expect(lateFeeDue(inv, "2026-12-22", s)).toBe(1300); // still inside the week after it fell due
+    expect(lateFeeDue(inv, "2026-12-23", s)).toBe(0); // old backlog: switching the rule on doesn't fee it
   });
   it("is never added twice, to deposits, to paid or draft invoices, or when switched off", () => {
-    const day = "2027-01-15";
+    const day = "2026-12-16";
     expect(lateFeeDue({ ...inv, lateFeeAppliedAt: new Date() }, day, s)).toBe(0);
     expect(lateFeeDue({ ...inv, kind: "DEPOSIT" }, day, s)).toBe(0);
     expect(lateFeeDue({ ...inv, status: "PAID" }, day, s)).toBe(0);
     expect(lateFeeDue({ ...inv, status: "DRAFT" }, day, s)).toBe(0);
     expect(lateFeeDue({ ...inv, dueOn: null }, day, s)).toBe(0);
     expect(lateFeeDue(inv, day, { ...s, lateFee: false })).toBe(0);
+  });
+});
+
+import { invoiceTotalsWithCredits } from "@/server/billing/invoice";
+describe("invoiceTotalsWithCredits", () => {
+  const onTop = { taxRegistered: true, taxRateBps: 500, pricesIncludeTax: false };
+  it("charges GST on the work, then takes the deposit off the total", () => {
+    // $1,000 job + $50 GST, $525 deposit already paid: $525 still to pay, and the whole $50 of GST is on this invoice.
+    expect(invoiceTotalsWithCredits([100000], 52500, 0, onTop)).toMatchObject({ taxCents: 5000, totalCents: 52500, subtotalCents: 47500 });
+  });
+  it("is the plain total when nothing was prepaid, and never goes below zero", () => {
+    expect(invoiceTotalsWithCredits([3000], 0, 0, NOT_REG).totalCents).toBe(3000);
+    expect(invoiceTotalsWithCredits([3000], 3000, 0, NOT_REG).totalCents).toBe(0);
+    expect(invoiceTotalsWithCredits([3000], 9999, 0, NOT_REG).totalCents).toBe(0);
+  });
+  it("applies a discount before tax and credits after", () => {
+    expect(invoiceTotalsWithCredits([100000], 10000, 10000, onTop)).toMatchObject({ taxCents: 4500, totalCents: 84500 });
   });
 });

@@ -12,6 +12,7 @@ import { plansTriggered } from "../snow/select";
 import { seasonFor } from "../booking/create";
 import { TransitionError } from "../status/visit";
 import { invoiceUnbilled } from "./invoices";
+import { rebuildStormCharges } from "./visit-charges";
 import { alertAssigned } from "./assign-alerts";
 
 type Actor = { id: string; businessId: string };
@@ -99,6 +100,7 @@ export async function setStormDepth(user: Actor, id: string, cm: number) {
   return db.$transaction(async (tx) => {
     const ev = await load(tx, user, id);
     await tx.snowEvent.update({ where: { id }, data: { measuredCm: cm } });
+    await rebuildStormCharges(tx, id); // done visits not yet invoiced follow the storm's depth, whatever order things happened in
     if (ev.status !== "ACTIVE") return;
     const day = todayLocal();
     for (let push = 1; push <= ev.pushCount; push++) await generate(tx, ev, cm, push, day, user.id);

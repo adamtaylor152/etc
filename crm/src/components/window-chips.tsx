@@ -11,11 +11,12 @@ export function WindowChips({ windows = WINDOWS, start = "startTime", end = "end
     if (anyTime instanceof HTMLInputElement) anyTime.checked = false;
   }
   return (
-    <div className="flex flex-wrap items-center gap-1.5 text-xs">
-      <span className="font-semibold text-ink-soft">Window:</span>
+    <div role="group" aria-label="Fill the times from an arrival window" className="flex flex-wrap items-center gap-1.5">
+      <span className="mr-0.5 text-xs font-medium text-ink-soft">Arrival window</span>
       {windows.map((w) => (
-        <button key={w.key} type="button" onClick={(e) => pick(e, w.from, w.to)} className="rounded-full border border-line bg-white px-2.5 py-1 font-semibold hover:border-blue">
-          {w.label} <span className="font-normal text-ink-soft">{windowHint(w)}</span>
+        <button key={w.key} type="button" onClick={(e) => pick(e, w.from, w.to)}
+          className="inline-flex min-h-9 items-center gap-1.5 rounded-full border border-line bg-white px-3 text-[13px] font-semibold hover:border-blue/40 hover:bg-blue/5 hover:text-blue-deep">
+          {w.label}<span className="font-normal tabular-nums text-ink-soft">{windowHint(w)}</span>
         </button>
       ))}
     </div>

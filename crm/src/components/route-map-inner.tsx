@@ -11,7 +11,7 @@ export type MapLine = { color: string; pts: [number, number][] };
 
 const icon = (n: number, done: boolean, color = "#14213d") => L.divIcon({
   className: "",
-  html: `<div style="width:28px;height:28px;border-radius:50%;background:${done ? "#10b981" : color};color:#fff;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;font:700 13px system-ui">${n}</div>`,
+  html: `<div style="width:28px;height:28px;border-radius:50%;background:${done ? "#059669" : color};color:#fff;border:2px solid #fff;box-shadow:0 1px 4px rgba(20,33,61,.4);display:flex;align-items:center;justify-content:center;font:600 13px system-ui;font-variant-numeric:tabular-nums">${n}</div>`,
   iconSize: [28, 28], iconAnchor: [14, 14],
 });
 
@@ -19,7 +19,7 @@ export default function RouteMapInner({ stops, areas, depot, lines = [] }: { sto
   const pts: [number, number][] = [[depot.lat, depot.lng], ...stops.map((s) => [s.lat, s.lng] as [number, number])];
   const bounds = L.latLngBounds(pts).pad(0.15);
   return (
-    <MapContainer bounds={bounds} scrollWheelZoom={false} className="h-80 w-full rounded-2xl sm:h-[28rem]" style={{ zIndex: 0 }}>
+    <MapContainer bounds={bounds} scrollWheelZoom={false} className="h-72 w-full rounded-xl border border-line sm:h-96 lg:h-[min(26rem,calc(100dvh-22rem))] lg:min-h-64" style={{ zIndex: 0 }}>
       <TileLayer url="https://tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' maxZoom={19} />
       {areas.map((a) => (
         <GeoJSON key={a.code} data={a.geometry} style={{ color: "#1d6fd8", weight: 2, fillOpacity: 0.06 }} />
