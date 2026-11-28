@@ -5,7 +5,7 @@ import { BookingConfirmation } from "@/emails/booking";
 import { AutoPayFailed, InvoiceSent, PaymentReceipt, RefundReceipt, StatementEmail, type InvoiceEmailData } from "@/emails/invoice";
 import { HubLink, PlanRenewal, PriceChange, QuoteApproved, QuoteSent, type QuoteEmailData } from "@/emails/quote";
 import { ReviewRequest, VisitScheduled } from "@/emails/schedule";
-import { OnMyWay, StormHeadsUp } from "@/emails/snow";
+import { OnMyWay, StormHeadsUp, VisitSkipped } from "@/emails/snow";
 import { PhotoUploadRequest, VisitDone } from "@/emails/visit";
 import { env } from "../env";
 import type { EmailKey } from "./wording";
@@ -25,6 +25,7 @@ export function samples(): Record<EmailKey, { props: object; el: ReactElement }>
     "photo_upload.request": { props: {}, el: <PhotoUploadRequest name="Sam" services={["Yard cleanup"]} url={url} site={site} phone={phone} /> },
     "price.change": { props: {}, el: <PriceChange name={name} address="123 Sample St SW" size="Large" was="$45" now="$60" plan url={url} site={site} phone={phone} /> },
     "visit.scheduled": { props: {}, el: <VisitScheduled {...visit} /> },
+    "visit.skipped": { props: {}, el: <VisitSkipped name={name} address={address} what="a car was parked across the driveway" next="Move the car and reply to this email, and we'll come back." site={site} phone={phone} /> },
     "visit.on_my_way": { props: {}, el: <OnMyWay name={name} address={address} site={site} phone={phone} /> },
     "storm.heads_up": { props: {}, el: <StormHeadsUp name={name} address={address} cm={8} site={site} phone={phone} /> },
     "visit.done": { props: {}, el: <VisitDone name={name} address={address} when="Tue, Dec 2" what="Snow clearing" depthCm={8} photos={[]} reportUrl={url} site={site} phone={phone} /> },

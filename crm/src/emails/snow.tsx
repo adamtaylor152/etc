@@ -18,14 +18,14 @@ export function OnMyWay({ name, address, site, phone }: { name: string; address:
 
 export function VisitSkipped({ name, address, what, next, site, phone }: { name: string; address: string; what: string; next: string; site: string; phone: string }) {
   return (
-    <EtcEmail title="We couldn't do your visit" preheader={`We came by ${address} but couldn't do the job`}>
+    <EtcEmail title="We couldn't do your visit" preheader={`We came by ${address} but couldn't do the job`} vars={{ first_name: firstName(name), address, reason: what, next_step: next }}>
       <Header right="Visit update" />
       <tr>
         <td className="px" style={{ padding: "32px 40px 26px" }}>
           <Eyebrow>Heads up</Eyebrow>
           <H1>Hi {firstName(name)}, we couldn&apos;t do your visit today</H1>
-          <P>We came by {address}, but {what}. You won&apos;t be charged for this visit.</P>
-          <P>{next}</P>
+          <Intro><P>We came by {address}, but {what}. You won&apos;t be charged for this visit.</P>
+          <P>{next}</P></Intro>
         </td>
       </tr>
       <Footer site={site} phone={phone} reason="You're getting this because you booked a job with etc." />

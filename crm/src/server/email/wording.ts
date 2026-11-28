@@ -39,6 +39,7 @@ export const EMAIL_META = {
   "visit.scheduled": { group: "Visits", label: "You're booked", trigger: "You email a client their visit date.", vars: VISIT_VARS },
   "visit.on_my_way": { group: "Visits", label: "On our way", trigger: "The crew taps On my way (if the automation is on).", vars: ["address"] },
   "storm.heads_up": { group: "Visits", label: "Snow day heads-up", trigger: "A storm is started (if the automation is on).", vars: ["address"] },
+  "visit.skipped": { group: "Visits", label: "We couldn't do your visit", trigger: "A visit is skipped for a reason the client can fix (if the automation is on).", vars: ["address", "reason", "next_step"] },
   "visit.done": { group: "Visits", label: "All done", trigger: "A visit is marked done (if the automation is on).", vars: VISIT_VARS },
   "quote.sent": { group: "Quotes", label: "Your quote", trigger: "You send a quote. A message typed on the quote itself is used instead of this opening.", vars: QUOTE_VARS },
   "quote.follow_up": { group: "Quotes", label: "Quote follow-up", trigger: "A quote has had no answer for a few days. A message typed on the quote itself is used instead of this opening.", vars: QUOTE_VARS },
