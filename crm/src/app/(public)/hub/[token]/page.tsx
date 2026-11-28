@@ -9,7 +9,8 @@ import { signedMediaPath } from "@/server/media";
 import { money } from "@/server/money";
 import { mintToken, peekToken } from "@/server/tokens";
 import { renewalSeason } from "@/server/ops/jobs";
-import { hubPausePlan, hubRenewPlan, hubRequestWork, hubSetTexts } from "./actions";
+import { stripeEnabled } from "@/server/stripe";
+import { hubPausePlan, hubPayAll, hubRenewPlan, hubRequestWork, hubSetTexts } from "./actions";
 
 export const metadata = { title: { absolute: "Your etc. page" } };
 
@@ -50,7 +51,13 @@ export default async function Hub({ params, searchParams }: PageProps<"/hub/[tok
       {sp.requested && <p className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 font-medium text-emerald-800">Thanks! We got your request and will be in touch.</p>}
       {sp.error && <p className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">{String(sp.error)}</p>}
       <h1 className="font-display text-3xl font-bold">Hi {c.firstName}!</h1>
-      {owing > 0 && <Card className="border-blue/30"><p className="font-semibold">{money(owing)} owing. Pay from an invoice below.</p></Card>}
+      {sp.paid && <p className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 font-medium text-emerald-800">Payment received. Thank you!</p>}
+      {owing > 0 && (
+        <Card className="border-blue/30">
+          <p className="font-semibold">{money(owing)} owing.{stripeEnabled() ? "" : " Pay from an invoice below."}</p>
+          {stripeEnabled() && <form action={hubPayAll} className="mt-2"><input type="hidden" name="t" value={token} /><button className="min-h-12 rounded-full bg-blue px-6 font-semibold text-white">Pay {money(owing)} by card</button></form>}
+        </Card>
+      )}
       <Card title="Payment history" actions={<a href={`/hub/${token}/statement`} className="text-sm font-semibold text-blue">Statement</a>}>
         {payments.length ? (
           <ul className="divide-y divide-line text-sm">{payments.map((p) => <li key={p.id} className="flex justify-between py-2"><span>{p.receivedAt.toLocaleDateString("en-CA", { timeZone: "America/Edmonton", month: "short", day: "numeric", year: "numeric" })} · {p.method === "ETRANSFER" ? "e-Transfer" : p.method.charAt(0) + p.method.slice(1).toLowerCase()} · invoice #{p.invoice.number}</span><span className="font-semibold">{money(p.amountCents - p.refundedCents)}</span></li>)}</ul>
