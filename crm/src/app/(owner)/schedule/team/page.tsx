@@ -5,6 +5,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { RouteMap } from "@/components/route-map";
 import { ScheduleTabs } from "@/components/schedule-tabs";
 import { TeamBoard, type BoardCard, type Lane } from "@/components/team-board";
+import { btn, Card, Empty } from "@/components/ui";
 import { conflicts, fmtMin, onTimeOff, unavailable } from "@/server/availability";
 import { addDays, todayLocal } from "@/server/dates";
 import { businessId, db } from "@/server/db";
@@ -40,26 +41,34 @@ export default async function TeamSchedule({ searchParams }: PageProps<"/schedul
     done: visitState.get(b.id)!.state === "COMPLETED", color: personOf.get(b.userIds[0])?.color,
   })) : [];
   const nav = (d: string, s = week ? "week" : "day") => `/schedule/team?date=${d}&span=${s}`;
+  const seg = "inline-flex min-h-8 items-center rounded-md px-3 text-[13px] font-semibold";
   return (
     <>
       <ScheduleTabs active="/schedule/team" />
-      <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
-        <Link href={nav(addDays(date, week ? -7 : -1))} className="rounded-lg border border-line bg-white p-2" aria-label="Previous"><ChevronLeft className="size-4" /></Link>
-        <Link href={nav(todayLocal())} className="rounded-lg border border-line bg-white px-3 py-1.5 font-semibold">Today</Link>
-        <Link href={nav(addDays(date, week ? 7 : 1))} className="rounded-lg border border-line bg-white p-2" aria-label="Next"><ChevronRight className="size-4" /></Link>
-        <span className="font-semibold">{week ? `Week of ${new Date(`${start}T12:00:00Z`).toLocaleDateString("en-CA", { month: "long", day: "numeric", timeZone: "UTC" })}` : new Date(`${date}T12:00:00Z`).toLocaleDateString("en-CA", { weekday: "long", month: "long", day: "numeric", timeZone: "UTC" })}</span>
-        <span className="ml-auto flex gap-1 rounded-lg bg-white p-1 shadow-card">
-          <Link href={nav(date, "day")} className={`rounded-md px-3 py-1 font-semibold ${!week ? "bg-navy text-white" : "text-ink-soft"}`}>Day</Link>
-          <Link href={nav(date, "week")} className={`rounded-md px-3 py-1 font-semibold ${week ? "bg-navy text-white" : "text-ink-soft"}`}>Week</Link>
-        </span>
+      <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2">
+        <div className="flex items-center gap-2">
+          <Link href={nav(todayLocal())} className={btn("secondary", "min-h-9 px-3 text-[13px]")}>Today</Link>
+          <div className="flex">
+            <Link href={nav(addDays(date, week ? -7 : -1))} className={btn("secondary", "min-h-9 rounded-r-none px-2")} aria-label={week ? "Previous week" : "Previous day"}><ChevronLeft className="size-4" strokeWidth={1.75} aria-hidden /></Link>
+            <Link href={nav(addDays(date, week ? 7 : 1))} className={btn("secondary", "-ml-px min-h-9 rounded-l-none px-2")} aria-label={week ? "Next week" : "Next day"}><ChevronRight className="size-4" strokeWidth={1.75} aria-hidden /></Link>
+          </div>
+        </div>
+        <h2 className="font-display text-[1.15rem] font-semibold tabular-nums">{week ? `Week of ${new Date(`${start}T12:00:00Z`).toLocaleDateString("en-CA", { month: "long", day: "numeric", timeZone: "UTC" })}` : new Date(`${date}T12:00:00Z`).toLocaleDateString("en-CA", { weekday: "long", month: "long", day: "numeric", timeZone: "UTC" })}</h2>
+        <div className="ml-auto flex gap-1 rounded-lg bg-tint p-1" role="group" aria-label="Span">
+          <Link href={nav(date, "day")} aria-current={!week ? "true" : undefined} className={`${seg} ${!week ? "bg-white text-navy shadow-sm" : "text-ink-soft hover:text-navy"}`}>Day</Link>
+          <Link href={nav(date, "week")} aria-current={week ? "true" : undefined} className={`${seg} ${week ? "bg-white text-navy shadow-sm" : "text-ink-soft hover:text-navy"}`}>Week</Link>
+        </div>
       </div>
-      <div className={`grid gap-4 ${!week ? "xl:grid-cols-[1fr_26rem]" : ""}`}>
-        <TeamBoard lanes={lanes} dates={dates} cards={cards} />
+      <div className={`grid items-start gap-5 ${!week ? "xl:grid-cols-[minmax(0,1fr)_26rem]" : ""}`}>
+        <div className="min-w-0">
+          <TeamBoard lanes={lanes} dates={dates} cards={cards} today={todayLocal()} />
+          <p className="mt-2 text-xs text-ink-soft">Drag a card to another person to reassign it{week ? ", or to another day to move it" : "; switch to Week to move it to another day"}. Finished work and storm visits stay where they are.</p>
+        </div>
         {!week && (
-          <section className="rounded-lg border border-line bg-white p-2 shadow-card">
-            {stops.length ? <RouteMap stops={stops} areas={[]} depot={{ lat: biz.depotLat ?? 50.91, lng: biz.depotLng ?? -114.11 }} /> : <p className="p-6 text-center text-sm text-ink-soft">No mapped visits this day.</p>}
-            <p className="px-2 pb-1 pt-2 text-xs text-ink-soft">Pins are coloured by person. Drag cards between people to reassign; between days on the week view to move.</p>
-          </section>
+          <Card className="p-2! sm:p-2!">
+            {stops.length ? <RouteMap stops={stops} areas={[]} depot={{ lat: biz.depotLat ?? 50.91, lng: biz.depotLng ?? -114.11 }} /> : <Empty>No mapped visits this day.</Empty>}
+            <p className="px-2 pb-1 pt-2 text-xs text-ink-soft">Pins are coloured by person.</p>
+          </Card>
         )}
       </div>
     </>
