@@ -1,15 +1,15 @@
-import { ButtonLink } from "@/components/ui";
 import { requireOwner } from "@/server/auth";
 import { clientTagsBulk } from "../client-actions";
 import { Prisma } from "@/generated/prisma/client";
 import { ListPage, listHref, pageOf, sortRows } from "@/components/list-page";
-import { Badge } from "@/components/ui";
+import { Badge, Button, ButtonLink, btn } from "@/components/ui";
 import { addDays, dateOnly, fromLocalInput, localDayStart, prettyDate, todayLocal } from "@/server/dates";
 import { businessId, db } from "@/server/db";
 import { money } from "@/server/money";
 import { clientName, inOrder, like, nameHas, textHas, words } from "@/server/queries";
 
 export const metadata = { title: "Clients" };
+const ctl = "min-h-10 rounded-lg border border-line bg-white px-3 text-base outline-none hover:border-ink-faint/60 focus:border-blue focus:ring-2 focus:ring-blue/20 sm:text-sm";
 type Status = "lead" | "active" | "archived";
 
 export default async function Clients({ searchParams }: PageProps<"/clients">) {
@@ -79,7 +79,7 @@ export default async function Clients({ searchParams }: PageProps<"/clients">) {
   return (
     <ListPage
       title="Clients" base="/clients" params={params} at={at} newHref="/clients/new" newLabel="New client"
-      actions={<><ButtonLink href="/clients/import">Import</ButtonLink><a href="/api/export/clients" className="inline-flex min-h-10 items-center rounded-lg border border-line bg-white px-4 text-sm font-semibold hover:bg-tint">Export</a></>} searchPlaceholder="Search name, phone, email, address, tag"
+      actions={<><ButtonLink href="/clients/import">Import</ButtonLink><a href="/api/export/clients" className={btn("secondary")}>Export</a></>} searchPlaceholder="Search name, phone, email, address, tag"
       overview={(["active", "lead", "archived"] as const).map((s, n) => ({ label: s === "lead" ? "Leads" : s === "active" ? "Active" : "Archived", count: counts[n], dot: dot[s], active: status === s, href: listHref("/clients", params, { status: s }) }))}
       metrics={[
         { label: "New leads", value: newLeads, sub: "past 30 days", href: listHref("/clients", {}, { status: "lead" }) },
@@ -91,11 +91,11 @@ export default async function Clients({ searchParams }: PageProps<"/clients">) {
         ...(tags.length ? [{ name: "tag", label: "Tag", value: params.tag ?? "", options: [{ value: "", label: "Any tag" }, ...tags.map((t) => ({ value: t, label: t }))] }] : []),
       ]}
       columns={[
-        { key: "name", label: "Name", sortable: true },
+        { key: "name", label: "Name", sortable: true, className: "max-sm:row-span-2" },
         { key: "address", label: "Address", className: "hidden md:table-cell" },
         { key: "tags", label: "Tags", className: "hidden lg:table-cell" },
         { key: "status", label: "Status" },
-        { key: "last", label: "Last activity", sortable: true, className: "hidden sm:table-cell" },
+        { key: "last", label: "Last activity", sortable: true, align: "right", className: "hidden sm:table-cell" },
         { key: "balance", label: "Balance", sortable: true, align: "right" },
       ]}
       rows={rows.map((c) => {
@@ -105,22 +105,22 @@ export default async function Clients({ searchParams }: PageProps<"/clients">) {
         return {
           id: c.id, href: `/clients/${c.id}`,
           cells: {
-            name: <>{clientName(c)}<span className="block text-xs font-normal text-ink-soft">{c.phone ?? c.email}</span></>,
-            address: <>{c.properties[0]?.formatted.split(",")[0] ?? "—"}{c.properties[0]?.community && <span className="block text-xs text-ink-soft">{c.properties[0].community.name}</span>}</>,
+            name: <>{clientName(c)}<span className="block truncate text-[13px] font-normal text-ink-soft sm:text-xs">{c.phone ?? c.email}</span></>,
+            address: <>{c.properties[0]?.formatted.split(",")[0] ?? <span className="text-ink-faint">—</span>}{c.properties[0]?.community && <span className="block text-xs text-ink-soft">{c.properties[0].community.name}</span>}</>,
             tags: <span className="flex flex-wrap gap-1">{c.tags.map((t) => <Badge key={t}>{t}</Badge>)}</span>,
             status: <Badge tone={s === "active" ? "green" : s === "lead" ? "blue" : "gray"}>{s === "lead" ? "Lead" : s === "active" ? "Active" : "Archived"}</Badge>,
-            last: l ? prettyDate(dateOnly(l)) : <span className="text-ink-soft">—</span>,
-            balance: b > 0 ? <span className="font-semibold text-amber-700">{money(b)}</span> : <span className="text-ink-soft">{money(0)}</span>,
+            last: l ? <span className="text-ink-soft">{prettyDate(dateOnly(l))}</span> : <span className="text-ink-faint">—</span>,
+            balance: b > 0 ? <span className="font-semibold text-amber-800" title="Owing on sent invoices">{money(b)}</span> : <span className="text-ink-faint">{money(0)}</span>,
           },
         };
       })}
       bulk={{
         action: clientTagsBulk,
         controls: <>
-          <select name="mode" className="h-9 rounded-lg border border-line bg-white px-2"><option value="add">Add tag</option><option value="remove">Remove tag</option></select>
-          <input name="tag" required placeholder="tag" list="client-tags" className="h-9 w-32 rounded-lg border border-line px-2" />
+          <select name="mode" aria-label="What to do with the tag" className={ctl}><option value="add">Add tag</option><option value="remove">Remove tag</option></select>
+          <input name="tag" required placeholder="Tag" aria-label="Tag" list="client-tags" className={`${ctl} w-36 min-w-0 max-sm:flex-1`} />
           <datalist id="client-tags">{tags.map((t) => <option key={t} value={t} />)}</datalist>
-          <button className="h-9 rounded-lg bg-navy px-3 font-semibold text-white">Apply</button>
+          <Button variant="secondary">Apply to ticked</Button>
         </>,
       }}
       empty="No clients match."

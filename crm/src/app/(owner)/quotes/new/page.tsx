@@ -7,7 +7,8 @@ import { ClientPick } from "@/components/client-pick";
 import { Flash } from "@/components/flash";
 import { Gallery } from "@/components/gallery";
 import { QuoteLinesEditor } from "@/components/quote-lines";
-import { Button, Card, Field, Input, PageHeader, Textarea, inputCls } from "@/components/ui";
+import { DetailHeader } from "@/components/detail-header";
+import { Button, Card, Field, Input, Textarea, inputCls } from "@/components/ui";
 import { businessId, db } from "@/server/db";
 import { templateLines } from "@/server/ops/quotes";
 import { clientName } from "@/server/queries";
@@ -39,33 +40,45 @@ export default async function NewQuote({ searchParams }: PageProps<"/quotes/new"
     : like ? { title: like.title, message: like.message, lines: like.lineItems.map((l) => ({ ...l, quantity: Number(l.quantity) })), options: quoteOptions(like.options) } : null;
   const lines = src?.lines ?? asked;
   const here = (template: string) => `/quotes/new?${new URLSearchParams({ ...(request ? { request: request.id } : { client: client.id }), template })}`;
+  const link = "font-semibold text-blue hover:text-blue-deep";
   return (
-    <div className="mx-auto max-w-3xl">
+    <div className="max-w-3xl">
+      <DetailHeader back={request ? { href: `/requests/${request.id}`, label: `Request #${request.number}` } : { href: `/clients/${client.id}`, label: clientName(client) }} title="New quote"
+        sub={<>For <Link className={link} href={`/clients/${client.id}`}>{clientName(client)}</Link>{request && <> · from <Link className={link} href={`/requests/${request.id}`}>request #{request.number}</Link></>}{like && <> · like <Link className={link} href={`/quotes/${like.id}`}>quote #{like.number}</Link></>}</>} />
       <Flash error={sp.error} />
-      <PageHeader title="New quote" sub={<>For <Link className="font-semibold text-blue" href={`/clients/${client.id}`}>{clientName(client)}</Link>{request && <> · from <Link className="font-semibold text-blue" href={`/requests/${request.id}`}>request #{request.number}</Link></>}{like && <> · like <Link className="font-semibold text-blue" href={`/quotes/${like.id}`}>quote #{like.number}</Link></>}</>} />
       {templates.length > 0 && !like && (
-        <p className="mb-4 flex flex-wrap items-center gap-2 text-sm"><span className="text-ink-soft">Start from a template:</span>
-          {templates.map((t) => <Link key={t.id} href={here(t.id)} className={`rounded-full px-3 py-1 font-semibold ${tpl?.id === t.id ? "bg-navy text-white" : "bg-tint"}`}>{t.name}</Link>)}
-        </p>
+        <div className="mb-4 flex flex-wrap items-center gap-2 text-sm" role="group" aria-label="Start from a template">
+          <span className="mr-1 text-xs font-medium text-ink-soft">Start from a template</span>
+          {templates.map((t) => <Link key={t.id} href={here(t.id)} aria-current={tpl?.id === t.id ? "true" : undefined} className={`inline-flex min-h-9 items-center rounded-full border px-3.5 text-[13px] font-medium ${tpl?.id === t.id ? "border-blue/30 bg-blue/8 font-semibold text-blue-deep" : "border-line bg-white text-ink-soft hover:border-ink-faint/60 hover:text-navy"}`}>{t.name}</Link>)}
+        </div>
       )}
-      {photos.length > 0 && <Card title="Client's photos" className="mb-4"><Gallery photos={photos} back={`/quotes/new?request=${request!.id}`} controls={false} /></Card>}
-      {request?.notes && <Card title="Client's notes" className="mb-4"><p className="whitespace-pre-line text-sm">{request.notes}</p></Card>}
-      <Card>
-        <form key={tpl?.id ?? like?.id ?? "blank"} action={quoteCreate} className="space-y-4">
-          <input type="hidden" name="clientId" value={client.id} />
-          {tpl && <input type="hidden" name="templateId" value={tpl.id} />}
-          {like && <input type="hidden" name="similarId" value={like.id} />}
-          {request && <input type="hidden" name="requestId" value={request.id} />}
-          <Field label="Property">
-            <select name="propertyId" className={inputCls} defaultValue={request?.propertyId ?? (like?.clientId === client.id ? like.propertyId : null) ?? undefined}>{client.properties.map((p) => <option key={p.id} value={p.id}>{p.formatted}</option>)}</select>
-          </Field>
-          <Field label="Title"><Input name="title" required defaultValue={src?.title ?? (lines.map((l) => l.name).join(" + ") || "")} placeholder="e.g. Deck & fence cleaning" /></Field>
-          <QuoteLinesEditor lines={lines} options={src?.options} services={services.map((s) => ({ name: s.name, description: s.description, unitPriceCents: s.unitPriceCents }))} />
-          <Field label="Message to the client (optional)"><Textarea name="message" rows={3} defaultValue={src?.message ?? ""} placeholder="Thanks for the photos! Here's what we'd do…" /></Field>
-          {src && <p className="text-sm text-ink-soft">The options, discount and deposit settings come along too (line photos don&apos;t); check them on the next screen. The quote gets a new number and 30 days to respond.</p>}
-          <Button>Create quote</Button>
-        </form>
-      </Card>
+      <div className="space-y-5">
+        {photos.length > 0 && <Card title="Client's photos"><Gallery photos={photos} back={`/quotes/new?request=${request!.id}`} controls={false} /></Card>}
+        {request?.notes && <Card title="Client's notes"><p className="max-w-[70ch] whitespace-pre-line text-sm">{request.notes}</p></Card>}
+        <Card>
+          <form key={tpl?.id ?? like?.id ?? "blank"} action={quoteCreate} className="space-y-5">
+            <input type="hidden" name="clientId" value={client.id} />
+            {tpl && <input type="hidden" name="templateId" value={tpl.id} />}
+            {like && <input type="hidden" name="similarId" value={like.id} />}
+            {request && <input type="hidden" name="requestId" value={request.id} />}
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="Title"><Input name="title" required defaultValue={src?.title ?? (lines.map((l) => l.name).join(" + ") || "")} placeholder="e.g. Deck & fence cleaning" /></Field>
+              <Field label="Property">
+                <select name="propertyId" className={inputCls} defaultValue={request?.propertyId ?? (like?.clientId === client.id ? like.propertyId : null) ?? undefined}>{client.properties.map((p) => <option key={p.id} value={p.id}>{p.formatted}</option>)}</select>
+              </Field>
+            </div>
+            <div className="border-t border-line-soft pt-5">
+              <QuoteLinesEditor lines={lines} options={src?.options} services={services.map((s) => ({ name: s.name, description: s.description, unitPriceCents: s.unitPriceCents }))} />
+            </div>
+            <Field label="Message to the client (optional)"><Textarea name="message" rows={3} defaultValue={src?.message ?? ""} placeholder="Thanks for the photos! Here's what we'd do…" /></Field>
+            <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-3 border-t border-line-soft pt-4">
+              <p className="mr-auto max-w-[52ch] text-xs text-ink-soft">{src ? <>The options, discount and deposit settings come along too (line photos don&apos;t); check them on the next screen. The quote gets a new number and 30 days to respond.</> : "Saved as a draft. Discount, deposit and line photos are on the next screen, where you send it."}</p>
+              <Link href={request ? `/requests/${request.id}` : `/clients/${client.id}`} className="inline-flex min-h-10 items-center rounded-lg px-1 text-sm font-semibold text-ink-soft hover:text-navy">Cancel</Link>
+              <Button>Create quote</Button>
+            </div>
+          </form>
+        </Card>
+      </div>
     </div>
   );
 }
