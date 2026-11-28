@@ -655,6 +655,7 @@ model Job {
   billingType        BillingType      @default(PER_VISIT)
   invoiceSchedule    InvoiceSchedule  @default(AFTER_EACH_VISIT)
   totalCents         Int?
+  discountCents      Int              @default(0) // discount agreed on the quote this job came from: comes off its first invoice, once
   // RECURRING
   rrule              String?
   recurrenceStartsOn DateTime?        @db.Date
@@ -918,6 +919,7 @@ model Payment {
   feeCents                Int?
   refundedCents           Int           @default(0)
   tipCents                Int? // card tip on top of amountCents: never part of the invoice balance or GST
+  tipRefundedCents        Int           @default(0) // how much of the tip went back (refunds in Stripe come off the tip first)
   receivedAt              DateTime      @default(now())
   reference               String?
   note                    String?

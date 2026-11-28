@@ -2,12 +2,12 @@
 import { assertChecklistDone } from "./checklists";
 import { assertSigned } from "./signatures";
 import { Prisma, type SkipReason, type VisitState } from "@/generated/prisma/client";
-import { chargesForVisit, extrasOffered, parseOverrides, STORM_CHARGE, type OverrideLine } from "../billing/charges";
+import { extrasOffered, STORM_CHARGE, type OverrideLine } from "../billing/charges";
 import { visitLinesLock } from "../status/job";
-import { dueDate } from "../billing/invoice";
 import { dateOnly, todayLocal, toDbDate } from "../dates";
-import { invoiceUnbilled } from "./invoices";
-import { db, type Tx } from "../db";
+import { invoiceUnbilled, issueInvoice } from "./invoices";
+import { rebuildCharges, rebuildStormCharges } from "./visit-charges";
+import { db } from "../db";
 import { enqueue, enqueueSms, kickOutbox } from "../email/outbox";
 import { env } from "../env";
 import { logActivity } from "../records";
@@ -21,11 +21,6 @@ export type TransitionExtra = {
   skipReason?: SkipReason; skipNote?: string; depthCm?: number | null; iceMeltApplied?: boolean | null;
   lat?: number | null; lng?: number | null; iceMeltBags?: number | null;
 };
-
-async function iceMeltPrice(tx: Tx, businessId: string) {
-  const s = await tx.service.findUnique({ where: { businessId_key: { businessId, key: "ice_melt" } } });
-  return s?.unitPriceCents ?? 500;
-}
 
 export async function transitionVisit(user: Actor, visitId: string, to: VisitState, extra: TransitionExtra = {}) {
   const updated = await transitionTx(user, visitId, to, extra);
@@ -62,26 +57,15 @@ function transitionTx(user: Actor, visitId: string, to: VisitState, extra: Trans
     if (to === "SKIPPED") Object.assign(data, { skippedAt: now, skipReason: extra.skipReason ?? "OTHER", skipNote: extra.skipNote || null });
     if (to === "SCHEDULED") Object.assign(data, { completedAt: null, skippedAt: null, skipReason: null, skipNote: null, enRouteAt: null, arrivedAt: null, iceMeltBags: null });
     const updated = await tx.visit.update({ where: { id: visitId }, data });
+    // This push carried the once-per-storm charge and is no longer done: the charge moves to another completed push.
+    if ((to === "SCHEDULED" || to === "CANCELLED") && v.snowEventId && v.charges.some((c) => !c.invoiceLineItemId && c.name.startsWith(STORM_CHARGE))) await rebuildStormCharges(tx, v.snowEventId, v.jobId);
 
     if (to === "COMPLETED") {
-      const job = { ...v.job, lineItems: v.job.lineItems.map((l) => ({ ...l, quantity: Number(l.quantity) })) };
-      const stormCharged = v.job.snowBillingMode === "PER_EVENT" && !!v.snowEventId // startsWith: a depth tier adds to the name
-        && (await tx.visitCharge.count({ where: { name: { startsWith: STORM_CHARGE }, visit: { jobId: v.jobId, snowEventId: v.snowEventId, id: { not: visitId } } } })) > 0;
-      // Read after the update above: it holds the visit's row lock, so an extra the client is adding right now is either in or refused.
-      const extras = await tx.visitExtra.findMany({ where: { visitId }, orderBy: { createdAt: "asc" } });
-      // Depth for the tier: what the crew measured here, else the storm's.
-      const lines = chargesForVisit(job, {
-        iceMeltApplied: updated.iceMeltApplied, stormCharged, overrides: parseOverrides(v.lineOverrides),
-        depthCm: updated.depthCm ?? v.snowEvent?.measuredCm ?? null, isReturn: v.isReturn, returnPriceCents: v.returnPriceCents,
-      }, await iceMeltPrice(tx, user.businessId), extras);
-      if (lines.length) await tx.visitCharge.createMany({ data: lines.map((l) => ({ ...l, businessId: user.businessId, visitId })) });
+      const lines = (await rebuildCharges(tx, visitId)) ?? [];
       // Billed per visit (one-off jobs): invoice it now so the "all done" email can carry a pay link.
       if (lines.length && v.job.invoiceSchedule === "AFTER_EACH_VISIT") {
         const inv = await invoiceUnbilled(user, { clientId: v.job.clientId, visitId }, tx);
-        if ((await getSettings(tx, user.businessId)).autoSendVisitInvoices) {
-          const today = todayLocal();
-          await tx.invoice.update({ where: { id: inv.id }, data: { status: "AWAITING_PAYMENT", issuedOn: toDbDate(today), dueOn: toDbDate(dueDate(today, inv.paymentTerms)), sentAt: new Date() } });
-        }
+        if ((await getSettings(tx, user.businessId)).autoSendVisitInvoices) await issueInvoice(tx, inv.id); // same rules as Send: settles a zero balance, stamps auto-pay
       }
       // "All done" email with before/after photos. Waits 5 minutes so photos taken right after tapping Done make it in;
       // the dedupe key means reopening and completing again never sends it twice.

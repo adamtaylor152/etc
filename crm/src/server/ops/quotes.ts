@@ -107,7 +107,7 @@ export async function sendQuote(user: Actor, quoteId: string, via: "EMAIL" | "SM
     await tx.quote.update({ where: { id: quoteId }, data: { status: "AWAITING_RESPONSE", sentAt: q.sentAt ?? new Date(), lastSentAt: new Date(), lastSentVia: via, changesRequestedAt: null } });
     if (via === "SMS") {
       if (!smsEnabled()) throw new TransitionError("Texting isn't set up yet (Telnyx key missing)");
-      const queued = await enqueueSms(tx, { businessId: user.businessId, template: "sms.quote", client: q.client, props: { quoteId }, dedupeKey: `quote:${quoteId}:sent-sms:${Date.now()}`, entityType: "Quote", entityId: quoteId });
+      const queued = await enqueueSms(tx, { businessId: user.businessId, template: "sms.quote", client: q.client, props: { quoteId }, dedupeKey: `quote:${quoteId}:sent-sms:${Math.floor(Date.now() / 60_000)}`, entityType: "Quote", entityId: quoteId });
       if (!queued) throw new TransitionError(`${q.client.firstName} hasn't agreed to texts, texted STOP, or has no mobile number. Send it by email instead.`);
     } else {
       await enqueue(tx, {
@@ -217,7 +217,7 @@ export async function convertQuote(user: Actor, quoteId: string, input: { date: 
     const job = await tx.job.create({
       data: {
         businessId: user.businessId, number: await nextNumber(tx, user.businessId, "JOB"), clientId: q.clientId, propertyId, requestId: q.requestId,
-        quoteId: q.id, kind: "ONE_OFF", title: q.title ?? "Job", billingType: input.billingType,
+        quoteId: q.id, kind: "ONE_OFF", title: q.title ?? "Job", billingType: input.billingType, discountCents: q.discountCents, // comes off the job's first invoice
         invoiceSchedule: input.billingType === "PER_VISIT" ? "AFTER_EACH_VISIT" : "ON_COMPLETION",
         totalCents: input.billingType === "FIXED_PRICE" ? quoteTotal(offered, q.discountCents) : null, // pre-tax: the invoice adds GST itself
         lineItems: { create: lines.map((l, i) => ({ name: l.name, description: l.description, quantity: l.quantity, unitPriceCents: l.unitPriceCents, totalCents: l.totalCents, perVisit: input.billingType === "PER_VISIT", sortOrder: i })) },
