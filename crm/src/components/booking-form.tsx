@@ -2,14 +2,18 @@
 // The CRM's own booking form (app.etccrew.ca/book). Posts to the same /api/public/bookings as etccrew.ca's wizard,
 // so validation, pricing and emails are identical. Services and prices come from the price book.
 import { useState } from "react";
+import { shrink } from "./photo-uploader";
 
 type Service = { label: string; price: string | null };
 
 export function BookingForm({ services, phone }: { services: Service[]; phone: string }) {
   const [picked, setPicked] = useState<string[]>([]);
   const [plan, setPlan] = useState("One-time visit");
-  const [state, setState] = useState<{ status: "idle" | "sending" | "done" | "error"; msg?: string; upload?: string; estimate?: string; id?: number }>({ status: "idle" });
+  const [size, setSize] = useState("Standard");
+  const [photos, setPhotos] = useState<File[]>([]);
+  const [state, setState] = useState<{ status: "idle" | "sending" | "done" | "error"; msg?: string; upload?: string; estimate?: string; id?: number; sent?: number; unsent?: number }>({ status: "idle" });
   const shovel = picked.includes("Snow shovelling");
+  const quoted = picked.some((s) => s !== "Snow shovelling") || (shovel && size === "Oversized"); // same rule as the server
   const input = "w-full min-h-11 rounded-xl border border-line bg-white px-3 py-2 text-base";
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
@@ -26,7 +30,18 @@ export function BookingForm({ services, phone }: { services: Service[]; phone: s
     const res = await fetch("/api/public/bookings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).catch(() => null);
     const data = await res?.json().catch(() => ({}));
     if (!res?.ok) return setState({ status: "error", msg: `${data?.error ?? "Couldn't reach us."} You can also call ${phone}.` });
-    setState({ status: "done", upload: data.uploadUrl, estimate: data.estimate, id: data.id });
+    // Quote jobs come back with a photo link: send the photos they picked through it, one at a time.
+    const send = quoted && data.uploadUrl ? photos : [];
+    let sent = 0;
+    for (const [i, p] of send.entries()) {
+      setState({ status: "sending", msg: `Sending photo ${i + 1} of ${send.length}…` });
+      const fd = new FormData();
+      fd.append("file", await shrink(p), "photo.jpg");
+      const r = await fetch(new URL(data.uploadUrl).pathname.replace(/^\/u\//, "/api/public/uploads/"), { method: "POST", body: fd }).catch(() => null);
+      if (!r?.ok) break; // booking is in; the done screen links to the photo page for the rest
+      sent++;
+    }
+    setState({ status: "done", upload: data.uploadUrl, estimate: data.estimate, id: data.id, sent, unsent: send.length - sent });
   }
 
   if (state.status === "done") {
@@ -35,7 +50,9 @@ export function BookingForm({ services, phone }: { services: Service[]; phone: s
         <div className="text-5xl">🙌</div>
         <h2 className="mt-2 font-display text-2xl font-bold">Thanks, neighbour! Booking #{state.id} is in.</h2>
         <p className="mt-2 text-ink-soft">Estimate: <b>{state.estimate}</b> (tax included). A confirmation is on its way, and Silas will be in touch to lock in a time.</p>
-        {state.upload && <a href={state.upload} className="mt-4 inline-flex min-h-12 items-center rounded-full bg-blue px-6 font-semibold text-white">Send us photos for a faster quote</a>}
+        {!!state.sent && <p className="mt-2 text-ink-soft">📸 Got your {state.sent} photo{state.sent === 1 ? "" : "s"}, thanks!</p>}
+        {!!state.unsent && <p className="mt-2 font-semibold text-amber-800">{state.unsent} photo{state.unsent === 1 ? "" : "s"} didn&apos;t send. Use the button below to try again.</p>}
+        {state.upload && <a href={state.upload} className="mt-4 inline-flex min-h-12 items-center rounded-full bg-blue px-6 font-semibold text-white">{state.sent ? "Add more photos" : "Send us photos for a faster quote"}</a>}
       </div>
     );
   }
@@ -70,8 +87,8 @@ export function BookingForm({ services, phone }: { services: Service[]; phone: s
             <label key={p} className="flex items-center gap-2"><input type="radio" name="plan" checked={plan === p} onChange={() => setPlan(p)} className="size-5" /> {p}{p === "Every snowfall" && <span className="text-sm text-ink-soft"> ($5 off every time)</span>}</label>
           ))}
           <p className="pt-1 text-sm font-semibold">How big is the driveway?</p>
-          {[["Standard", "1–2 car, front walk and steps"], ["Large", "3 car, extra long or wide (+$15)"], ["Oversized", "Acreage, back lane, shared or commercial (we'll quote)"]].map(([v, d], i) => (
-            <label key={v} className="flex items-center gap-2"><input type="radio" name="size" value={v} defaultChecked={i === 0} className="size-5" /> <span><b>{v}</b> <span className="text-sm text-ink-soft">{d}</span></span></label>
+          {[["Standard", "1–2 car, front walk and steps"], ["Large", "3 car, extra long or wide (+$15)"], ["Oversized", "Acreage, back lane, shared or commercial (we'll quote)"]].map(([v, d]) => (
+            <label key={v} className="flex items-center gap-2"><input type="radio" name="size" value={v} checked={size === v} onChange={() => setSize(v)} className="size-5" /> <span><b>{v}</b> <span className="text-sm text-ink-soft">{d}</span></span></label>
           ))}
           <label className="flex items-center gap-2"><input type="checkbox" name="extraWalk" className="size-5" /> Corner lot or extra sidewalk (+$10)</label>
           <label className="flex items-center gap-2"><input type="checkbox" name="icemelt" className="size-5" /> Add ice melt (+$5)</label>
@@ -79,6 +96,13 @@ export function BookingForm({ services, phone }: { services: Service[]; phone: s
         </fieldset>
       )}
       {!(shovel && plan === "Every snowfall") && <label className="block text-sm font-semibold">Preferred date (optional)<input name="date" type="date" className={input} /></label>}
+      {quoted && (
+        <label className="block text-sm font-semibold">Photos of the job (optional, up to 20)
+          <span className="block font-normal text-ink-soft">The whole area, close-ups of the tricky bits, and how we get there. We can often quote from photos alone.</span>
+          <input type="file" accept="image/*" multiple className={input} onChange={(e) => setPhotos([...(e.target.files ?? [])].slice(0, 20))} />
+          {photos.length > 0 && <span className="mt-1 block font-normal text-ink-soft">{photos.length} photo{photos.length === 1 ? "" : "s"} ready to send</span>}
+        </label>
+      )}
       <label className="block text-sm font-semibold">Anything else? (optional)<textarea name="notes" rows={3} maxLength={2000} className={input} /></label>
       <fieldset className="flex flex-wrap gap-4">
         <legend className="mb-2 font-semibold">Pay after the job by</legend>
@@ -87,7 +111,7 @@ export function BookingForm({ services, phone }: { services: Service[]; phone: s
       </fieldset>
       <input name="website" tabIndex={-1} autoComplete="off" className="hidden" aria-hidden />
       {state.status === "error" && <p className="rounded-xl bg-red-50 p-3 text-sm text-red-800">{state.msg}</p>}
-      <button disabled={state.status === "sending"} className="min-h-14 w-full rounded-full bg-blue text-base font-semibold text-white disabled:opacity-50">{state.status === "sending" ? "Sending…" : "Send booking"}</button>
+      <button disabled={state.status === "sending"} className="min-h-14 w-full rounded-full bg-blue text-base font-semibold text-white disabled:opacity-50">{state.status === "sending" ? state.msg ?? "Sending…" : "Send booking"}</button>
     </form>
   );
 }
