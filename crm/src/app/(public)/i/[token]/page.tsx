@@ -1,5 +1,6 @@
 /* eslint-disable @next/next/no-img-element -- private photos/signatures via signed URLs, not optimizable */
 // Client invoice page: view, pay by card (Stripe Checkout), e-Transfer instructions, print / save as PDF.
+import { stripeEnabled } from "@/server/stripe";
 import { InvoicePay } from "@/components/invoice-pay";
 import { Card } from "@/components/ui";
 import { InvoiceBadge } from "@/components/status";

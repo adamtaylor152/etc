@@ -20,7 +20,6 @@ import { TransitionError } from "@/server/status/visit";
 import { peekToken } from "@/server/tokens";
 import { checkoutForCard, checkoutForInvoices, stripeEnabled } from "@/server/stripe";
 import { cardsOffered, customerFor, removeCard, setAutoPay } from "@/server/ops/autopay";
-import { TransitionError } from "@/server/status/visit";
 
 async function hubClient(f: FormData) {
   const token = String(f.get("t") ?? "");
