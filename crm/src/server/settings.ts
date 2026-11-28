@@ -16,6 +16,7 @@ export const SettingsSchema = z.object({
   dailyDigest: z.boolean().default(false),          // 6am summary email to owners
   quoteFollowUp: z.boolean().default(true),         // nudge unanswered quotes after 3 days
   visitReminders: z.boolean().default(true),        // day-before reminder for scheduled (non-snow) visits
+  assignmentAlerts: z.boolean().default(true),      // tell the assigned person when an owner assigns or moves their work
   smsUpdates: z.boolean().default(true),            // texts (on my way, all done, storm day) to clients who opted in; needs Telnyx keys
 });
 export type Settings = z.infer<typeof SettingsSchema>;
@@ -40,5 +41,6 @@ export const SETTING_LABELS: Record<ToggleKey, [string, string]> = {
   dailyDigest: ["6am daily digest", "Today’s visits, late work, unbilled charges and failed emails."],
   quoteFollowUp: ["Quote follow-up", "One reminder 3 days after sending if the client hasn’t answered."],
   visitReminders: ["Visit reminders", "Day-before reminder for scheduled visits (not snow)."],
+  assignmentAlerts: ["Assignment alerts to the team", "Emails the person you assign or move work for (and texts them, if their team record has a phone): what, where, when and a link to their route. Never prices."],
   smsUpdates: ["Text updates", "Texts “on the way”, “all done” (with photos link) and storm days to clients who said yes to texts. Needs Telnyx keys."],
 };

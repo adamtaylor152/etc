@@ -32,6 +32,24 @@ export async function runStops(businessId: string, date: string, userId: string 
   }));
 }
 
+/** One person's assigned work for a day as plain lines ("when · what · where"), for assignment alerts. Never prices. */
+export async function dayLines(businessId: string, userId: string, date: string) {
+  const mine = { businessId, assignees: { some: { userId } } };
+  const [visits, tasks] = await Promise.all([
+    db.visit.findMany({ where: { ...mine, scheduledDate: toDbDate(date), state: { notIn: ["CANCELLED", "SKIPPED"] } }, include: { job: { select: { kind: true, title: true } }, property: { select: { formatted: true } } }, orderBy: [{ startAt: "asc" }, { routeSort: "asc" }] }),
+    db.task.findMany({ where: { ...mine, date: toDbDate(date), completedAt: null }, orderBy: { startAt: "asc" } }),
+  ]);
+  const props = new Map((await db.property.findMany({ where: { businessId, id: { in: tasks.map((t) => t.propertyId).filter((x): x is string => !!x) } }, select: { id: true, formatted: true } })).map((p) => [p.id, p.formatted]));
+  const when = (d: Date | null, timed: boolean) => (d && timed ? d.toLocaleTimeString("en-CA", { timeZone: "America/Edmonton", hour: "numeric", minute: "2-digit" }) : "Any time");
+  const street = (a: string | undefined) => (a ? ` · ${a.split(",")[0]}` : "");
+  return {
+    stops: visits.map((v) => `${when(v.startAt, !v.anytime)} · ${v.job.kind === "SNOW_PLAN" || v.snowEventId ? "Snow" : v.job.title}${street(v.property.formatted)}`),
+    tasks: tasks.map((t) => `${when(t.startAt, !t.allDay)} · ${t.title}${street(t.propertyId ? props.get(t.propertyId) : undefined)}`),
+  };
+}
+export const dayCount = (d: { stops: string[]; tasks: string[] }) =>
+  [d.stops.length && `${d.stops.length} stop${d.stops.length === 1 ? "" : "s"}`, d.tasks.length && `${d.tasks.length} task${d.tasks.length === 1 ? "" : "s"}`].filter(Boolean).join(", ") || "nothing";
+
 /** Crew warning for a snow stop whose size hasn't been checked on the satellite view. */
 export function sizeNote(snow: boolean, p: { sizeCheckedAt: Date | null; driveSize: string | null }) {
   if (!snow || p.sizeCheckedAt) return null;

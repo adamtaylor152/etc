@@ -24,6 +24,11 @@ export function addDays(s: string, n: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+/** The Monday of the week a YYYY-MM-DD falls in (time sheets run Monday to Sunday). */
+export function mondayOf(s: string): string {
+  return addDays(s, -((toDbDate(s).getUTCDay() + 6) % 7));
+}
+
 /** "Thu, Dec 4" for a YYYY-MM-DD. */
 export function prettyDate(s: string | null | undefined): string {
   if (!s) return "";

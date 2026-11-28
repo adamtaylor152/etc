@@ -3,6 +3,8 @@ import { db } from "../db";
 import { env } from "../env";
 import { mintToken } from "../tokens";
 import { dollars } from "../ops/drive-size";
+import { prettyDate } from "../dates";
+import { dayCount, dayLines } from "../runner";
 
 type Ctx = { businessId: string };
 const first = (n: string) => n.trim().split(" ")[0] || "there";
@@ -46,6 +48,12 @@ export const smsTemplates = {
   "sms.referral_thanks": async (p: { clientId: string; cents: number }) => {
     const c = await db.client.findUniqueOrThrow({ where: { id: p.clientId } });
     return `Thanks for sending a neighbour our way, ${first(c.firstName)}! $${(p.cents / 100).toFixed(0)} off your next etc. invoice. - etc.`;
+  },
+  // To someone on the team (not a client): their day changed. Built at send time; never prices.
+  "sms.crew_assignment": async (p: { userId: string; date: string }, ctx: Ctx) => {
+    const day = await dayLines(ctx.businessId, p.userId, p.date);
+    const first = day.stops[0] ?? day.tasks[0];
+    return `etc. crew: your work for ${prettyDate(p.date)} was updated (${dayCount(day)}). ${env.appUrl}/run?date=${p.date}${first ? ` First: ${first}` : ""}`;
   },
   // eslint-disable-next-line @typescript-eslint/no-unused-vars -- no props, but enqueueSms needs a props type
   "sms.opt_in": async (_p: Record<string, never>) => "You're signed up for etc. booking texts. Reply STOP to stop, HELP for help.",
