@@ -168,9 +168,9 @@ async function sendText(m: EmailMessage) {
   }
 }
 
-/** Queue a text for a client who opted in. No-op otherwise. */
+/** Queue a text for a client who opted in. No-op otherwise. (id null: a number that isn't a client yet, e.g. a missed caller.) */
 export async function enqueueSms<T extends SmsTemplateName>(tx: Db, m: {
-  businessId: string; template: T; client: { id: string; phone: string | null; smsOptIn: boolean; smsOptOutAt?: Date | null }; props: Parameters<(typeof smsTemplates)[T]>[0]; dedupeKey: string; entityType?: string; entityId?: string; sendAfter?: Date;
+  businessId: string; template: T; client: { id: string | null; phone: string | null; smsOptIn: boolean; smsOptOutAt?: Date | null }; props: Parameters<(typeof smsTemplates)[T]>[0]; dedupeKey: string; entityType?: string; entityId?: string; sendAfter?: Date;
 }) {
   const to = toE164(m.client.phone);
   if (!m.client.smsOptIn || m.client.smsOptOutAt || !to) return null;

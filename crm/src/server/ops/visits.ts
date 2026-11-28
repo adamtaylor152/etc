@@ -12,7 +12,7 @@ import { enqueue, enqueueSms, kickOutbox } from "../email/outbox";
 import { env } from "../env";
 import { logActivity } from "../records";
 import { getSettings } from "../settings";
-import { assertTransition, TransitionError } from "../status/visit";
+import { assertTransition, skipNotice, TransitionError } from "../status/visit";
 import { withAssignAlert, type Assigned } from "./assign-alerts";
 
 type Actor = { id: string; businessId: string };
@@ -103,6 +103,20 @@ function transitionTx(user: Actor, visitId: string, to: VisitState, extra: Trans
           businessId: user.businessId, template: "visit.on_my_way", to: client.email, replyTo: env.helpEmail, priority: 3, props: { visitId },
           dedupeKey: `visit:${visitId}:omw`, clientId: client.id, entityType: "Visit", entityId: visitId,
         });
+      }
+    }
+    // Skipped for a reason the client can fix (their choice of reasons, off by default): tell them what happened and what to do,
+    // by the same channels and rules as "all done" (text if they opted in and text updates are on; email unless it bounced).
+    // Held 3 minutes so a mis-tap can be undone: reopening the visit removes whatever hasn't gone yet.
+    const skipKeys = [`visit:${visitId}:skipped`, `visit:${visitId}:sms-skipped`];
+    if (to === "SCHEDULED") await tx.emailMessage.deleteMany({ where: { businessId: user.businessId, dedupeKey: { in: skipKeys }, status: "QUEUED" } });
+    if (to === "SKIPPED") {
+      const settings = await getSettings(tx, user.businessId);
+      if (settings.skipNotice && skipNotice(updated.skipReason, settings.skipNoticeReasons)) {
+        const client = await tx.client.findUniqueOrThrow({ where: { id: v.job.clientId } });
+        const m = { businessId: user.businessId, props: { visitId }, sendAfter: new Date(Date.now() + 3 * 60_000), entityType: "Visit", entityId: visitId };
+        if (client.email && !client.emailBouncedAt) await enqueue(tx, { ...m, template: "visit.skipped", to: client.email, replyTo: env.helpEmail, priority: 4, dedupeKey: skipKeys[0], clientId: client.id });
+        if (settings.smsUpdates) await enqueueSms(tx, { ...m, template: "sms.visit_skipped", client, dedupeKey: skipKeys[1] });
       }
     }
     await logActivity(tx, {

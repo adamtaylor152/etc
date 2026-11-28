@@ -10,6 +10,20 @@ const NEXT: Record<VisitState, VisitState[]> = {
   CANCELLED: ["SCHEDULED"],
 };
 
+/**
+ * What to tell a client whose visit was skipped, or null when the reason isn't theirs to fix or isn't switched on.
+ * Only reasons the client can act on (or would otherwise wonder about) have wording: "already cleared", "below trigger",
+ * "client cancelled" and "other" never produce a message. Pure, unit-tested.
+ */
+export function skipNotice(reason: string | null | undefined, on?: readonly string[]) {
+  const n = ({
+    BLOCKED_BY_CAR: { what: "a vehicle was in the way and we couldn't work around it", next: "Once it's moved, reply to this message and we'll fit you back in as soon as we can." },
+    NO_ACCESS: { what: "we couldn't get in (a locked gate or blocked access)", next: "Reply to this message to tell us how to get in and we'll fit you back in as soon as we can." },
+    WEATHER: { what: "the weather made it unsafe to do the job", next: "Nothing you need to do: we'll be back as soon as it's safe." },
+  } as Record<string, { what: string; next: string }>)[reason ?? ""];
+  return n && (!on || on.includes(reason!)) ? n : null;
+}
+
 export class TransitionError extends Error {}
 
 export function canTransition(from: VisitState, to: VisitState) {

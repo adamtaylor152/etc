@@ -17,14 +17,14 @@ export function VisitScheduled({ name, what, date, address, reminder, when = "to
   );
 }
 
-export function ReviewRequest({ name, url, site, phone }: { name: string; url: string; site: string; phone: string }) {
+export function ReviewRequest({ name, url, site, phone, followUp }: { name: string; url: string; site: string; phone: string; followUp?: boolean }) {
   return (
     <EtcEmail title="How did we do?" preheader="A quick Google review helps Silas a ton">
       <Header right="Thank you" />
       <tr>
         <td className="px" style={{ padding: "32px 40px 26px" }}>
-          <Eyebrow>30 seconds</Eyebrow>
-          <H1>Thanks for choosing etc., {firstName(name)}!</H1>
+          <Eyebrow>{followUp ? "One last ask" : "30 seconds"}</Eyebrow>
+          <H1>{followUp ? <>Got 30 seconds, {firstName(name)}?</> : <>Thanks for choosing etc., {firstName(name)}!</>}</H1>
           <P>If you were happy with the job, a quick Google review helps neighbours find us, and every job helps Silas get to electrician school.</P>
           <Button href={url} label="Leave a review" />
           <p style={{ margin: "18px 0 0", fontFamily: BODY_FONT, fontSize: 13, color: INK_SOFT }}>Something not right? Just reply. We&apos;ll make it right.</p>

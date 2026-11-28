@@ -5,6 +5,8 @@ import { createStorm } from "./ops/storms";
 import { health, markTick } from "./health";
 import { retryTextMedia } from "./ops/texts";
 import { sendReviewRequests } from "./ops/marketing";
+import { runAutomations } from "./ops/automations";
+import { markScheduledSent } from "./ops/campaigns";
 import { syncTelnyxCalls } from "./ops/calls";
 import { db } from "./db";
 import { env } from "./env";
@@ -64,6 +66,8 @@ async function hourly() {
   if (hour >= 8 && hour < 20) await runAutoPay().catch((e) => console.error("auto-pay run failed", e)); // saved cards: charge due invoices, retry failed ones
   if (hour >= 6 && hour < 22) await visitReminders(hour);
   if (hour >= 10 && hour < 18) await reviewRequests();
+  if (hour >= 9 && hour < 19) await runAutomations(); // win-back and plan renewal emails, if switched on (Marketing)
+  await markScheduledSent();
   if (hour === 6) await dailyDigest();
   await opsAlerts();
 }
@@ -123,7 +127,7 @@ async function visitReminders(hour: number) {
   }
 }
 
-/** Google review ask, 2 days after a client's first completed visit of the season; once per client per season. */
+/** Review ask a set time after a completed visit, and its one reminder (Marketing settings: trigger, caps, days). */
 async function reviewRequests() {
   await sendReviewRequests();
 }
