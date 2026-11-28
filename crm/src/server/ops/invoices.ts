@@ -1,12 +1,13 @@
 // Invoices and payments: unbilled charges -> draft invoice -> send -> payment (cash / e-Transfer / card) -> receipt.
 import type { PaymentMethod, Prisma } from "@/generated/prisma/client";
-import { dueDate, etransferRef, invoiceTotals, statusAfterPayments } from "../billing/invoice";
+import { depositCents, depositCredit, dueDate, etransferRef, invoiceTotals, statusAfterPayments } from "../billing/invoice";
 import { todayLocal, toDbDate } from "../dates";
 import { db, type Tx } from "../db";
 import { enqueue, kickOutbox } from "../email/outbox";
 import { env } from "../env";
 import { logActivity, nextNumber } from "../records";
 import { TransitionError } from "../status/visit";
+import { parseSettings } from "../settings";
 
 type Actor = { id: string; businessId: string } | { id: null; businessId: string }; // id null = system (Stripe webhook)
 type LineIn = { name: string; quantity: number; unitPriceCents: number; totalCents: number; serviceDate?: Date | null; jobId?: string | null; visitId?: string | null; chargeId?: string };
@@ -16,12 +17,18 @@ async function createDraft(tx: Tx, user: Actor, input: {
 }) {
   if (!input.lines.length) throw new TransitionError("Nothing to invoice");
   const biz = await tx.business.findUniqueOrThrow({ where: { id: user.businessId } });
+  // Paid deposits on these jobs' quotes become credit lines ("Less deposit"), each used once.
+  const jobIds = [...new Set([input.jobId, ...input.lines.map((l) => l.jobId)].filter((x): x is string => !!x))];
+  const quotes = jobIds.length ? await tx.quote.findMany({ where: { jobId: { in: jobIds } }, select: { id: true } }) : [];
+  const deposits = quotes.length ? await tx.invoice.findMany({ where: { kind: "DEPOSIT", quoteId: { in: quotes.map((q) => q.id) }, appliedToInvoiceId: null, amountPaidCents: { gt: 0 } }, orderBy: { number: "asc" } }) : [];
+  const credits = depositCredit(input.lines.reduce((n, l) => n + l.totalCents, 0), deposits.map((d) => ({ id: d.id, paidCents: d.amountPaidCents })));
+  input = { ...input, lines: [...input.lines, ...credits.map((c) => ({ name: `Less deposit (invoice #${deposits.find((d) => d.id === c.id)!.number})`, quantity: 1, unitPriceCents: -c.cents, totalCents: -c.cents }))] };
   const number = await nextNumber(tx, user.businessId, "INVOICE");
   const totals = invoiceTotals(input.lines.map((l) => l.totalCents), 0, biz);
   const inv = await tx.invoice.create({
     data: {
       businessId: user.businessId, number, clientId: input.clientId, propertyId: input.propertyId, jobId: input.jobId, snowEventId: input.snowEventId,
-      subject: input.subject, paymentTerms: biz.defaultPaymentTerms, etransferRef: etransferRef(number),
+      subject: input.subject, paymentTerms: biz.defaultPaymentTerms, etransferRef: etransferRef(number), allowPartial: parseSettings(biz.settings).allowPartialPayments,
       subtotalCents: totals.subtotalCents, taxCents: totals.taxCents, totalCents: totals.totalCents,
     },
   });
@@ -34,6 +41,7 @@ async function createDraft(tx: Tx, user: Actor, input: {
       if (res.count !== 1) throw new TransitionError("Some charges were already invoiced. Refresh and try again.");
     }
   }
+  if (credits.length) await tx.invoice.updateMany({ where: { id: { in: credits.map((c) => c.id) } }, data: { appliedToInvoiceId: inv.id } });
   await logActivity(tx, { businessId: user.businessId, type: "invoice.created", entityType: "Invoice", entityId: inv.id, actorType: user.id ? "USER" : "SYSTEM", actorUserId: user.id ?? undefined, clientId: input.clientId, jobId: input.jobId ?? undefined });
   return inv;
 }
@@ -216,4 +224,25 @@ export async function setBadDebt(user: Actor, invoiceId: string, bad: boolean) {
   if (bad && inv.status !== "AWAITING_PAYMENT") throw new TransitionError("Only unpaid invoices can be written off");
   if (!bad && inv.status !== "BAD_DEBT") return;
   await db.invoice.update({ where: { id: invoiceId }, data: bad ? { status: "BAD_DEBT", badDebtAt: new Date() } : { status: "AWAITING_PAYMENT", badDebtAt: null } });
+}
+
+/** When a client approves a quote with a deposit: a deposit invoice they can pay right away (own ETC- ref for Interac matching). */
+export async function createDepositInvoice(tx: Tx, quoteId: string) {
+  const q = await tx.quote.findUniqueOrThrow({ where: { id: quoteId } });
+  const cents = depositCents(q.totalCents, q.depositType, q.depositValue);
+  if (cents <= 0 || (await tx.invoice.count({ where: { kind: "DEPOSIT", quoteId } }))) return null;
+  const biz = await tx.business.findUniqueOrThrow({ where: { id: q.businessId } });
+  const number = await nextNumber(tx, q.businessId, "INVOICE");
+  const today = todayLocal();
+  const inv = await tx.invoice.create({
+    data: {
+      businessId: q.businessId, number, clientId: q.clientId, propertyId: q.propertyId, kind: "DEPOSIT", quoteId, subject: `Deposit for quote #${q.number}`,
+      paymentTerms: "DUE_ON_RECEIPT", etransferRef: etransferRef(number), status: "AWAITING_PAYMENT", issuedOn: toDbDate(today), dueOn: toDbDate(today), sentAt: new Date(),
+      subtotalCents: cents, taxCents: 0, totalCents: cents, allowPartial: false,
+      lineItems: { create: [{ name: `Deposit for quote #${q.number}${q.title ? ` (${q.title})` : ""}`, quantity: 1, unitPriceCents: cents, totalCents: cents, sortOrder: 0 }] },
+    },
+  });
+  void biz;
+  await logActivity(tx, { businessId: q.businessId, type: "invoice.created", entityType: "Invoice", entityId: inv.id, actorType: "SYSTEM", clientId: q.clientId, data: { deposit: true } });
+  return inv;
 }

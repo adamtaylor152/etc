@@ -13,7 +13,10 @@ export async function payByCard(f: FormData) {
   const t = await peekToken(db, token, ["INVOICE"]);
   if (!t.ok || !t.token.invoiceId || !stripeEnabled()) redirect(`/i/${encodeURIComponent(token)}`);
   const inv = await db.invoice.findUniqueOrThrow({ where: { id: t.token.invoiceId }, include: { client: true } });
-  const balance = inv.totalCents - inv.amountPaidCents;
+  const owed = inv.totalCents - inv.amountPaidCents;
+  // Partial payments (when allowed): any amount from $0.50 up to the balance.
+  const asked = inv.allowPartial && f.get("amount") ? Math.round(Number(f.get("amount")) * 100) : owed;
+  const balance = Number.isFinite(asked) ? Math.min(owed, Math.max(50, asked)) : owed;
   if (inv.status !== "AWAITING_PAYMENT" || balance < 50) redirect(`/i/${token}`); // Stripe's minimum is $0.50
   let url: string | null = null;
   try {

@@ -1,3 +1,4 @@
+import { invoiceAllowPartial } from "../../work2-actions";
 import { SignatureCard } from "@/components/signatures";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -34,7 +35,7 @@ export default async function InvoicePage({ params, searchParams }: PageProps<"/
       <Flash error={sp.error} />
       {sp.sent && <p className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-medium text-emerald-800">Invoice emailed to {inv.client.email}.</p>}
       <PageHeader
-        title={<>Invoice #{inv.number} <InvoiceBadge s={view} /></>}
+        title={<>{inv.kind === "DEPOSIT" ? "Deposit invoice" : "Invoice"} #{inv.number} <InvoiceBadge s={view} /></>}
         sub={<><Link className="font-semibold text-blue" href={`/clients/${inv.clientId}`}>{clientName(inv.client)}</Link> · {inv.subject}</>}
         actions={<>
           {open && <form action={invoiceSend}>{hidden}<Button>{inv.status === "DRAFT" ? "Send invoice" : "Resend"}</Button></form>}
@@ -83,6 +84,13 @@ export default async function InvoicePage({ params, searchParams }: PageProps<"/
             </Card>
           )}
 
+          {inv.status !== "VOID" && inv.status !== "PAID" && (
+            <form action={invoiceAllowPartial} className="flex items-center gap-2 rounded-lg border border-line bg-white p-3 text-sm shadow-card">
+              <input type="hidden" name="id" value={inv.id} /><input type="hidden" name="on" value={inv.allowPartial ? "0" : "1"} />
+              <span className="font-semibold">Online partial payments</span><span className="text-ink-soft">{inv.allowPartial ? "on: the client can pay part of the balance" : "off: card payments are for the full balance"}</span>
+              <button className="ml-auto min-h-8 rounded-lg border border-line px-2 text-xs font-semibold hover:bg-tint">{inv.allowPartial ? "Turn off" : "Turn on"}</button>
+            </form>
+          )}
           <Card title="Payments">
             {inv.payments.length ? (
               <ul className="divide-y divide-line">

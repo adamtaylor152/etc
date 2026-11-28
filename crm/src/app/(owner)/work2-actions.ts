@@ -101,3 +101,9 @@ export async function collectPayments(f: FormData) {
   revalidatePath("/", "layout");
   redirect(`/clients/${clientId}?paid=1`);
 }
+
+export async function invoiceAllowPartial(f: FormData) {
+  const user = await requireOwner();
+  await db.invoice.updateMany({ where: { id: str(f, "id"), businessId: user.businessId }, data: { allowPartial: str(f, "on") === "1" } });
+  revalidatePath(`/invoices/${str(f, "id")}`);
+}

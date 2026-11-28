@@ -49,3 +49,23 @@ export function reminderDue(i: { status: InvoiceStatus; dueOn: string | null; re
 }
 
 export const etransferRef = (number: number) => `ETC-${number}`;
+
+/** Deposit amount for a quote total. Pure, unit-tested. */
+export function depositCents(totalCents: number, type: string, value: number) {
+  if (type === "PERCENT") return Math.round((totalCents * Math.min(100, Math.max(0, value))) / 100);
+  if (type === "FIXED") return Math.min(totalCents, Math.max(0, value));
+  return 0;
+}
+
+/** How much paid deposit to credit on a new invoice: never more than the invoice itself. Pure, unit-tested. */
+export function depositCredit(invoiceCents: number, deposits: { id: string; paidCents: number }[]) {
+  let left = invoiceCents;
+  const use: { id: string; cents: number }[] = [];
+  for (const d of deposits) {
+    const c = Math.min(d.paidCents, left);
+    if (c <= 0) break;
+    use.push({ id: d.id, cents: c });
+    left -= c;
+  }
+  return use;
+}

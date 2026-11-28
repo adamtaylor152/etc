@@ -8,7 +8,8 @@ export const SettingsSchema = z.object({
   onMyWayEmail: z.boolean().default(false),         // email the client when the crew taps "On my way"
   stormHeadsUp: z.boolean().default(false),         // email plan clients "you're on our route" when a storm starts
   snowAlert: z.boolean().default(true),             // email owners when the forecast meets a plan trigger
-  reviewRequests: z.boolean().default(false),       // ask for a Google review after the first job of the season
+  reviewRequests: z.boolean().default(false),
+  allowPartialPayments: z.boolean().default(false), // new invoices let clients pay part online       // ask for a Google review after the first job of the season
   dailyDigest: z.boolean().default(false),          // 6am summary email to owners
   quoteFollowUp: z.boolean().default(true),         // nudge unanswered quotes after 3 days
   visitReminders: z.boolean().default(true),        // day-before reminder for scheduled (non-snow) visits
@@ -29,6 +30,7 @@ export const SETTING_LABELS: Record<keyof Settings, [string, string]> = {
   onMyWayEmail: ["“On my way” email", "Emails the client when you tap On my way."],
   stormHeadsUp: ["Storm heads-up", "Emails every plan client “you’re on our route” when a storm starts."],
   snowAlert: ["Snow alert to owners", "Emails you when the forecast meets a plan trigger in the next 36 hours."],
+  allowPartialPayments: ["Partial payments", "New invoices let clients pay part of the balance online (you can change it per invoice)."],
   reviewRequests: ["Google review requests", "Asks happy clients for a review after their first job of the season (needs your review link)."],
   dailyDigest: ["6am daily digest", "Today’s visits, late work, unbilled charges and failed emails."],
   quoteFollowUp: ["Quote follow-up", "One reminder 3 days after sending if the client hasn’t answered."],

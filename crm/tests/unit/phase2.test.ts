@@ -116,3 +116,18 @@ describe("signatures", () => {
     expect(docHash({ a: 1 })).not.toBe(docHash({ a: 2 }));
   });
 });
+
+import { depositCents, depositCredit } from "@/server/billing/invoice";
+describe("deposits", () => {
+  it("works out the deposit from a percent or a fixed amount, capped at the total", () => {
+    expect(depositCents(50000, "PERCENT", 25)).toBe(12500);
+    expect(depositCents(50000, "FIXED", 10000)).toBe(10000);
+    expect(depositCents(5000, "FIXED", 10000)).toBe(5000);
+    expect(depositCents(50000, "NONE", 50)).toBe(0);
+  });
+  it("credits paid deposits against an invoice without going below zero", () => {
+    expect(depositCredit(30000, [{ id: "a", paidCents: 12500 }])).toEqual([{ id: "a", cents: 12500 }]);
+    expect(depositCredit(10000, [{ id: "a", paidCents: 12500 }, { id: "b", paidCents: 500 }])).toEqual([{ id: "a", cents: 10000 }]);
+    expect(depositCredit(30000, [])).toEqual([]);
+  });
+});

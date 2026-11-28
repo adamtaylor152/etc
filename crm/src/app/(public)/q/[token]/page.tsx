@@ -1,6 +1,8 @@
 /* eslint-disable @next/next/no-img-element -- private photos/signatures via signed URLs, not optimizable */
 // Client quote page: see the quote and photos, tick optional extras, approve or ask for changes.
 import { QuoteApprove } from "@/components/quote-approve";
+import { money } from "@/server/money";
+import { mintToken } from "@/server/tokens";
 import { signedMediaPath } from "@/server/media";
 import { Card } from "@/components/ui";
 import { dateOnly, prettyDate, todayLocal } from "@/server/dates";
@@ -23,6 +25,9 @@ export default async function PublicQuote({ params, searchParams }: PageProps<"/
   const expired = quoteExpired({ status: q.status, validUntil: dateOnly(q.validUntil) }, todayLocal());
   const canAct = (q.status === "AWAITING_RESPONSE" || q.status === "CHANGES_REQUESTED") && !expired;
   const sig = await db.signature.findFirst({ where: { quoteId: q.id, kind: "QUOTE" }, orderBy: { signedAt: "desc" } });
+  const deposit = await db.invoice.findFirst({ where: { kind: "DEPOSIT", quoteId: q.id } });
+  const biz = await db.business.findUniqueOrThrow({ where: { id: q.businessId } });
+  const depositLink = deposit && deposit.status !== "PAID" ? `/i/${await mintToken(db, q.businessId, "INVOICE", { invoiceId: deposit.id, clientId: q.clientId })}` : null;
   return (
     <div className="space-y-4">
       {sp.approved && <p className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 font-medium text-emerald-800">Approved, thank you! Silas will be in touch to book a time.</p>}
@@ -37,6 +42,14 @@ export default async function PublicQuote({ params, searchParams }: PageProps<"/
       <Card>
         {q.status === "APPROVED" || q.status === "CONVERTED"
           ? <><p className="mb-2 font-semibold text-emerald-700">Approved{q.approvedByName && !q.approvedByName.startsWith("Approved by") ? ` by ${q.approvedByName}` : ""}. Thank you!</p>
+            {deposit && deposit.status !== "PAID" && (
+              <div className="mb-3 rounded-xl border border-blue/30 bg-blue/5 p-4 text-sm">
+                <p className="font-semibold">Deposit due: {money(deposit.totalCents - deposit.amountPaidCents)}{q.depositRequired && " (needed to book your date)"}</p>
+                {biz.etransferEmail && <p className="mt-1">Send it by Interac e-Transfer to <b className="select-all">{biz.etransferEmail}</b> with <b className="select-all">{deposit.etransferRef}</b> in the message.</p>}
+                {depositLink && <a href={depositLink} className="mt-2 inline-flex min-h-11 items-center rounded-full bg-blue px-5 font-semibold text-white">View deposit invoice</a>}
+              </div>
+            )}
+            {deposit?.status === "PAID" && <p className="mb-3 text-sm font-semibold text-emerald-700">Deposit received. Thank you!</p>}
             {sig && <div className="mb-3 flex items-center gap-3"><img src={signedMediaPath(sig.attachmentId, "sm", 30)} alt="Your signature" className="h-14 w-36 rounded border border-line bg-white object-contain" /><span className="text-xs text-ink-soft">Signed {sig.signedAt.toLocaleDateString("en-CA", { timeZone: "America/Edmonton" })}</span></div>}</>
           : expired ? <p className="mb-2 font-semibold text-red-700">This quote has expired. Reply to our email or call {env.phone} for an updated price.</p> : null}
         <QuoteApprove token={token} action={clientApprove} canAct={canAct} discountCents={q.discountCents}

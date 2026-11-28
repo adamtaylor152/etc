@@ -45,6 +45,7 @@ export default async function Home({ searchParams }: PageProps<"/">) {
     team(bid),
   ]);
   const cnt = <T,>(l: T[], f: (x: T) => boolean) => l.filter(f).length;
+  const depositsWaiting = invoices.filter((i) => i.kind === "DEPOSIT" && i.status === "AWAITING_PAYMENT").length;
   const sum = <T,>(l: T[], f: (x: T) => boolean, v: (x: T) => number) => l.filter(f).reduce((n, x) => n + v(x), 0);
   const stale = localDayStart(addDays(today, -3));
   const isPastDue = (i: (typeof invoices)[number]) => i.status === "AWAITING_PAYMENT" && !!i.dueOn && dateOnly(i.dueOn)! < today;
@@ -85,6 +86,7 @@ export default async function Home({ searchParams }: PageProps<"/">) {
     { n: jcount("REQUIRES_INVOICING"), label: "jobs to invoice", href: "/billing", icon: <Receipt className="size-4 text-blue" /> },
     { n: cnt(invoices, isPastDue), label: "past-due invoices", href: "/invoices?tab=PAST_DUE", icon: <Receipt className="size-4 text-red-700" /> },
     { n: tasksOpen, label: "tasks due", href: "/tasks", icon: <ClipboardList className="size-4 text-navy" /> },
+    { n: depositsWaiting, label: "deposits waiting", href: "/invoices?status=AWAITING_PAYMENT", icon: <Banknote className="size-4 text-blue" /> },
     { n: toMatch, label: "payments to match", href: "/payments/unmatched", icon: <Banknote className="size-4 text-amber-700" /> },
     { n: unread, label: "unread texts", href: "/messages", icon: <MessageSquare className="size-4 text-indigo-700" /> },
   ].filter((t) => t.n > 0);
