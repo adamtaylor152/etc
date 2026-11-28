@@ -141,7 +141,7 @@ export default {
 ### Marketing-site feeds
 
 When `CRM_BOOKING_URL` is set, etccrew.ca's tuition tracker and "Our work" gallery load from `GET /api/public/site`:
-- **Tracker:** money earned and jobs done.
+- **Tracker:** invoice totals (every invoice from the moment it is created, minus void and written-off ones) and jobs done. Cached 60 seconds.
 - **Gallery:** before/after photos an owner starred "★ Website", which they should only do with the client's OK.
 
 Captions show only the community and month.
