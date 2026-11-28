@@ -3,7 +3,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { RequestBadge } from "@/components/status";
 import { RecordPanel } from "@/components/record-panel";
-import { Button, Card, Dl, PageHeader } from "@/components/ui";
+import { DetailHeader } from "@/components/detail-header";
+import { Flash } from "@/components/flash";
+import { Button, ButtonLink, Card, Dl, Empty, Input, Notice } from "@/components/ui";
 import { dateOnly, prettyDate, prettyDateTime } from "@/server/dates";
 import { businessId, db } from "@/server/db";
 import { clientName } from "@/server/queries";
@@ -25,22 +27,35 @@ export default async function RequestPage({ params, searchParams }: PageProps<"/
     db.attachment.findMany({ where: { businessId: bid, requestId: id, deletedAt: null }, orderBy: { createdAt: "asc" } }),
   ]);
   const archived = r.status === "ARCHIVED";
+  const open = r.status === "NEW" || r.status === "ASSESSMENT_SCHEDULED";
+  const link = "font-semibold text-blue hover:text-blue-deep";
   return (
     <>
-      <PageHeader
-        title={<>Request #{r.number} <RequestBadge s={r.status} /></>}
-        sub={<>{archived && r.lostReason && <span className="mr-2 font-semibold text-ink">Archived: {r.lostReason}.</span>}From <Link className="font-semibold text-blue" href={`/clients/${r.clientId}`}>{clientName(r.client)}</Link> · {prettyDateTime(r.createdAt)}</>}
-        actions={
-          <form action={setRequestArchived} className="flex items-center gap-2">
-            <input type="hidden" name="id" value={r.id} /><input type="hidden" name="archive" value={archived ? "0" : "1"} />
-            {!archived && <input name="reason" maxLength={200} placeholder="Why? (optional)" aria-label="Reason it didn't go ahead" className="min-h-10 w-44 rounded-lg border border-line bg-white px-3 text-sm" />}
-            <Button variant="secondary">{archived ? "Unarchive" : "Archive"}</Button>
-          </form>
-        }
+      <DetailHeader
+        back={{ href: "/requests", label: "Requests" }}
+        kind={<span className="tabular-nums">Request #{r.number}</span>}
+        status={<RequestBadge s={r.status} />}
+        title={r.title}
+        sub={<>From <Link className={link} href={`/clients/${r.clientId}`}>{clientName(r.client)}</Link> · <span className="tabular-nums">{prettyDateTime(r.createdAt)}</span></>}
+        actions={<>
+          <ButtonLink href={`/jobs/new?request=${r.id}`}>Convert to job</ButtonLink>
+          <ButtonLink href={`/quotes/new?request=${r.id}`} variant={open ? "primary" : "secondary"}>Convert to quote</ButtonLink>
+          {archived && (
+            <form action={setRequestArchived}>
+              <input type="hidden" name="id" value={r.id} /><input type="hidden" name="archive" value="0" />
+              <Button>Unarchive</Button>
+            </form>
+          )}
+        </>}
       />
-      {r.client.doNotService && <p role="alert" className="mb-5 rounded-lg border border-red-300 bg-red-50 p-3 text-sm font-semibold text-red-800">This client is marked “do not service”. Check their notes before quoting or booking.</p>}
-      <div className="grid gap-5 lg:grid-cols-3">
-        <div className="space-y-5 lg:col-span-2">
+      <Flash error={sp.error} />
+      {r.client.doNotService && <Notice tone="bad"><span className="font-semibold">This client is marked “do not service”.</span> Check their notes before quoting or booking.</Notice>}
+      {archived && <Notice tone="warn">Archived{r.lostReason ? `: ${r.lostReason}.` : "."} Unarchive it to pick it back up.</Notice>}
+      {r.status === "NEW" && <Notice>New request. Next step: send a quote, or book it straight to a job.</Notice>}
+      {r.status === "ASSESSMENT_SCHEDULED" && <Notice>Assessment booked{r.assessmentAt ? ` for ${prettyDateTime(r.assessmentAt)}` : ""}: after the visit, send a quote or book the job.</Notice>}
+      {sp.sent === "photos" && <Notice tone="good">Photo request sent to {r.client.firstName}.</Notice>}
+      <div className="grid gap-5 lg:grid-cols-3 lg:items-start">
+        <div className="min-w-0 space-y-5 lg:col-span-2">
           <Card title="What they asked for">
             <Dl rows={[
               ["Services", r.services.join("\n")],
@@ -49,7 +64,7 @@ export default async function RequestPage({ params, searchParams }: PageProps<"/
               ["When", r.preferredDate ? prettyDate(dateOnly(r.preferredDate)) : r.snowPlan === "EVERY_SNOWFALL" ? "After every snowfall" : "As soon as possible"],
               ["Estimate", r.estimateText],
               ["Payment", r.preferredPayment === "ETRANSFER" ? "e-Transfer" : r.preferredPayment === "CASH" ? "Cash" : null],
-              ["Address", r.property ? <a className="text-blue" href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(r.property.formatted)}`}>{r.property.formatted}</a> : null],
+              ["Address", r.property ? <a className={link} href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(r.property.formatted)}`}>{r.property.formatted}</a> : null],
               ["Community", r.property?.community?.name ?? (r.property ? "Unknown (no map pin)" : null)],
               ["Access", r.accessNotes],
               ["Notes", r.notes],
@@ -57,21 +72,27 @@ export default async function RequestPage({ params, searchParams }: PageProps<"/
           </Card>
           <Card title="Photos" actions={
             <form action={requestPhotos}><input type="hidden" name="requestId" value={r.id} /><input type="hidden" name="back" value={`/requests/${r.id}`} />
-              <Button variant="secondary">{sp.sent === "photos" ? "Sent ✓ Send again" : "Ask client for photos"}</Button></form>
+              <Button variant="secondary">{sp.sent === "photos" ? "Send again" : "Ask client for photos"}</Button></form>
           }>
-            {photos.length ? <Gallery photos={photos} back={`/requests/${r.id}`} /> : <p className="text-sm text-ink-soft">No photos yet. Quote requests get a &quot;send us photos&quot; link in their confirmation email.</p>}
+            {photos.length ? <Gallery photos={photos} back={`/requests/${r.id}`} /> : <p className="max-w-[70ch] text-sm text-ink-soft">No photos yet. Quote requests get a &quot;send us photos&quot; link in their confirmation email.</p>}
           </Card>
           <Card title="Jobs from this request">
             {r.jobs.length ? (
-              <ul className="divide-y divide-line">
-                {r.jobs.map((j) => <li key={j.id}><Link href={`/jobs/${j.id}`} className="block py-2.5 font-semibold text-blue">Job #{j.number}: {j.title}</Link></li>)}
+              <ul className="-my-1 divide-y divide-line-soft">
+                {r.jobs.map((j) => <li key={j.id}><Link href={`/jobs/${j.id}`} className={`block py-2.5 text-sm ${link}`}><span className="tabular-nums">Job #{j.number}</span>: {j.title}</Link></li>)}
               </ul>
-            ) : <p className="text-sm text-ink-soft">This needs a quote.</p>}
-            <span className="mt-3 flex flex-wrap gap-2">
-              <Link href={`/quotes/new?request=${r.id}`} className="inline-flex min-h-10 items-center rounded-lg bg-blue px-4 text-sm font-semibold text-white">Convert to quote</Link>
-              <Link href={`/jobs/new?request=${r.id}`} className="inline-flex min-h-10 items-center rounded-lg border border-line bg-white px-4 text-sm font-semibold hover:bg-tint">Convert to job</Link>
-            </span>
+            ) : <Empty action={<ButtonLink href={`/quotes/new?request=${r.id}`}>Convert to quote</ButtonLink>}>No jobs yet. This needs a quote.</Empty>}
           </Card>
+          {!archived && (
+            <Card title="Not going ahead?">
+              <form action={setRequestArchived} className="flex flex-wrap items-end gap-2">
+                <input type="hidden" name="id" value={r.id} /><input type="hidden" name="archive" value="1" />
+                <label className="min-w-0 flex-1 basis-56"><span className="mb-1 block text-sm font-semibold">Why? (optional)</span><Input name="reason" maxLength={200} placeholder="Too far, went with someone else…" aria-label="Reason it didn't go ahead" /></label>
+                <Button variant="danger">Archive request</Button>
+              </form>
+              <p className="mt-2 text-xs text-ink-soft">Archiving takes it off the open list and counts it as lost in the pipeline. You can unarchive it later.</p>
+            </Card>
+          )}
         </div>
         <RecordPanel businessId={bid} target={{ requestId: r.id }} clientId={r.clientId} path={`/requests/${r.id}`} />
       </div>
