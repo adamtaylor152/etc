@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-img-element -- private photos/signatures via signed URLs, not optimizable */
 // Visit report for the client: before & after photos from one visit (linked from the "all done" email).
 import type { Answers, ChecklistItem } from "@/server/ops/checklists";
 import { Card, Dl } from "@/components/ui";
@@ -17,6 +18,7 @@ export default async function VisitReport({ params }: PageProps<"/v/[token]">) {
     include: { property: true, job: true, attachments: { where: { deletedAt: null, sharedWithClient: true }, orderBy: { createdAt: "asc" } } },
   });
   const group = (k: string) => v.attachments.filter((a) => a.kind === k);
+  const sig = await db.signature.findFirst({ where: { visitId: v.id, kind: "VISIT" }, orderBy: { signedAt: "desc" } });
   const vc = await db.visitChecklist.findUnique({ where: { visitId: v.id } });
   const shown = vc ? (vc.items as ChecklistItem[]).filter((i) => i.showClient && i.type !== "PHOTO") : [];
   const answer = (i: ChecklistItem) => { const a = (vc!.answers as Answers)[i.id]; return i.type === "CHECKBOX" ? (a === true ? "✓ Done" : "—") : i.type === "YESNO" ? (a === "yes" ? "Yes" : a === "no" ? "No" : "—") : a == null || a === "" ? "—" : String(a); };
@@ -34,13 +36,14 @@ export default async function VisitReport({ params }: PageProps<"/v/[token]">) {
           ["Ice melt", v.state === "COMPLETED" && v.iceMeltApplied ? "Yes" : null],
         ]} />
       </Card>
+      {sig && <Card title="Signed off"><div className="flex items-center gap-3"><img src={signedMediaPath(sig.attachmentId, "sm", 30)} alt="Signature" className="h-14 w-36 rounded border border-line object-contain" /><span className="text-sm">{sig.signerName}<span className="block text-xs text-ink-soft">{sig.statement}</span></span></div></Card>}
       {shown.length > 0 && <Card title="What we did"><Dl rows={shown.map((i) => [i.label, answer(i)] as [string, string])} /></Card>}
       {[["BEFORE", "Before"], ["AFTER", "After"], ["PROOF", "More photos"], ["OTHER", "More photos"]].map(([k, label]) => group(k).length > 0 && (
         <Card key={k} title={label}>
           <div className="grid gap-2 sm:grid-cols-2">
             {group(k).map((a) => (
               <a key={a.id} href={signedMediaPath(a.id, "lg", 30)} target="_blank" rel="noreferrer">
-                {/* eslint-disable-next-line @next/next/no-img-element -- private media via signed URL */}
+                { }
                 <img src={signedMediaPath(a.id, "md", 30)} alt={label} className="w-full rounded-xl" />
               </a>
             ))}

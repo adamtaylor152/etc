@@ -1,5 +1,7 @@
+/* eslint-disable @next/next/no-img-element -- private photos/signatures via signed URLs, not optimizable */
 // Client quote page: see the quote and photos, tick optional extras, approve or ask for changes.
 import { QuoteApprove } from "@/components/quote-approve";
+import { signedMediaPath } from "@/server/media";
 import { Card } from "@/components/ui";
 import { dateOnly, prettyDate, todayLocal } from "@/server/dates";
 import { db } from "@/server/db";
@@ -20,6 +22,7 @@ export default async function PublicQuote({ params, searchParams }: PageProps<"/
   if (q.status === "DRAFT" || q.status === "ARCHIVED") return <Card><h1 className="font-display text-2xl font-bold">This quote isn&apos;t available</h1><p className="mt-2 text-ink-soft">Get in touch if you have questions: {env.helpEmail}.</p></Card>;
   const expired = quoteExpired({ status: q.status, validUntil: dateOnly(q.validUntil) }, todayLocal());
   const canAct = (q.status === "AWAITING_RESPONSE" || q.status === "CHANGES_REQUESTED") && !expired;
+  const sig = await db.signature.findFirst({ where: { quoteId: q.id, kind: "QUOTE" }, orderBy: { signedAt: "desc" } });
   return (
     <div className="space-y-4">
       {sp.approved && <p className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 font-medium text-emerald-800">Approved, thank you! Silas will be in touch to book a time.</p>}
@@ -33,7 +36,8 @@ export default async function PublicQuote({ params, searchParams }: PageProps<"/
       {q.message && <Card><p className="whitespace-pre-line">{q.message}</p></Card>}
       <Card>
         {q.status === "APPROVED" || q.status === "CONVERTED"
-          ? <p className="mb-2 font-semibold text-emerald-700">Approved{q.approvedByName && !q.approvedByName.startsWith("Approved by") ? ` by ${q.approvedByName}` : ""}. Thank you!</p>
+          ? <><p className="mb-2 font-semibold text-emerald-700">Approved{q.approvedByName && !q.approvedByName.startsWith("Approved by") ? ` by ${q.approvedByName}` : ""}. Thank you!</p>
+            {sig && <div className="mb-3 flex items-center gap-3"><img src={signedMediaPath(sig.attachmentId, "sm", 30)} alt="Your signature" className="h-14 w-36 rounded border border-line bg-white object-contain" /><span className="text-xs text-ink-soft">Signed {sig.signedAt.toLocaleDateString("en-CA", { timeZone: "America/Edmonton" })}</span></div>}</>
           : expired ? <p className="mb-2 font-semibold text-red-700">This quote has expired. Reply to our email or call {env.phone} for an updated price.</p> : null}
         <QuoteApprove token={token} action={clientApprove} canAct={canAct} discountCents={q.discountCents}
           lines={q.lineItems.map((l) => ({ id: l.id, name: l.name, description: l.description, totalCents: l.totalCents, isOptional: l.isOptional, isSelected: l.isSelected, qty: Number(l.quantity) !== 1 ? String(Number(l.quantity)) : "" }))} />

@@ -1,5 +1,6 @@
 "use server";
 import { headers } from "next/headers";
+import { saveSignature } from "@/server/ops/signatures";
 import { redirect } from "next/navigation";
 import { db } from "@/server/db";
 import { approveQuote, requestQuoteChanges } from "@/server/ops/quotes";
@@ -18,8 +19,17 @@ export async function clientApprove(f: FormData) {
   const h = await headers();
   const name = String(f.get("name") ?? "").trim().slice(0, 100);
   if (!name) redirect(`/q/${token}?error=${encodeURIComponent("Type your name to approve")}`);
+  const ip = h.get("cf-connecting-ip") ?? h.get("x-forwarded-for")?.split(",").pop()?.trim() ?? null;
+  const q = await db.quote.findUniqueOrThrow({ where: { id: quoteId } });
+  // Signature first: a missing/blank one stops the approval before anything changes.
   try {
-    await approveQuote(quoteId, { name, selected: f.getAll("selected").map(String), ip: h.get("cf-connecting-ip") ?? h.get("x-forwarded-for")?.split(",").pop()?.trim() ?? null });
+    await saveSignature({ businessId: q.businessId, kind: "QUOTE", quoteId, clientId: q.clientId, dataUrl: String(f.get("signature") ?? ""), signerName: name, ip, userAgent: h.get("user-agent"), inPerson: false });
+  } catch (e) {
+    if (e instanceof TransitionError) redirect(`/q/${token}?error=${encodeURIComponent(e.message)}`);
+    throw e;
+  }
+  try {
+    await approveQuote(quoteId, { name, selected: f.getAll("selected").map(String), ip });
   } catch (e) {
     if (e instanceof TransitionError) redirect(`/q/${token}?error=${encodeURIComponent("This quote can't be approved any more. Give us a call.")}`);
     throw e;

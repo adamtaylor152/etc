@@ -1,3 +1,4 @@
+import { jobRequireSignature } from "../../signature-actions";
 import { jobChecklistSet } from "../../checklist-actions";
 import { JobCosting } from "@/components/job-costing";
 import { team } from "@/server/schedule";
@@ -153,6 +154,11 @@ export default async function JobPage({ params, searchParams }: PageProps<"/jobs
               <select name="templateId" defaultValue={job.checklistTemplateId ?? ""} className="min-h-9 rounded-lg border border-line bg-white px-2"><option value="">None</option>{checklists.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
               <button className="min-h-9 rounded-lg border border-line px-3 font-semibold hover:bg-tint">Save</button>
               <Link href="/settings/checklists" className="text-xs text-blue">Edit checklists</Link>
+            </form>
+            <form action={jobRequireSignature} className="mt-2 flex items-center gap-2 text-sm">
+              <input type="hidden" name="jobId" value={job.id} /><input type="hidden" name="on" value={job.requireSignature ? "0" : "1"} />
+              <span className="font-bold">Client signature</span><span className="text-ink-soft">{job.requireSignature ? "required before each visit is marked Done" : "not required"}</span>
+              <button className="min-h-8 rounded-lg border border-line px-2 text-xs font-semibold hover:bg-tint">{job.requireSignature ? "Turn off" : "Require"}</button>
             </form>
           </section>
           <JobCosting businessId={bid} jobId={job.id} people={await team(bid)} back={here} />

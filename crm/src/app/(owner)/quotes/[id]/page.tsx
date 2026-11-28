@@ -1,3 +1,4 @@
+import { SignatureCard } from "@/components/signatures";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Flash } from "@/components/flash";
@@ -100,7 +101,7 @@ export default async function QuotePage({ params, searchParams }: PageProps<"/qu
             {q.status !== "CONVERTED" && q.status !== "ARCHIVED" && <form action={quoteArchive} className="mt-3">{hidden}<Button variant="secondary">Archive</Button></form>}
           </Card>
         </div>
-        <RecordPanel businessId={bid} target={{ quoteId: q.id }} clientId={q.clientId} path={here} />
+        <div className="space-y-5"><SignatureCard where={{ quoteId: q.id }} signHref={`/sign/quote/${q.id}`} /><RecordPanel businessId={bid} target={{ quoteId: q.id }} clientId={q.clientId} path={here} /></div>
       </div>
     </>
   );

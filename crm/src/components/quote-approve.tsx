@@ -1,6 +1,7 @@
 "use client";
 // Client-side quote approval: tick optional extras (total updates live), type your name, approve.
 import { useState } from "react";
+import { SignaturePad } from "./signature-pad";
 
 type Line = { id: string; name: string; description: string | null; totalCents: number; isOptional: boolean; isSelected: boolean; qty: string };
 const money = (c: number) => `$${(c / 100).toLocaleString("en-CA", { minimumFractionDigits: c % 100 ? 2 : 0, maximumFractionDigits: 2 })}`;
@@ -34,7 +35,8 @@ export function QuoteApprove({ token, lines, discountCents, action, canAct }: {
       {canAct && (
         <div className="space-y-3 rounded-2xl bg-tint p-4">
           <label className="block text-sm font-semibold">Your name<input name="name" required maxLength={100} autoComplete="name" className="mt-1 w-full min-h-11 rounded-xl border border-line bg-white px-3" /></label>
-          <label className="flex items-start gap-2 text-sm"><input type="checkbox" required className="mt-0.5 size-5" /> I approve this quote and would like etc. to do the work.</label>
+          <div><span className="mb-1 block text-sm font-semibold">Signature</span><SignaturePad /></div>
+          <label className="flex items-start gap-2 text-sm"><input type="checkbox" required className="mt-0.5 size-5" /> I approve this quote and authorize etc. to do the work described.</label>
           <button className="min-h-14 w-full rounded-full bg-blue text-base font-semibold text-white">Approve quote ({money(total)})</button>
         </div>
       )}

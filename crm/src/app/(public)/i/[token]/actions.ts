@@ -1,5 +1,8 @@
 "use server";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { saveSignature } from "@/server/ops/signatures";
+import { TransitionError } from "@/server/status/visit";
 import { db } from "@/server/db";
 import { checkoutForInvoice, stripeEnabled } from "@/server/stripe";
 import { peekToken } from "@/server/tokens";
@@ -21,4 +24,20 @@ export async function payByCard(f: FormData) {
     console.error("stripe checkout failed", e);
   }
   redirect(url ?? `/i/${token}?error=${encodeURIComponent("Card payments aren't working right now. Please try e-Transfer or cash.")}`);
+}
+
+/** Optional "sign to confirm" on the invoice page. */
+export async function clientSignInvoice(f: FormData) {
+  const token = String(f.get("t") ?? "");
+  const t = await peekToken(db, token, ["INVOICE"]);
+  if (!t.ok || !t.token.invoiceId) redirect(`/i/${encodeURIComponent(token)}`);
+  const inv = await db.invoice.findUniqueOrThrow({ where: { id: t.token.invoiceId } });
+  const h = await headers();
+  try {
+    await saveSignature({ businessId: inv.businessId, kind: "INVOICE", invoiceId: inv.id, clientId: inv.clientId, dataUrl: String(f.get("signature") ?? ""), signerName: String(f.get("name") ?? ""), ip: h.get("cf-connecting-ip"), userAgent: h.get("user-agent"), inPerson: false });
+  } catch (e) {
+    if (e instanceof TransitionError) redirect(`/i/${encodeURIComponent(token)}?error=${encodeURIComponent(e.message)}`);
+    throw e;
+  }
+  redirect(`/i/${encodeURIComponent(token)}?signed=1`);
 }

@@ -1,5 +1,6 @@
 // Visit operations: the field flow (on my way -> arrived -> done / skip), scheduling and reopening.
 import { assertChecklistDone } from "./checklists";
+import { assertSigned } from "./signatures";
 import type { SkipReason, VisitState } from "@/generated/prisma/client";
 import { chargesForVisit } from "../billing/charges";
 import { dueDate } from "../billing/invoice";
@@ -46,6 +47,7 @@ function transitionTx(user: Actor, visitId: string, to: VisitState, extra: Trans
     if (to === "EN_ROUTE") data.enRouteAt = now;
     if (to === "IN_PROGRESS") data.arrivedAt = now;
     if (to === "COMPLETED") await assertChecklistDone(tx, user.businessId, visitId);
+    if (to === "COMPLETED") await assertSigned(user.businessId, visitId, v.job.requireSignature);
     if (to === "COMPLETED") Object.assign(data, {
       completedAt: now, completedById: user.id, completedLat: extra.lat ?? null, completedLng: extra.lng ?? null,
       depthCm: extra.depthCm ?? v.depthCm, iceMeltApplied: extra.iceMeltApplied ?? v.iceMeltApplied,

@@ -16,7 +16,7 @@ const EVENT_TITLE: Record<string, string> = {
   "booking.received": "Booked online", "request.created": "Request created", "booking.imported": "Imported booking", "client.created": "Client added",
   "request.archived": "Request archived", "request.unarchived": "Request reopened",
   "quote.created": "Quote created", "quote.sent": "Quote sent", "quote.approved": "Quote approved", "quote.changes_requested": "Client asked for changes to a quote",
-  "quote.converted": "Quote converted to a job",
+  "quote.converted": "Quote converted to a job", "quote.signed": "Quote signed", "invoice.signed": "Invoice signed", "visit.signed": "Client signed off the visit",
   "job.created": "Job created", "job.closed": "Job closed", "job.reopened": "Job reopened", "job.schedule_changed": "Repeat schedule changed",
   "plan.created": "Snow plan started", "plan.updated": "Snow plan changed", "plan.paused": "Snow plan paused", "plan.resumed": "Snow plan resumed", "plan.renewed": "Snow plan renewed",
   "visit.en_route": "On the way", "visit.in_progress": "Arrived", "visit.completed": "Visit completed", "visit.checklist_done": "Checklist completed", "visit.skipped": "Visit skipped",
