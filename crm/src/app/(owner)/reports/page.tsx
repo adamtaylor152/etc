@@ -12,7 +12,7 @@ import { Card, PageHeader, Stat } from "@/components/ui";
 import { instants, parseRange, PRESETS, REPORTS } from "@/server/reports";
 import { TZ, todayLocal, toDbDate } from "@/server/dates";
 import { businessId, db } from "@/server/db";
-import { money } from "@/server/money";
+import { cad } from "@/server/money";
 
 export const metadata = { title: "Reports" };
 
@@ -87,7 +87,7 @@ export default async function Reports({ searchParams }: PageProps<"/reports">) {
       <PageHeader title="Reports" sub={`${period}, unless a card says otherwise. Card fees aren't subtracted.`} />
       <RangeBar base="/reports" presets={PRESETS} range={r} />
       <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="Money in" value={money(total)} sub="payments received, after refunds" />
+        <Stat label="Money in" value={cad(total)} sub="payments received, after refunds" />
         <Stat label="Visits done" value={visitsDone.toLocaleString("en-CA")} sub="completed in the period" />
         <Stat label="Quotes approved" value={sent ? `${Math.round((100 * won) / sent)}%` : "–"} sub={sent ? `${won} of ${sent} sent` : "no quotes sent in the period"} />
         <Stat label="Storms this season" value={String(storms.length)} sub={season?.name ?? "no season running"} />

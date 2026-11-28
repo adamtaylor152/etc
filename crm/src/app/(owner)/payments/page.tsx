@@ -6,7 +6,7 @@ import { Pager, pageOf } from "@/components/list-page";
 import { ButtonLink, Card, Empty, PageHeader, Stat, btn } from "@/components/ui";
 import { fromLocalInput, prettyDateTime, todayLocal } from "@/server/dates";
 import { businessId, db } from "@/server/db";
-import { money } from "@/server/money";
+import { cad } from "@/server/money";
 import { clientName } from "@/server/queries";
 
 export const metadata = { title: "Payments" };
@@ -40,9 +40,9 @@ export default async function Payments({ searchParams }: PageProps<"/payments">)
       )}
       {byMethod.length > 0 && (
         <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-          <Stat label={`Received in ${year}`} value={money(received)} sub="after refunds" />
-          {byMethod.map(([m, c]) => <Stat key={m} label={METHOD[m]} value={money(c)} sub={received > 0 ? `${Math.round((100 * c) / received)}% of the year` : undefined} />)}
-          {tips > 0 && <Stat label="Tips" value={money(tips)} sub="on top, not invoice money" />}
+          <Stat label={`Received in ${year}`} value={cad(received)} sub="after refunds" />
+          {byMethod.map(([m, c]) => <Stat key={m} label={METHOD[m]} value={cad(c)} sub={received > 0 ? `${Math.round((100 * c) / received)}% of the year` : undefined} />)}
+          {tips > 0 && <Stat label="Tips" value={cad(tips)} sub="on top, not invoice money" />}
         </div>
       )}
       {payments.length ? (
@@ -70,8 +70,8 @@ export default async function Payments({ searchParams }: PageProps<"/payments">)
                   <td className="hidden whitespace-nowrap px-4 py-3 tabular-nums text-ink-soft sm:table-cell">{prettyDateTime(p.receivedAt)}</td>
                   <td className="px-4 py-3 text-right">
                     <Amount cents={p.amountCents} className="font-semibold" />
-                    {p.tipCents ? <span className="block whitespace-nowrap text-xs tabular-nums text-ink-soft">plus {money(p.tipCents)} tip</span> : null}
-                    {p.refundedCents > 0 && <span className="block whitespace-nowrap text-xs font-medium tabular-nums text-red-700">{money(p.refundedCents)} refunded</span>}
+                    {p.tipCents ? <span className="block whitespace-nowrap text-xs tabular-nums text-ink-soft">plus {cad(p.tipCents)} tip</span> : null}
+                    {p.refundedCents > 0 && <span className="block whitespace-nowrap text-xs font-medium tabular-nums text-red-700">{cad(p.refundedCents)} refunded</span>}
                   </td>
                 </tr>
               ))}

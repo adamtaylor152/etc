@@ -10,7 +10,7 @@ import { invoiceView } from "@/server/billing/invoice";
 import { dateOnly, prettyDate, todayLocal } from "@/server/dates";
 import { db } from "@/server/db";
 import { env } from "@/server/env";
-import { money } from "@/server/money";
+import { cad } from "@/server/money";
 import { clientName } from "@/server/queries";
 import { parseSettings } from "@/server/settings";
 import { peekToken } from "@/server/tokens";
@@ -54,16 +54,16 @@ export default async function PublicInvoice({ params, searchParams }: PageProps<
             <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
               <div>
                 <p className="text-sm font-medium text-ink-soft">Amount due</p>
-                <p className="mt-1 font-display text-[2.5rem] font-semibold leading-none tabular-nums">{money(balance)}</p>
+                <p className="mt-1 font-display text-[2.5rem] font-semibold leading-none tabular-nums">{cad(balance)}</p>
               </div>
               <p className={`font-medium tabular-nums ${view === "PAST_DUE" ? "text-red-700" : "text-ink-soft"}`}>{view === "PAST_DUE" ? "Was due" : "Due"} {prettyDate(dateOnly(inv.dueOn))}</p>
             </div>
-            {inv.amountPaidCents > 0 && <p className="mt-3 text-sm text-ink-soft tabular-nums">{money(inv.amountPaidCents)} of {money(inv.totalCents)} already paid. Thank you.</p>}
+            {inv.amountPaidCents > 0 && <p className="mt-3 text-sm text-ink-soft tabular-nums">{cad(inv.amountPaidCents)} of {cad(inv.totalCents)} already paid. Thank you.</p>}
             <a href="#pay" className={cta("primary", "no-print mt-4")}>How to pay</a>
           </Card>
         ) : inv.status === "PAID" ? (
           <Done title="Paid in full. Thank you.">
-            <p className="tabular-nums">{money(inv.totalCents)} received. There&apos;s nothing more to do.</p>
+            <p className="tabular-nums">{cad(inv.totalCents)} received. There&apos;s nothing more to do.</p>
             <p className="no-print mt-1">{pdf}</p>
           </Done>
         ) : null}
@@ -79,18 +79,18 @@ export default async function PublicInvoice({ params, searchParams }: PageProps<
                   {l.description && <span className="block text-sm text-ink-soft">{l.description}</span>}
                   <span className="block text-sm text-ink-soft tabular-nums">{prettyDate(dateOnly(l.serviceDate))}</span>
                 </span>
-                <span className="shrink-0 font-semibold tabular-nums">{money(l.totalCents)}</span>
+                <span className="shrink-0 font-semibold tabular-nums">{cad(l.totalCents)}</span>
               </li>
             ))}
           </ul>
           <dl className="space-y-1.5 border-t border-line pt-3">
-            {inv.discountCents > 0 && <><TotalRow muted label="Subtotal" value={money(inv.subtotalCents)} /><TotalRow muted label="Discount" value={`−${money(inv.discountCents)}`} /></>}
-            <TotalRow label={<span className="font-semibold">Total</span>} value={<span className="font-display text-xl font-semibold">{money(inv.totalCents)}</span>} />
-            {inv.amountPaidCents > 0 && <><TotalRow muted label="Paid" value={`−${money(inv.amountPaidCents)}`} /><TotalRow label={<span className="font-semibold">Balance</span>} value={<span className="font-semibold">{money(balance)}</span>} /></>}
+            {inv.discountCents > 0 && <><TotalRow muted label="Subtotal" value={cad(inv.subtotalCents)} /><TotalRow muted label="Discount" value={`−${cad(inv.discountCents)}`} /></>}
+            <TotalRow label={<span className="font-semibold">Total</span>} value={<span className="font-display text-xl font-semibold">{cad(inv.totalCents)}</span>} />
+            {inv.amountPaidCents > 0 && <><TotalRow muted label="Paid" value={`−${cad(inv.amountPaidCents)}`} /><TotalRow label={<span className="font-semibold">Balance</span>} value={<span className="font-semibold">{cad(balance)}</span>} /></>}
           </dl>
           {inv.message && <p className="mt-4 whitespace-pre-line rounded-lg bg-tint p-3.5">{inv.message}</p>}
           <div className="mt-4 text-sm text-ink-soft">
-            <p>{biz.taxRegistered ? `${biz.taxName} ${money(inv.taxCents)}${biz.pricesIncludeTax ? " included" : ""}${biz.taxNumber ? ` · ${biz.taxName} #${biz.taxNumber}` : ""}` : "Prices include tax."}</p>
+            <p>{biz.taxRegistered ? `${biz.taxName} ${cad(inv.taxCents)}${biz.pricesIncludeTax ? " included" : ""}${biz.taxNumber ? ` · ${biz.taxName} #${biz.taxNumber}` : ""}` : "Prices include tax."}</p>
             <p className="mt-2 font-semibold text-navy">{biz.legalName ?? biz.name}</p>
             <p className="break-words">{(biz.website ?? env.siteUrl).replace(/^https?:\/\//, "")} · {env.helpEmail}</p>
           </div>

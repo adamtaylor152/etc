@@ -61,7 +61,8 @@ const BTN = {
   danger: "bg-white text-red-700 border-red-200 shadow-sm hover:bg-red-50 hover:border-red-300",
 };
 type Variant = keyof typeof BTN;
-export const btn = (v: Variant, extra = "") => `inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border px-4 text-sm font-semibold disabled:opacity-50 disabled:shadow-none ${BTN[v]} ${extra}`;
+// 44px tall on phones (gloves, cold thumbs), 40px from tablet up. `max-sm:` so a caller's smaller desktop height still applies there.
+export const btn = (v: Variant, extra = "") => `inline-flex min-h-10 max-sm:min-h-11 items-center justify-center gap-2 rounded-lg border px-4 text-sm font-semibold disabled:opacity-50 disabled:shadow-none ${BTN[v]} ${extra}`;
 
 export function Button({ variant = "primary", className = "", ...p }: ComponentProps<"button"> & { variant?: Variant }) {
   return <button {...p} className={btn(variant, className)} />;
@@ -82,7 +83,7 @@ export function Field({ label, children, hint }: { label: string; children: Reac
 }
 
 // 16px on phones (iOS zooms the page on anything smaller), 14px from tablet up to match the rest of the app.
-export const inputCls = "w-full min-h-10 rounded-lg border border-line bg-white px-3 py-2 text-base sm:text-sm outline-none hover:border-ink-faint/60 focus:border-blue focus:ring-2 focus:ring-blue/20 disabled:bg-tint disabled:text-ink-soft";
+export const inputCls = "w-full min-h-10 max-sm:min-h-11 rounded-lg border border-line bg-white px-3 py-2 text-base sm:text-sm outline-none hover:border-ink-faint/60 focus:border-blue focus:ring-2 focus:ring-blue/20 disabled:bg-tint disabled:text-ink-soft";
 
 export function Input(p: ComponentProps<"input">) {
   return <input {...p} className={`${inputCls} ${p.className ?? ""}`} />;
@@ -121,7 +122,7 @@ export function Tabs({ items, active }: { items: { href: string; label: string; 
     <nav className="mb-4 flex gap-1 overflow-x-auto border-b border-line">
       {items.map((t) => (
         <Link key={t.href} href={t.href} aria-current={t.label === active ? "page" : undefined}
-          className={`-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm font-semibold ${t.label === active ? "border-blue text-navy" : "border-transparent text-ink-soft hover:border-line hover:text-navy"}`}>
+          className={`-mb-px inline-flex items-center whitespace-nowrap border-b-2 px-3 py-2 text-sm font-semibold max-sm:min-h-11 ${t.label === active ? "border-blue text-navy" : "border-transparent text-ink-soft hover:border-line hover:text-navy"}`}>
           {t.label}{t.count != null && <span className="ml-1.5 rounded-full bg-tint px-1.5 text-xs text-ink-soft tabular-nums">{t.count}</span>}
         </Link>
       ))}
@@ -129,13 +130,16 @@ export function Tabs({ items, active }: { items: { href: string; label: string; 
   );
 }
 
-/** A headline number with its label (overview tiles on list pages, storms, reports). */
+/** A headline count reads with thousands separators ("1,034"). Anything that is not a number passes through. */
+export const figure = (v: ReactNode) => (typeof v === "number" ? v.toLocaleString("en-CA") : v);
+
+/** A headline number with its label (overview tiles on list pages, storms, reports). The figure shrinks with a narrow tile, so "$11,635.50" fits two-up on a phone. */
 export function Stat({ label, value, sub, tone }: { label: ReactNode; value: ReactNode; sub?: ReactNode; tone?: "good" | "warn" | "bad" }) {
   const color = tone === "good" ? "text-emerald-700" : tone === "warn" ? "text-amber-700" : tone === "bad" ? "text-red-700" : "";
   return (
-    <div className="rounded-xl border border-line bg-white p-4 shadow-card">
+    <div className="@container min-w-0 rounded-xl border border-line bg-white p-4 shadow-card">
       <div className="text-xs font-medium text-ink-soft">{label}</div>
-      <div className={`mt-1 font-display text-[1.7rem] font-semibold leading-none tabular-nums ${color}`}>{value}</div>
+      <div className={`mt-1 font-display text-[clamp(1.15rem,14cqw,1.7rem)] font-semibold leading-none tabular-nums [overflow-wrap:anywhere] ${color}`}>{figure(value)}</div>
       {sub && <div className="mt-1.5 text-xs text-ink-soft">{sub}</div>}
     </div>
   );

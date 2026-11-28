@@ -7,7 +7,7 @@ import { SnowBanner } from "@/components/snow-banner";
 import { Card, Empty } from "@/components/ui";
 import { addDays, dateOnly, localDayStart, prettyDate, todayLocal, toDbDate } from "@/server/dates";
 import { businessId, db } from "@/server/db";
-import { money } from "@/server/money";
+import { cad } from "@/server/money";
 import { autoPayInTrouble } from "@/server/billing/autopay";
 import { clientName, jobsWithStatus } from "@/server/queries";
 import { dayProgress } from "@/server/runner";
@@ -193,23 +193,23 @@ export default async function Home({ searchParams }: PageProps<"/">) {
             { label: "Waiting 3+ days", value: cnt(requests, (r) => r.status === "NEW" && r.createdAt < stale), href: "/requests" },
           ]} />
         <WorkCard title="Quotes" href="/quotes" color="bg-rose-100 text-rose-800" icon={<FileText className="size-4" strokeWidth={1.75} />}
-          lead={{ label: "Approved", count: cnt(quotes, (q) => q.status === "APPROVED"), value: money(sum(quotes, (q) => q.status === "APPROVED", (q) => q.totalCents)), href: "/quotes?status=APPROVED" }}
+          lead={{ label: "Approved", count: cnt(quotes, (q) => q.status === "APPROVED"), value: cad(sum(quotes, (q) => q.status === "APPROVED", (q) => q.totalCents)), href: "/quotes?status=APPROVED" }}
           rows={[
-            { label: "Awaiting response", count: cnt(quotes, (q) => q.status === "AWAITING_RESPONSE"), value: money(sum(quotes, (q) => q.status === "AWAITING_RESPONSE", (q) => q.totalCents)), href: "/quotes?status=AWAITING_RESPONSE" },
+            { label: "Awaiting response", count: cnt(quotes, (q) => q.status === "AWAITING_RESPONSE"), value: cad(sum(quotes, (q) => q.status === "AWAITING_RESPONSE", (q) => q.totalCents)), href: "/quotes?status=AWAITING_RESPONSE" },
             { label: "Changes requested", value: cnt(quotes, (q) => q.status === "CHANGES_REQUESTED"), href: "/quotes?status=CHANGES_REQUESTED" },
             { label: "Drafts", value: cnt(quotes, (q) => q.status === "DRAFT"), href: "/quotes?status=DRAFT" },
           ]} />
         <WorkCard title="Jobs" href="/jobs" color="bg-emerald-100 text-emerald-800" icon={<Hammer className="size-4" strokeWidth={1.75} />}
-          lead={{ label: "Requires invoicing", count: jcount("REQUIRES_INVOICING"), value: money(unbilled._sum.totalCents ?? 0), href: "/billing" }}
+          lead={{ label: "Requires invoicing", count: jcount("REQUIRES_INVOICING"), value: cad(unbilled._sum.totalCents ?? 0), href: "/billing" }}
           rows={[
             { label: "Active", value: jobs.filter((j) => j.status !== "ARCHIVED").length, href: "/jobs" },
             { label: "Late", value: jcount("LATE"), href: "/jobs?status=LATE" },
             { label: "Action required", value: jcount("ACTION_REQUIRED") + jcount("UNSCHEDULED"), href: "/jobs?status=ACTION_REQUIRED" },
           ]} />
         <WorkCard title="Invoices" href="/invoices" color="bg-blue/10 text-blue-deep" icon={<Receipt className="size-4" strokeWidth={1.75} />}
-          lead={{ label: "Awaiting payment", count: owing.length, value: money(owingCents), href: "/invoices" }}
+          lead={{ label: "Awaiting payment", count: owing.length, value: cad(owingCents), href: "/invoices" }}
           rows={[
-            { label: "Past due", count: cnt(invoices, isPastDue), value: money(sum(invoices, isPastDue, (i) => i.totalCents - i.amountPaidCents)), href: "/invoices?tab=PAST_DUE" },
+            { label: "Past due", count: cnt(invoices, isPastDue), value: cad(sum(invoices, isPastDue, (i) => i.totalCents - i.amountPaidCents)), href: "/invoices?tab=PAST_DUE" },
             { label: "Drafts", value: cnt(invoices, (i) => i.status === "DRAFT"), href: "/invoices?tab=DRAFT" },
           ]} />
       </div>
@@ -254,7 +254,7 @@ export default async function Home({ searchParams }: PageProps<"/">) {
           <dl className="divide-y divide-line-soft text-sm">
             <div className="pb-3">
               <dt className="text-xs font-medium text-ink-soft">Receivables</dt>
-              <dd className="mt-1 font-display text-[1.7rem] font-semibold leading-none tabular-nums">{money(owingCents)}</dd>
+              <dd className="mt-1 font-display text-[1.7rem] font-semibold leading-none tabular-nums">{cad(owingCents)}</dd>
               <dd className="mt-1.5 text-xs text-ink-soft">from {owingBy.size} client{owingBy.size === 1 ? "" : "s"}</dd>
               {topOwing.length > 0 && (
                 <dd className="mt-2">
@@ -263,7 +263,7 @@ export default async function Home({ searchParams }: PageProps<"/">) {
                       <li key={o.id}>
                         <Link href={`/clients/${o.id}`} className="-mx-2 flex min-h-9 items-center justify-between gap-3 rounded-lg px-2 hover:bg-tint">
                           <span className="flex min-w-0 items-baseline gap-1.5"><span className="truncate">{o.name}</span>{o.late && <span className="shrink-0 text-xs font-medium text-red-700">past due</span>}</span>
-                          <span className="shrink-0 font-semibold tabular-nums">{money(o.cents)}</span>
+                          <span className="shrink-0 font-semibold tabular-nums">{cad(o.cents)}</span>
                         </Link>
                       </li>
                     ))}
@@ -272,7 +272,7 @@ export default async function Home({ searchParams }: PageProps<"/">) {
               )}
             </div>
             <div className="flex items-baseline justify-between gap-3 py-3"><dt className="text-ink-soft">Visits in the next 7 days</dt><dd className="font-display text-lg font-semibold tabular-nums">{weekVisits}</dd></div>
-            <div className="flex items-baseline justify-between gap-3 pt-3"><dt className="text-ink-soft">Collected this month</dt><dd className="font-display text-lg font-semibold tabular-nums">{money((paidThisMonth._sum.amountCents ?? 0) - (paidThisMonth._sum.refundedCents ?? 0))}</dd></div>
+            <div className="flex items-baseline justify-between gap-3 pt-3"><dt className="text-ink-soft">Collected this month</dt><dd className="font-display text-lg font-semibold tabular-nums">{cad((paidThisMonth._sum.amountCents ?? 0) - (paidThisMonth._sum.refundedCents ?? 0))}</dd></div>
           </dl>
         </Card>
       </div>

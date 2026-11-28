@@ -17,7 +17,7 @@ import { TERMS_LABEL, invoiceView } from "@/server/billing/invoice";
 import { MAX_ATTEMPTS, autoPayPending, cardLabel } from "@/server/billing/autopay";
 import { dateOnly, prettyDate, prettyDateTime, todayLocal } from "@/server/dates";
 import { business, businessId, db } from "@/server/db";
-import { money } from "@/server/money";
+import { cad } from "@/server/money";
 import { clientName } from "@/server/queries";
 import { paymentRefund } from "../../billing-extras-actions";
 import { invoiceBadDebt, invoiceMarkSent, invoiceSend, invoiceVoid, paymentDelete, paymentRecord, viewAsClient } from "../../billing-actions";
@@ -100,7 +100,7 @@ export default async function InvoicePage({ params, searchParams }: PageProps<"/
             <Card title="Auto-pay" actions={<Badge tone={AUTOPAY_STATE[autoState][1]}>{AUTOPAY_STATE[autoState][0]}</Badge>} className={autoFailed ? "border-red-200" : autoTrouble ? "border-amber-300" : ""}>
               <p className={`max-w-[70ch] text-sm ${autoFailed ? "font-medium text-red-900" : "text-ink-soft"}`}>{AUTOPAY_NOTE[autoState]}</p>
               {autoPayPending(inv.autoPayState) && inv.autoPayOn && (
-                <p className="mt-2 text-sm font-medium tabular-nums">{inv.autoPayState === "RETRYING" ? "Next try" : `${cardLabel(inv.client) ?? "The card"} is charged ${money(balance)}`} on {prettyDate(dateOnly(inv.autoPayOn))}.</p>
+                <p className="mt-2 text-sm font-medium tabular-nums">{inv.autoPayState === "RETRYING" ? "Next try" : `${cardLabel(inv.client) ?? "The card"} is charged ${cad(balance)}`} on {prettyDate(dateOnly(inv.autoPayOn))}.</p>
               )}
               {attempts.length > 0 && (
                 <ul className="mt-3 divide-y divide-line-soft border-t border-line-soft text-sm">
@@ -121,21 +121,21 @@ export default async function InvoicePage({ params, searchParams }: PageProps<"/
     <>
       <Flash error={sp.error} />
       {sp.refunded && <Notice tone="good">Refund recorded. A refund receipt is on its way to the client.</Notice>}
-      {refunded > 0 && inv.status === "AWAITING_PAYMENT" && <Notice tone="warn">{money(refunded)} was refunded, so this invoice shows {money(balance)} owing again. If nothing more is owed, write it off{holdsMoney ? "" : " or void it"} from the More menu. No automatic reminders go out for it.</Notice>}
+      {refunded > 0 && inv.status === "AWAITING_PAYMENT" && <Notice tone="warn">{cad(refunded)} was refunded, so this invoice shows {cad(balance)} owing again. If nothing more is owed, write it off{holdsMoney ? "" : " or void it"} from the More menu. No automatic reminders go out for it.</Notice>}
       {sp.sent && <Notice tone="good">Invoice emailed to {inv.client.email}.</Notice>}
       <DetailHeader
         back={{ href: "/invoices", label: "Invoices" }}
         kind={inv.kind === "DEPOSIT" ? "Deposit invoice" : "Invoice"}
         status={<InvoiceBadge s={view} />}
-        title={<>#{inv.number} <span className="text-ink-soft">·</span> {money(inv.totalCents)}</>}
+        title={<>#{inv.number} <span className="text-ink-soft">·</span> {cad(inv.totalCents)}</>}
         sub={<>
           <Link className="font-semibold text-blue hover:text-blue-deep" href={`/clients/${inv.clientId}`}>{clientName(inv.client)}</Link>{inv.subject && <> · {inv.subject}</>}
           <span className="mt-0.5 block tabular-nums">
             {view === "PAID" ? <span className="font-medium text-emerald-700">Paid{inv.paidAt ? ` ${prettyDate(dateOnly(inv.paidAt))}` : ""}</span>
-              : view === "PAST_DUE" ? <span className="font-medium text-red-700">Past due: {money(balance)} was due {prettyDate(due)}</span>
+              : view === "PAST_DUE" ? <span className="font-medium text-red-700">Past due: {cad(balance)} was due {prettyDate(due)}</span>
               : view === "VOID" ? (inv.voidReason ? `Voided: ${inv.voidReason}` : null)
-              : view === "BAD_DEBT" ? `${money(balance)} written off as bad debt`
-              : due ? <>{money(balance)} due {prettyDate(due)}</>
+              : view === "BAD_DEBT" ? `${cad(balance)} written off as bad debt`
+              : due ? <>{cad(balance)} due {prettyDate(due)}</>
               : "Not sent yet"}
           </span>
         </>}
@@ -165,7 +165,7 @@ export default async function InvoicePage({ params, searchParams }: PageProps<"/
                 {inv.lineItems.map((l) => (
                   <tr key={l.id} className="align-top">
                     <td className="py-2.5">
-                      <span className="font-medium">{l.name}</span>{Number(l.quantity) !== 1 && <span className="tabular-nums text-ink-soft"> × {Number(l.quantity)} @ {money(l.unitPriceCents)}</span>}
+                      <span className="font-medium">{l.name}</span>{Number(l.quantity) !== 1 && <span className="tabular-nums text-ink-soft"> × {Number(l.quantity)} @ {cad(l.unitPriceCents)}</span>}
                       {l.description && <span className="block max-w-[60ch] text-xs text-ink-soft">{l.description}</span>}
                       {l.serviceDate && <span className="block text-xs tabular-nums text-ink-soft sm:hidden">{prettyDate(dateOnly(l.serviceDate))}</span>}
                     </td>
@@ -221,9 +221,9 @@ export default async function InvoicePage({ params, searchParams }: PageProps<"/
                         </div>
                         <div className="text-right">
                           <Amount cents={p.amountCents} className="font-semibold" />
-                          {p.tipCents ? <span className="block text-xs tabular-nums text-ink-soft">plus {money(p.tipCents)} tip</span> : null}
-                          {extra > 0 && <span className="block text-xs tabular-nums text-ink-soft">plus {money(extra)} kept as credit</span>}
-                          {p.refundedCents > 0 && <span className="block text-xs font-medium tabular-nums text-red-700">{money(p.refundedCents)} refunded</span>}
+                          {p.tipCents ? <span className="block text-xs tabular-nums text-ink-soft">plus {cad(p.tipCents)} tip</span> : null}
+                          {extra > 0 && <span className="block text-xs tabular-nums text-ink-soft">plus {cad(extra)} kept as credit</span>}
+                          {p.refundedCents > 0 && <span className="block text-xs font-medium tabular-nums text-red-700">{cad(p.refundedCents)} refunded</span>}
                         </div>
                       </div>
                       {(canRemove || canRefund) && (

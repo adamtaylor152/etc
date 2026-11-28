@@ -7,7 +7,7 @@ import { Saved, SwitchRow, primaryWhenOpen, rowToggle } from "@/components/setti
 import { Badge, Button, Card, Empty, Field, Input, Textarea, btn, inputCls } from "@/components/ui";
 import type { Service } from "@/generated/prisma/client";
 import { businessId, db } from "@/server/db";
-import { money } from "@/server/money";
+import { cad } from "@/server/money";
 import { CATEGORIES, SNOW_KEYS, UNITS } from "@/server/ops/price-book";
 import { serviceArchive, serviceMove, serviceSave } from "./actions";
 
@@ -72,7 +72,7 @@ export default async function PriceBook({ searchParams }: PageProps<"/settings/p
             <ul>
               {services.map((sv, i) => {
                 const firstArchived = !sv.active && (i === 0 || services[i - 1].active);
-                const price = sv.unitPriceCents != null ? money(sv.unitPriceCents) : null;
+                const price = sv.unitPriceCents != null ? cad(sv.unitPriceCents) : null;
                 return (
                   <li key={sv.id} className="border-b border-line-soft last:border-b-0">
                     {firstArchived && <h2 className="border-b border-line-soft bg-tint px-4 py-2 text-xs font-medium text-ink-soft">Archived: kept on past quotes, jobs and invoices, hidden from pickers and booking</h2>}
@@ -94,11 +94,11 @@ export default async function PriceBook({ searchParams }: PageProps<"/settings/p
                             {!sv.active && <Badge>Archived</Badge>}
                           </span>
                           <span className="mt-0.5 block text-ink-soft tabular-nums lg:hidden">
-                            {category(sv)} · {price ? `${price} ${UNITS[sv.unit]}` : "Quote"}{sv.defaultDurationMin != null && ` · ${sv.defaultDurationMin} min`}{sv.unitCostCents != null && ` · cost ${money(sv.unitCostCents)}`}
+                            {category(sv)} · {price ? `${price} ${UNITS[sv.unit]}` : "Quote"}{sv.defaultDurationMin != null && ` · ${sv.defaultDurationMin} min`}{sv.unitCostCents != null && ` · cost ${cad(sv.unitCostCents)}`}
                           </span></span>
                           <span className="hidden text-ink-soft lg:block">{category(sv)}</span>
                           <span className="hidden text-right tabular-nums text-ink-soft lg:block">{sv.defaultDurationMin != null ? `${sv.defaultDurationMin} min` : "—"}</span>
-                          <span className="hidden text-right tabular-nums text-ink-soft lg:block">{sv.unitCostCents != null ? money(sv.unitCostCents) : "—"}</span>
+                          <span className="hidden text-right tabular-nums text-ink-soft lg:block">{sv.unitCostCents != null ? cad(sv.unitCostCents) : "—"}</span>
                           <span className={`hidden text-right tabular-nums lg:block ${price ? "font-semibold" : "text-ink-soft"}`}>{price ?? "Quote"}</span>
                           <span className="hidden text-ink-soft lg:block">{price ? UNITS[sv.unit] : ""}</span>
                           <span className={`mt-1 sm:mt-0 sm:justify-end ${rowToggle}`}><span className="group-open:hidden">Edit</span><span className="hidden group-open:inline">Close</span><ChevronDown className="size-4 transition-transform group-open:rotate-180" aria-hidden /></span>

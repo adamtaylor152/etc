@@ -8,7 +8,7 @@ import { InlineField, Saved, SwitchRow, inlineCls, numCls } from "@/components/s
 import { Badge, Button, ButtonLink, Card, Empty, PageHeader, Stat, btn } from "@/components/ui";
 import { addDays, localDayStart, prettyDate, todayLocal } from "@/server/dates";
 import { businessId, db } from "@/server/db";
-import { money } from "@/server/money";
+import { cad } from "@/server/money";
 import { clientName } from "@/server/queries";
 import { AUTOMATION_KEYS, AUTOMATIONS } from "@/server/ops/automations";
 import { parseSettings } from "@/server/settings";
@@ -47,7 +47,7 @@ export default async function Marketing({ searchParams }: PageProps<"/marketing"
         <Stat label="Review requests sent" value={reviews.length} sub={`${rated.length} rated · average ${avg}${rated.length ? " out of 5" : ""}`} />
         <Stat label="Went to Google" value={reviews.filter((r) => r.googleClickedAt).length} sub="clicked “Leave a Google review”" />
         <Stat label="Referrals" value={referrals.length} sub={`${referrals.filter((r) => r.status !== "PENDING").length} qualified`} />
-        <Stat label="Credits issued" value={money(credits._sum.amountCents ?? 0)} sub="all time" />
+        <Stat label="Credits issued" value={cad(credits._sum.amountCents ?? 0)} sub="all time" />
       </div>
       <div className="grid gap-5 lg:grid-cols-2 [&>*]:min-w-0">
         <Card title="Recent ratings & feedback">

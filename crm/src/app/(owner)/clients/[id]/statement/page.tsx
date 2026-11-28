@@ -6,7 +6,7 @@ import { Download, Mail } from "lucide-react";
 import { dateOnly, prettyDate, todayLocal } from "@/server/dates";
 import { businessId } from "@/server/db";
 import { loadStatement, parseStatementRange, statementQuery } from "@/server/statement";
-import { money } from "@/server/money";
+import { cad } from "@/server/money";
 import { clientName } from "@/server/queries";
 import { DetailHeader } from "@/components/detail-header";
 import { Flash } from "@/components/flash";
@@ -59,17 +59,17 @@ export default async function Statement({ params, searchParams }: PageProps<"/cl
           <table className="w-full min-w-[30rem] text-sm">
             <thead><tr className="border-b border-navy text-left"><th className={`${th} pr-3`}>Date</th><th className={`${th} pr-3`}>Description</th><th className={`${th} text-right`}>Charges</th><th className={`${th} pl-3 text-right`}>Payments</th><th className={`${th} pl-3 text-right`}>Balance</th></tr></thead>
             <tbody className="divide-y divide-line-soft">
-              {since && <tr><td className="whitespace-nowrap py-2.5 pr-3 text-ink-soft">{prettyDate(dateOnly(since))}</td><td>Opening balance</td><td /><td /><td className="text-right">{money(st.openingCents)}</td></tr>}
+              {since && <tr><td className="whitespace-nowrap py-2.5 pr-3 text-ink-soft">{prettyDate(dateOnly(since))}</td><td>Opening balance</td><td /><td /><td className="text-right">{cad(st.openingCents)}</td></tr>}
               {st.rows.map((r) => (
                 <tr key={r.kind + r.id}>
                   <td className="whitespace-nowrap py-2.5 pr-3 text-ink-soft">{prettyDate(dateOnly(r.date))}</td><td className="pr-3">{r.label}</td>
-                  <td className="whitespace-nowrap text-right">{r.amountCents > 0 ? money(r.amountCents) : ""}</td><td className="whitespace-nowrap pl-3 text-right">{r.amountCents < 0 ? money(-r.amountCents) : ""}</td>
-                  <td className="whitespace-nowrap pl-3 text-right">{money(r.balanceCents)}</td>
+                  <td className="whitespace-nowrap text-right">{r.amountCents > 0 ? cad(r.amountCents) : ""}</td><td className="whitespace-nowrap pl-3 text-right">{r.amountCents < 0 ? cad(-r.amountCents) : ""}</td>
+                  <td className="whitespace-nowrap pl-3 text-right">{cad(r.balanceCents)}</td>
                 </tr>
               ))}
               {!since && !st.rows.length && <tr><td colSpan={5} className="py-6 text-center text-ink-soft">No invoices or payments in this period.</td></tr>}
             </tbody>
-            <tfoot><tr className="border-t border-navy"><td colSpan={4} className="pt-3 text-right font-semibold">Balance owing</td><td className="whitespace-nowrap pl-3 pt-3 text-right font-display text-xl font-semibold">{money(st.balanceCents)}</td></tr></tfoot>
+            <tfoot><tr className="border-t border-navy"><td colSpan={4} className="pt-3 text-right font-semibold">Balance owing</td><td className="whitespace-nowrap pl-3 pt-3 text-right font-display text-xl font-semibold">{cad(st.balanceCents)}</td></tr></tfoot>
           </table>
         </div>
         {st.balanceCents > 0 && biz.etransferEmail && <p className="mt-6 max-w-[70ch] text-sm">Pay by Interac e-Transfer to <span className="font-semibold">{biz.etransferEmail}</span> (include your invoice number), or cash.</p>}

@@ -41,7 +41,7 @@ export default async function CampaignPage({ params, searchParams }: PageProps<"
   return (
     <>
       <DetailHeader back={{ href: "/marketing/campaigns", label: "Campaigns" }} kind={email ? "Email campaign" : "Text campaign"} status={<CampaignBadge status={c.status} />} title={c.name}
-        sub={c.status === "SCHEDULED" && c.scheduledFor ? `Goes out ${prettyDateTime(c.scheduledFor)}.` : undefined}
+        sub={c.status === "SCHEDULED" && c.scheduledFor ? `Goes out ${prettyDateTime(c.scheduledFor)}` : undefined}
         actions={<>
           {queued > 0 && <form action={campaignCancel}><input type="hidden" name="id" value={c.id} /><ConfirmButton message={`Cancel this campaign? ${queued} message${queued === 1 ? "" : "s"} not sent yet will never go out. This can't be undone (duplicate it to send again).`} className={btn("danger")}>Cancel {queued} unsent</ConfirmButton></form>}
           <form action={campaignDuplicate}><input type="hidden" name="id" value={c.id} /><Button variant="secondary">Duplicate</Button></form>

@@ -20,7 +20,7 @@ import { ConfirmButton } from "@/components/confirm-button";
 import { canTransition } from "@/server/status/visit";
 import { dateOnly, prettyDate, prettyDateTime, todayLocal } from "@/server/dates";
 import { businessId, db } from "@/server/db";
-import { money } from "@/server/money";
+import { cad } from "@/server/money";
 import { clientName } from "@/server/queries";
 import { mapsLink, routeVisits } from "@/server/routing";
 import { visitLinesLock, visitStatus } from "@/server/status/job";
@@ -131,12 +131,12 @@ export default async function VisitPage({ params, searchParams }: PageProps<"/vi
 
         {v.isReturn && (
           <div className="[&>p]:mb-0">
-            <Notice><span className="font-semibold">Return visit.</span> <span className="font-normal">We&apos;ve already cleared this address this storm; this trip is for what came back (usually the city plough at the driveway end). {v.returnPriceCents ? <>Billable: <span className="font-semibold tabular-nums">{money(v.returnPriceCents)}</span>, charged once when it&apos;s marked done.</> : "Included: no charge."}</span></Notice>
+            <Notice><span className="font-semibold">Return visit.</span> <span className="font-normal">We&apos;ve already cleared this address this storm; this trip is for what came back (usually the city plough at the driveway end). {v.returnPriceCents ? <>Billable: <span className="font-semibold tabular-nums">{cad(v.returnPriceCents)}</span>, charged once when it&apos;s marked done.</> : "Included: no charge."}</span></Notice>
           </div>
         )}
         {v.extras.length > 0 && (
           <Card title="Extras the client added">
-            <ul className="divide-y divide-line-soft text-sm">{v.extras.map((e) => <li key={e.id} className="flex justify-between gap-2 py-2"><span className="font-semibold">{e.name}</span><span className="tabular-nums text-ink-soft">{money(e.unitPriceCents)}</span></li>)}</ul>
+            <ul className="divide-y divide-line-soft text-sm">{v.extras.map((e) => <li key={e.id} className="flex justify-between gap-2 py-2"><span className="font-semibold">{e.name}</span><span className="tabular-nums text-ink-soft">{cad(e.unitPriceCents)}</span></li>)}</ul>
             <p className="mt-2 text-xs text-ink-soft">Added from their client page. Billed once, with this visit, when it&apos;s marked done.</p>
           </Card>
         )}
@@ -229,7 +229,7 @@ export default async function VisitPage({ params, searchParams }: PageProps<"/vi
               ["Reason", v.skipReason ? SKIP.find(([k]) => k === v.skipReason)?.[1] ?? v.skipReason : null],
               ["Note", v.skipNote],
               ["Location", v.completedLat != null ? <a className="font-semibold text-blue hover:text-blue-deep" href={`https://www.google.com/maps/search/?api=1&query=${v.completedLat},${v.completedLng}`}>Recorded</a> : null],
-              ["Charges", v.charges.length ? v.charges.map((c) => `${c.name}: ${money(c.totalCents)}`).join("\n") : null],
+              ["Charges", v.charges.length ? v.charges.map((c) => `${c.name}: ${cad(c.totalCents)}`).join("\n") : null],
             ]} />
             {v.state === "COMPLETED" && v.iceMeltApplied && (
               <form action={visitIceMeltBags} className="mt-3 flex items-end gap-2">
@@ -244,7 +244,7 @@ export default async function VisitPage({ params, searchParams }: PageProps<"/vi
                 <p className="text-sm"><span className="font-semibold">Plough came back?</span> Add a return visit to today&apos;s route for this address, with the same people.</p>
                 <div className="grid grid-cols-2 gap-2">
                   <Button variant="secondary" name="billable" value="0" className="min-h-11!">Included (no charge)</Button>
-                  <Button variant="secondary" name="billable" value="1" className="min-h-11! tabular-nums">Billable ({money(returnCents)})</Button>
+                  <Button variant="secondary" name="billable" value="1" className="min-h-11! tabular-nums">Billable ({cad(returnCents)})</Button>
                 </div>
               </form>
             )}
@@ -252,7 +252,7 @@ export default async function VisitPage({ params, searchParams }: PageProps<"/vi
               <form action={paymentRecord} className="mt-4 space-y-2 rounded-lg bg-tint p-3">
                 <input type="hidden" name="invoiceId" value={invoice.id} /><input type="hidden" name="back" value={here} />
                 <input type="hidden" name="amount" value={(owing / 100).toFixed(2)} />
-                <p className="text-sm">Invoice #{invoice.number}: <span className="font-semibold tabular-nums">{money(owing)}</span> owing. Paid on the spot?</p>
+                <p className="text-sm">Invoice #{invoice.number}: <span className="font-semibold tabular-nums">{cad(owing)}</span> owing. Paid on the spot?</p>
                 <div className="grid grid-cols-2 gap-2">
                   <Button variant="secondary" name="method" value="CASH" className="min-h-11!">Got cash</Button>
                   <Button variant="secondary" name="method" value="ETRANSFER" className="min-h-11!">Got e-Transfer</Button>
@@ -270,7 +270,7 @@ export default async function VisitPage({ params, searchParams }: PageProps<"/vi
         {v.job.kind !== "SNOW_PLAN" && v.job.billingType === "PER_VISIT" && (
           <Card title={overrides ? "This visit's own price" : "What this visit charges"}>
             <ul className="divide-y divide-line-soft text-sm">
-              {priced.map((l, i) => <li key={i} className="flex justify-between gap-2 py-2"><span>{l.name}{Number(l.quantity) !== 1 && <span className="tabular-nums text-ink-soft"> × {Number(l.quantity)}</span>}</span><span className="font-semibold tabular-nums">{money(Math.round(Number(l.quantity) * l.unitPriceCents))}</span></li>)}
+              {priced.map((l, i) => <li key={i} className="flex justify-between gap-2 py-2"><span>{l.name}{Number(l.quantity) !== 1 && <span className="tabular-nums text-ink-soft"> × {Number(l.quantity)}</span>}</span><span className="font-semibold tabular-nums">{cad(Math.round(Number(l.quantity) * l.unitPriceCents))}</span></li>)}
             </ul>
             <p className="mt-2 text-xs text-ink-soft">{overrides ? `Changed for this visit only; job #${v.job.number} keeps its own prices.` : "From the job's line items."}{linesLock && ` ${linesLock}.`}</p>
             {!linesLock && (

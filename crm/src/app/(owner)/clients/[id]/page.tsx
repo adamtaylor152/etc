@@ -26,7 +26,7 @@ import { invoiceView } from "@/server/billing/invoice";
 import { ledger } from "@/server/billing/ledger";
 import { dateOnly, prettyDate, prettyDateTime, todayLocal, toDbDate } from "@/server/dates";
 import { businessId, db } from "@/server/db";
-import { money } from "@/server/money";
+import { cad } from "@/server/money";
 import { notesFor } from "@/server/ops/notes";
 import { clientName, jobsWithStatus } from "@/server/queries";
 import { visitStatus } from "@/server/status/job";
@@ -167,11 +167,11 @@ export default async function ClientPage({ params, searchParams }: PageProps<"/c
 
       <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-3">
         <div className="col-span-2 lg:col-span-1">
-          <Stat label="Balance owing" value={money(books.balanceCents)} tone={owing ? "warn" : undefined}
+          <Stat label="Balance owing" value={cad(books.balanceCents)} tone={owing ? "warn" : undefined}
             sub={<span className="flex flex-wrap gap-x-3 gap-y-1 text-[13px]">{owing ? <Link href={`/clients/${id}/collect`} className={link}>Collect payment</Link> : <span>Nothing owing</span>}<Link href={`/clients/${id}/statement`} className={link}>Statement</Link></span>} />
         </div>
-        <Stat label="Lifetime value" value={money(lifetime)} sub={`${c.payments.length} payment${c.payments.length === 1 ? "" : "s"} received`} />
-        <Stat label="Account credit" value={money(credit)} tone={credit > 0 ? "good" : undefined} sub={credit > 0 ? "Comes off the next invoice" : "None waiting"} />
+        <Stat label="Lifetime value" value={cad(lifetime)} sub={`${c.payments.length} payment${c.payments.length === 1 ? "" : "s"} received`} />
+        <Stat label="Account credit" value={cad(credit)} tone={credit > 0 ? "good" : undefined} sub={credit > 0 ? "Comes off the next invoice" : "None waiting"} />
       </div>
 
       <div className="flex flex-col gap-5 lg:grid lg:grid-cols-3 lg:items-start">
@@ -198,9 +198,9 @@ export default async function ClientPage({ params, searchParams }: PageProps<"/c
                   {counts[work] ? (
                     <ul className="divide-y divide-line-soft text-sm">
                       {work === "jobs" && jobs.map((j) => row(j.id, `/jobs/${j.id}`, `Job #${j.number}`, j.title, j.property.formatted.split(",")[0], <JobBadge s={j.status} />))}
-                      {work === "quotes" && c.quotes.map((q) => row(q.id, `/quotes/${q.id}`, `Quote #${q.number}`, q.title, prettyDate(dateOnly(q.createdAt)), <Badge tone={QUOTE[q.status][1]}>{QUOTE[q.status][0]}</Badge>, money(q.totalCents)))}
+                      {work === "quotes" && c.quotes.map((q) => row(q.id, `/quotes/${q.id}`, `Quote #${q.number}`, q.title, prettyDate(dateOnly(q.createdAt)), <Badge tone={QUOTE[q.status][1]}>{QUOTE[q.status][0]}</Badge>, cad(q.totalCents)))}
                       {work === "requests" && c.requests.map((r) => row(r.id, `/requests/${r.id}`, `Request #${r.number}`, r.title, prettyDateTime(r.createdAt), <RequestBadge s={r.status} />))}
-                      {work === "invoices" && c.invoices.map((i) => row(i.id, `/invoices/${i.id}`, `Invoice #${i.number}`, i.subject, i.dueOn ? `Due ${prettyDate(dateOnly(i.dueOn))}` : "Not sent", <InvoiceBadge s={invoiceView({ ...i, dueOn: dateOnly(i.dueOn) }, today)} />, money(i.totalCents)))}
+                      {work === "invoices" && c.invoices.map((i) => row(i.id, `/invoices/${i.id}`, `Invoice #${i.number}`, i.subject, i.dueOn ? `Due ${prettyDate(dateOnly(i.dueOn))}` : "Not sent", <InvoiceBadge s={invoiceView({ ...i, dueOn: dateOnly(i.dueOn) }, today)} />, cad(i.totalCents)))}
                     </ul>
                   ) : <Empty action={<ButtonLink href={newWork[1]}><Plus className="-ml-1 size-4" aria-hidden />{newWork[0]}</ButtonLink>}>No {work} for {c.firstName} yet.</Empty>}
                 </section>
@@ -227,12 +227,12 @@ export default async function ClientPage({ params, searchParams }: PageProps<"/c
                           <tr key={r.kind + r.id}>
                             <td className="whitespace-nowrap py-2.5 pr-3 text-ink-soft">{prettyDate(dateOnly(r.date))}</td>
                             <td className="pr-3"><Link href={r.href} className={link}>{r.label}</Link></td>
-                            <td className={`whitespace-nowrap text-right ${r.amountCents < 0 ? "text-emerald-700" : ""}`}>{r.amountCents < 0 ? `−${money(-r.amountCents)}` : money(r.amountCents)}</td>
-                            <td className="hidden whitespace-nowrap pl-4 text-right text-ink-soft sm:table-cell">{money(r.balanceCents)}</td>
+                            <td className={`whitespace-nowrap text-right ${r.amountCents < 0 ? "text-emerald-700" : ""}`}>{r.amountCents < 0 ? `−${cad(-r.amountCents)}` : cad(r.amountCents)}</td>
+                            <td className="hidden whitespace-nowrap pl-4 text-right text-ink-soft sm:table-cell">{cad(r.balanceCents)}</td>
                           </tr>
                         ))}
                       </tbody>
-                      <tfoot><tr className="border-t border-line"><td colSpan={2} className="pt-3 font-semibold">Current balance</td><td colSpan={2} className={`pt-3 text-right font-display text-lg font-semibold ${owing ? "text-amber-700" : ""}`}>{money(books.balanceCents)}</td></tr></tfoot>
+                      <tfoot><tr className="border-t border-line"><td colSpan={2} className="pt-3 font-semibold">Current balance</td><td colSpan={2} className={`pt-3 text-right font-display text-lg font-semibold ${owing ? "text-amber-700" : ""}`}>{cad(books.balanceCents)}</td></tr></tfoot>
                     </table>
                   ) : <p className="text-sm text-ink-soft">No invoices or payments yet.</p>}
                   {books.rows.length > 12 && <p className="mt-2 text-xs text-ink-soft">Showing the latest 12. The <Link href={`/clients/${id}/statement`} className={link}>statement</Link> has everything.</p>}
@@ -315,13 +315,13 @@ export default async function ClientPage({ params, searchParams }: PageProps<"/c
             ) : <p className="text-sm text-ink-soft">Just {c.firstName}. Add a spouse, tenant or property manager.</p>}
           </Card>
 
-          <Card title="Account credit" className="order-3 lg:order-none" actions={credit > 0 ? <span className="font-display font-semibold text-emerald-700 tabular-nums">{money(credit)}</span> : undefined}>
+          <Card title="Account credit" className="order-3 lg:order-none" actions={credit > 0 ? <span className="font-display font-semibold text-emerald-700 tabular-nums">{cad(credit)}</span> : undefined}>
             {credits.length ? (
               <ul className="-mt-1 mb-2 divide-y divide-line-soft text-sm">
                 {credits.map((k) => (
                   <li key={k.id} className="flex items-center justify-between gap-2 py-2">
-                    <span className="min-w-0"><span className="font-semibold tabular-nums">{money(k.amountCents)}</span> {k.reason}<span className="block text-xs text-ink-soft">{prettyDate(dateOnly(k.createdAt))}</span></span>
-                    {!k.referralId && <form action={creditRemove}><input type="hidden" name="id" value={k.id} /><input type="hidden" name="back" value={here} /><ConfirmButton message={`Remove this ${money(k.amountCents)} credit?`} className={`${quiet} hover:text-red-700`}>Remove</ConfirmButton></form>}
+                    <span className="min-w-0"><span className="font-semibold tabular-nums">{cad(k.amountCents)}</span> {k.reason}<span className="block text-xs text-ink-soft">{prettyDate(dateOnly(k.createdAt))}</span></span>
+                    {!k.referralId && <form action={creditRemove}><input type="hidden" name="id" value={k.id} /><input type="hidden" name="back" value={here} /><ConfirmButton message={`Remove this ${cad(k.amountCents)} credit?`} className={`${quiet} hover:text-red-700`}>Remove</ConfirmButton></form>}
                   </li>
                 ))}
               </ul>

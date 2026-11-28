@@ -16,7 +16,7 @@ import { ConfirmButton } from "@/components/confirm-button";
 import { Copy, Lock, Pencil, Trash2 } from "lucide-react";
 import { dateOnly, prettyDate, todayLocal } from "@/server/dates";
 import { businessId, db } from "@/server/db";
-import { money } from "@/server/money";
+import { cad } from "@/server/money";
 import { clientName, jobsWithStatus } from "@/server/queries";
 import { visitStatus } from "@/server/status/job";
 import { invoiceCreate } from "../../billing-actions";
@@ -200,9 +200,9 @@ export default async function JobPage({ params, searchParams }: PageProps<"/jobs
               </form>
             )}>
               <p className="mb-4 max-w-[70ch] text-sm text-ink-soft">{job.season?.name}. A visit is added automatically when a storm reaches the trigger. {mode === "SEASONAL"
-                ? <>Billed a flat <span className="font-semibold tabular-nums text-navy">{money(job.seasonalPriceCents ?? 0)}</span> for the season{job.addonsIncluded ? ", ice melt included" : "; ice melt is charged per visit"}.</>
+                ? <>Billed a flat <span className="font-semibold tabular-nums text-navy">{cad(job.seasonalPriceCents ?? 0)}</span> for the season{job.addonsIncluded ? ", ice melt included" : "; ice melt is charged per visit"}.</>
                 : mode === "PER_EVENT" ? "Billed once per storm, however many pushes; invoiced when the storm is finished." : "Billed per push, once per storm."}
-                {mode !== "SEASONAL" && tiers.length > 0 && <> By depth: <span className="font-semibold text-navy">{describeTiers(tiers, job.pricePerPushCents ?? 3000, money)}</span>.</>}</p>
+                {mode !== "SEASONAL" && tiers.length > 0 && <> By depth: <span className="font-semibold text-navy">{describeTiers(tiers, job.pricePerPushCents ?? 3000, cad)}</span>.</>}</p>
               <form action={planUpdate} className="space-y-4">
                 <input type="hidden" name="id" value={job.id} /><input type="hidden" name="back" value={here} />
                 <div className="grid items-start gap-3 sm:grid-cols-3">
@@ -223,11 +223,11 @@ export default async function JobPage({ params, searchParams }: PageProps<"/jobs
               {mode === "SEASONAL" && (
                 <div className="mt-5 border-t border-line-soft pt-4 text-sm">
                   <h3 className="font-semibold">Instalments</h3>
-                  <p className="mt-0.5 tabular-nums text-ink-soft">{money(paidCents)} of {money(job.seasonalPriceCents ?? 0)} paid · {instalments.filter((i) => i.invoice?.status === "PAID").length} of {instalments.length} instalment{instalments.length === 1 ? "" : "s"} paid</p>
+                  <p className="mt-0.5 tabular-nums text-ink-soft">{cad(paidCents)} of {cad(job.seasonalPriceCents ?? 0)} paid · {instalments.filter((i) => i.invoice?.status === "PAID").length} of {instalments.length} instalment{instalments.length === 1 ? "" : "s"} paid</p>
                   <ul className="mt-2 divide-y divide-line-soft">
                     {instalments.map((i) => (
                       <li key={i.n} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 py-2 tabular-nums">
-                        <span>{prettyDate(i.dueOn)} · <span className="font-semibold">{money(i.amountCents)}</span></span>
+                        <span>{prettyDate(i.dueOn)} · <span className="font-semibold">{cad(i.amountCents)}</span></span>
                         {i.invoice ? <Link href={`/invoices/${i.invoice.id}`} className="font-semibold text-blue hover:text-blue-deep">Invoice #{i.invoice.number} · {i.invoice.status === "PAID" ? "Paid" : i.invoice.status === "VOID" ? "Void" : "Unpaid"}</Link>
                           : <span className="text-ink-soft">{closed ? "Not invoiced (plan ended)" : i.dueOn <= today ? "Invoicing within the hour" : "Not due yet"}</span>}
                       </li>
@@ -244,14 +244,14 @@ export default async function JobPage({ params, searchParams }: PageProps<"/jobs
                     <thead><tr className="text-xs font-medium text-ink-soft"><th scope="col" className="pb-2 text-left font-medium">Item</th><th scope="col" className="pb-2 pl-3 text-right font-medium">Qty</th><th scope="col" className="pb-2 pl-3 text-right font-medium">Unit price</th></tr></thead>
                     <tbody className="divide-y divide-line-soft border-t border-line-soft">
                       {job.lineItems.map((l) => (
-                        <tr key={l.id}><td className="py-2.5">{l.name}{!l.perVisit && <span className="ml-1 text-xs text-ink-soft">(once)</span>}{l.description && <span className="block text-xs text-ink-soft">{l.description}</span>}</td><td className="py-2.5 pl-3 text-right align-top text-ink-soft">{String(l.quantity)}</td><td className="py-2.5 pl-3 text-right align-top font-semibold">{money(l.unitPriceCents)}</td></tr>
+                        <tr key={l.id}><td className="py-2.5">{l.name}{!l.perVisit && <span className="ml-1 text-xs text-ink-soft">(once)</span>}{l.description && <span className="block text-xs text-ink-soft">{l.description}</span>}</td><td className="py-2.5 pl-3 text-right align-top text-ink-soft">{String(l.quantity)}</td><td className="py-2.5 pl-3 text-right align-top font-semibold">{cad(l.unitPriceCents)}</td></tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
               ) : <Empty action={<ButtonLink href={`${here}/edit`}>Add line items</ButtonLink>}>No line items on this job yet.</Empty>}
-              <p className="mt-3 max-w-[70ch] text-xs text-ink-soft">{fixedMonthly ? `Fixed price ${money(job.totalCents ?? 0)} a month however many visits, drafted on day ${job.invoiceDay ?? 1}. Visits add no charges.`
-                : job.billingType === "FIXED_PRICE" ? `Fixed price ${money(job.totalCents ?? 0)}, invoiced when the job is done.`
+              <p className="mt-3 max-w-[70ch] text-xs text-ink-soft">{fixedMonthly ? `Fixed price ${cad(job.totalCents ?? 0)} a month however many visits, drafted on day ${job.invoiceDay ?? 1}. Visits add no charges.`
+                : job.billingType === "FIXED_PRICE" ? `Fixed price ${cad(job.totalCents ?? 0)}, invoiced when the job is done.`
                 : job.invoiceSchedule === "MONTHLY" ? `Billed for the visits done, drafted monthly on day ${job.invoiceDay ?? 1}.` : "Billed per visit."} Prices include tax.</p>
               {job.kind === "RECURRING" && !closed && (
                 <form action={recurringInvoicing} className="mt-4 space-y-3 border-t border-line-soft pt-4">
@@ -263,13 +263,13 @@ export default async function JobPage({ params, searchParams }: PageProps<"/jobs
             </Card>
           )}
 
-          <Card title="Charges and invoices" actions={unbilled.length > 0 && <Badge tone="amber"><span className="tabular-nums">{money(unbilledCents)}</span> not invoiced</Badge>}>
+          <Card title="Charges and invoices" actions={unbilled.length > 0 && <Badge tone="amber"><span className="tabular-nums">{cad(unbilledCents)}</span> not invoiced</Badge>}>
             {job.invoices.length > 0 && (
               <>
                 <h3 className="text-xs font-medium text-ink-soft">Invoices</h3>
                 <ul className="mb-4 mt-1 divide-y divide-line-soft">
                   {job.invoices.map((i) => (
-                    <li key={i.id}><Link href={`/invoices/${i.id}`} className="group -mx-2 flex min-h-10 items-center justify-between gap-2 rounded-lg px-2 py-2 text-sm hover:bg-tint"><span className="font-semibold tabular-nums group-hover:text-blue-deep">Invoice #{i.number}</span><span className="tabular-nums"><span className="font-semibold">{money(i.totalCents)}</span> <span className="text-ink-soft">· {i.status === "PAID" ? "Paid" : i.status === "DRAFT" ? "Draft" : i.status === "VOID" ? "Void" : "Unpaid"}</span></span></Link></li>
+                    <li key={i.id}><Link href={`/invoices/${i.id}`} className="group -mx-2 flex min-h-10 items-center justify-between gap-2 rounded-lg px-2 py-2 text-sm hover:bg-tint"><span className="font-semibold tabular-nums group-hover:text-blue-deep">Invoice #{i.number}</span><span className="tabular-nums"><span className="font-semibold">{cad(i.totalCents)}</span> <span className="text-ink-soft">· {i.status === "PAID" ? "Paid" : i.status === "DRAFT" ? "Draft" : i.status === "VOID" ? "Void" : "Unpaid"}</span></span></Link></li>
                   ))}
                 </ul>
               </>
@@ -281,7 +281,7 @@ export default async function JobPage({ params, searchParams }: PageProps<"/jobs
                   <table className="w-full text-sm">
                     <tbody className="divide-y divide-line-soft">
                       {charges.map((c) => (
-                        <tr key={c.id}><td className="whitespace-nowrap py-2 pr-3 text-ink-soft">{prettyDate(c.date)}</td><td className="py-2">{c.name}</td><td className="py-2 pl-3 text-right font-semibold">{money(c.totalCents)}</td><td className={`whitespace-nowrap py-2 pl-3 text-right text-xs ${c.invoiceLineItemId ? "text-ink-soft" : "font-semibold text-amber-800"}`}>{c.invoiceLineItemId ? "Invoiced" : "Not invoiced"}</td></tr>
+                        <tr key={c.id}><td className="whitespace-nowrap py-2 pr-3 text-ink-soft">{prettyDate(c.date)}</td><td className="py-2">{c.name}</td><td className="py-2 pl-3 text-right font-semibold">{cad(c.totalCents)}</td><td className={`whitespace-nowrap py-2 pl-3 text-right text-xs ${c.invoiceLineItemId ? "text-ink-soft" : "font-semibold text-amber-800"}`}>{c.invoiceLineItemId ? "Invoiced" : "Not invoiced"}</td></tr>
                       ))}
                     </tbody>
                   </table>

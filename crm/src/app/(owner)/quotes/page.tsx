@@ -5,7 +5,7 @@ import { QUOTE } from "@/components/status";
 import { Badge } from "@/components/ui";
 import { dateOnly, localDayStart, addDays, prettyDate, todayLocal } from "@/server/dates";
 import { businessId, db } from "@/server/db";
-import { money } from "@/server/money";
+import { cad } from "@/server/money";
 import { byClient, clientName, nameHas, numberIs, textHas, words } from "@/server/queries";
 
 export const metadata = { title: "Quotes" };
@@ -44,8 +44,8 @@ export default async function Quotes({ searchParams }: PageProps<"/quotes">) {
       overview={STATUSES.slice(0, 5).map((s) => ({ label: QUOTE[s][0], count: counts.find((c) => c.status === s)?._count._all ?? 0, dot: DOT[s], active: status === s, href: listHref("/quotes", params, { status: s }) }))}
       metrics={[
         { label: "Conversion rate", value: sent._count._all ? `${Math.round((won._count._all / sent._count._all) * 100)}%` : "—", sub: "of quotes sent in the past 30 days" },
-        { label: "Sent", value: money(sent._sum.totalCents ?? 0), sub: `${sent._count._all} quotes · past 30 days` },
-        { label: "Converted", value: money(won._sum.totalCents ?? 0), sub: `${won._count._all} quotes · past 30 days` },
+        { label: "Sent", value: cad(sent._sum.totalCents ?? 0), sub: `${sent._count._all} quotes · past 30 days` },
+        { label: "Converted", value: cad(won._sum.totalCents ?? 0), sub: `${won._count._all} quotes · past 30 days` },
       ]}
       filters={[{ name: "status", label: "Status", value: status ?? "", options: [{ value: "", label: "All active" }, ...STATUSES.map((s) => ({ value: s, label: QUOTE[s][0] }))] }]}
       columns={[{ key: "client", label: "Client", sortable: true }, { key: "number", label: "Quote", sortable: true }, { key: "property", label: "Property", className: "hidden md:table-cell" }, { key: "created", label: "Created", sortable: true, align: "right", className: "hidden sm:table-cell" }, { key: "status", label: "Status", sortable: true }, { key: "total", label: "Total", sortable: true, align: "right" }]}
@@ -54,7 +54,7 @@ export default async function Quotes({ searchParams }: PageProps<"/quotes">) {
         cells: {
           client: clientName(x.client), number: <><span className="font-medium tabular-nums">#{x.number}</span> <span className="text-ink-soft">{x.title}</span></>,
           property: x.property?.formatted.split(",")[0] ?? <span className="text-ink-faint">—</span>, created: <span className="text-ink-soft">{prettyDate(dateOnly(x.createdAt))}</span>,
-          status: <Badge tone={QUOTE[x.status][1]}>{QUOTE[x.status][0]}</Badge>, total: <span className="font-medium">{money(x.totalCents)}</span>,
+          status: <Badge tone={QUOTE[x.status][1]}>{QUOTE[x.status][0]}</Badge>, total: <span className="font-medium">{cad(x.totalCents)}</span>,
         },
       }))}
       empty="No quotes match."

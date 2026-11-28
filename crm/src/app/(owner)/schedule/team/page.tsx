@@ -6,8 +6,8 @@ import { RouteMap } from "@/components/route-map";
 import { ScheduleTabs } from "@/components/schedule-tabs";
 import { TeamBoard, type BoardCard, type Lane } from "@/components/team-board";
 import { btn, Card, Empty } from "@/components/ui";
-import { conflicts, fmtMin, onTimeOff, unavailable } from "@/server/availability";
-import { addDays, todayLocal } from "@/server/dates";
+import { conflicts, onTimeOff, unavailable } from "@/server/availability";
+import { addDays, prettyMinutes, todayLocal } from "@/server/dates";
 import { businessId, db } from "@/server/db";
 import { loadAvailability } from "@/server/schedule-data";
 
@@ -26,7 +26,7 @@ export default async function TeamSchedule({ searchParams }: PageProps<"/schedul
   const cards: BoardCard[] = av.busy.map((b) => {
     const v = visitState.get(b.id);
     return {
-      key: b.id, kind: (v ? "visit" : "task") as BoardCard["kind"], id: b.id, title: b.label, sub: v ? v.property.formatted.split(",")[0] : "Task", time: b.start != null ? fmtMin(b.start) : "",
+      key: b.id, kind: (v ? "visit" : "task") as BoardCard["kind"], id: b.id, title: b.label, sub: v ? v.property.formatted.split(",")[0] : "Task", time: b.start != null ? prettyMinutes(b.start) : "",
       userIds: b.userIds, date: b.date, done: v ? v.state === "COMPLETED" : false, warnings: v?.state === "COMPLETED" ? [] : conflicts(b, av.busy, av.people, av.timeOff),
       confirmed: !!v?.confirmedAt, href: v ? `/visits/${b.id}` : `/tasks/${b.id}`, movable: v ? v.state === "SCHEDULED" && !v.snowEventId : true,
     };

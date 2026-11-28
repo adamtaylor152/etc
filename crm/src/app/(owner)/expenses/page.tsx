@@ -10,7 +10,7 @@ import { Button, Card, Field, PageHeader, btn, inputCls } from "@/components/ui"
 import { expenseAdd, expenseDelete, expenseUpdate } from "../costing-actions";
 import { dateOnly, prettyDate, todayLocal, toDbDate } from "@/server/dates";
 import { businessId, db } from "@/server/db";
-import { money } from "@/server/money";
+import { cad } from "@/server/money";
 import { EXPENSE_CATEGORIES } from "@/server/ops/costing";
 
 export const metadata = { title: "Expenses" };
@@ -65,7 +65,7 @@ export default async function Expenses({ searchParams }: PageProps<"/expenses">)
           <div className="ml-auto text-right">
             <div className="text-xs font-medium text-ink-soft">Total{cat ? ` · ${cat}` : ""} · {monthName}</div>
             <Amount cents={total} className="font-display text-xl font-semibold" />
-            {gst > 0 && <div className="text-xs tabular-nums text-ink-soft">includes {money(gst)} GST</div>}
+            {gst > 0 && <div className="text-xs tabular-nums text-ink-soft">includes {cad(gst)} GST</div>}
           </div>
         </form>
         {rows.length ? (
@@ -84,7 +84,7 @@ export default async function Expenses({ searchParams }: PageProps<"/expenses">)
                   </div>
                   <div className="shrink-0 text-right">
                     <Amount cents={r.amountCents} className="font-semibold" />
-                    {r.gstCents > 0 && <span className="block text-xs tabular-nums text-ink-soft">GST {money(r.gstCents)}</span>}
+                    {r.gstCents > 0 && <span className="block text-xs tabular-nums text-ink-soft">GST {cad(r.gstCents)}</span>}
                   </div>
                 </div>
                 <div className="mt-1 flex flex-wrap items-start gap-x-3 sm:pl-27">

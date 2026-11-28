@@ -7,7 +7,7 @@ import { PrintLink } from "@/components/public/print-link";
 import { ledger } from "@/server/billing/ledger";
 import { dateOnly, prettyDate, todayLocal } from "@/server/dates";
 import { db } from "@/server/db";
-import { money } from "@/server/money";
+import { cad } from "@/server/money";
 import { clientName } from "@/server/queries";
 import { peekToken } from "@/server/tokens";
 
@@ -20,7 +20,7 @@ export default async function HubStatement({ params }: PageProps<"/hub/[token]/s
   const c = await db.client.findUniqueOrThrow({ where: { id: t.token.clientId }, include: { invoices: true, payments: { include: { invoice: { select: { number: true } } } } } });
   const biz = await db.business.findUniqueOrThrow({ where: { id: c.businessId } });
   const st = ledger(c.invoices, c.payments);
-  const amount = (cents: number) => (cents < 0 ? `−${money(-cents)}` : money(cents));
+  const amount = (cents: number) => (cents < 0 ? `−${cad(-cents)}` : cad(cents));
   return (
     <>
       <p className="no-print mb-2"><Link href={`/hub/${token}`} className={textLink}><ArrowLeft className="size-4" strokeWidth={1.75} aria-hidden />Back to your page</Link></p>
@@ -31,7 +31,7 @@ export default async function HubStatement({ params }: PageProps<"/hub/[token]/s
         </header>
         <div className="mb-4 rounded-lg bg-tint p-3.5">
           <p className="text-sm font-medium text-ink-soft">Balance owing</p>
-          <p className="mt-1 font-display text-[2rem] font-semibold leading-none tabular-nums">{money(st.balanceCents)}</p>
+          <p className="mt-1 font-display text-[2rem] font-semibold leading-none tabular-nums">{cad(st.balanceCents)}</p>
         </div>
         {st.rows.length ? (
           <>
@@ -40,14 +40,14 @@ export default async function HubStatement({ params }: PageProps<"/hub/[token]/s
               {st.rows.map((r) => (
                 <li key={r.kind + r.id} className="flex items-start justify-between gap-3 py-2.5">
                   <span className="min-w-0"><span className="block font-medium">{r.label}</span><span className="block text-sm text-ink-soft tabular-nums">{prettyDate(dateOnly(r.date))}</span></span>
-                  <span className="shrink-0 text-right tabular-nums"><span className="block font-semibold">{amount(r.amountCents)}</span><span className="block text-sm text-ink-soft">Balance {money(r.balanceCents)}</span></span>
+                  <span className="shrink-0 text-right tabular-nums"><span className="block font-semibold">{amount(r.amountCents)}</span><span className="block text-sm text-ink-soft">Balance {cad(r.balanceCents)}</span></span>
                 </li>
               ))}
             </ul>
             <table className="hidden w-full sm:table print:table">
               <thead><tr className="border-b border-line text-left text-xs font-medium text-ink-soft"><th className="py-2 font-medium">Date</th><th className="font-medium">Description</th><th className="text-right font-medium">Amount</th><th className="text-right font-medium">Balance</th></tr></thead>
-              <tbody>{st.rows.map((r) => <tr key={r.kind + r.id} className="border-b border-line-soft"><td className="py-2.5 pr-3 whitespace-nowrap text-ink-soft">{prettyDate(dateOnly(r.date))}</td><td className="pr-3">{r.label}</td><td className="text-right">{amount(r.amountCents)}</td><td className="pl-3 text-right">{money(r.balanceCents)}</td></tr>)}</tbody>
-              <tfoot><tr><td colSpan={3} className="pt-3 text-right font-semibold">Balance owing</td><td className="pt-3 pl-3 text-right font-display text-lg font-semibold">{money(st.balanceCents)}</td></tr></tfoot>
+              <tbody>{st.rows.map((r) => <tr key={r.kind + r.id} className="border-b border-line-soft"><td className="py-2.5 pr-3 whitespace-nowrap text-ink-soft">{prettyDate(dateOnly(r.date))}</td><td className="pr-3">{r.label}</td><td className="text-right">{amount(r.amountCents)}</td><td className="pl-3 text-right">{cad(r.balanceCents)}</td></tr>)}</tbody>
+              <tfoot><tr><td colSpan={3} className="pt-3 text-right font-semibold">Balance owing</td><td className="pt-3 pl-3 text-right font-display text-lg font-semibold">{cad(st.balanceCents)}</td></tr></tfoot>
             </table>
           </>
         ) : <p className="text-ink-soft">Nothing on your account yet. Invoices and payments will be listed here.</p>}
