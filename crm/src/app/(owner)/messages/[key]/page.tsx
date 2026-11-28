@@ -150,7 +150,7 @@ function PhotoLinks({ messageKey, messageId, media, jobs, quotes, canLink, out }
   const onQuotes = [...new Map(media.filter((m) => m.quoteId && m.quote).map((m) => [m.quoteId!, m.quote!])).entries()];
   const chip = (href: string, label: string, target: string) => (
     <span key={href} className="inline-flex items-center gap-0.5 rounded-full border border-emerald-200 bg-emerald-50 py-0.5 pl-3 pr-1 text-xs font-semibold text-emerald-900">
-      <Link href={href} className="hover:underline">Filed on {label}</Link>
+      <Link href={href} className="hover:underline max-sm:inline-flex max-sm:min-h-11 max-sm:items-center">Filed on {label}</Link>
       <form action={textPhotosLink}>
         <input type="hidden" name="key" value={messageKey} /><input type="hidden" name="messageId" value={messageId} /><input type="hidden" name="target" value={target} />
         <button className="grid size-7 max-sm:size-11 place-items-center rounded-full hover:bg-emerald-100" aria-label={`Remove from ${label}`} title={`Remove from ${label}`}><X className="size-3.5" aria-hidden /></button>

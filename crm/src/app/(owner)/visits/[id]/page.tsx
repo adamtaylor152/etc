@@ -181,9 +181,11 @@ export default async function VisitPage({ params, searchParams }: PageProps<"/vi
                   <span className="pt-3.5">{step(3, false)}</span>
                   <form action={visitTransition} className="flex-1 space-y-3">
                     {hidden("COMPLETED")}<GeoFields />
-                    <Field label="Snow depth (cm, optional)">
-                      <Input name="depthCm" type="number" inputMode="numeric" min={0} max={300} defaultValue={v.depthCm ?? v.snowEvent?.measuredCm ?? ""} />
-                    </Field>
+                    {isSnowVisit(v) && (
+                      <Field label="Snow depth (cm, optional)">
+                        <Input name="depthCm" type="number" inputMode="numeric" min={0} max={300} defaultValue={v.depthCm ?? v.snowEvent?.measuredCm ?? ""} />
+                      </Field>
+                    )}
                     {hasIceMelt && (
                       <label className="flex min-h-11 items-center gap-3 text-sm font-semibold">
                         <input type="hidden" name="iceMeltShown" value="1" />

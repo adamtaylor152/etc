@@ -208,7 +208,7 @@ export default async function InvoicePage({ params, searchParams }: PageProps<"/
                   <div className="col-span-2 sm:col-span-1"><Field label="Reference"><Input name="reference" placeholder={inv.etransferRef} /></Field></div>
                   <Button variant="secondary" className="col-span-2 sm:col-span-1">Save payment</Button>
                 </div>
-                <label className="flex items-start gap-2 text-sm"><input type="checkbox" name="keepExtra" className="mt-0.5 size-4 shrink-0" /> If this is more than the balance, keep the extra as account credit for their next invoice</label>
+                <label className="flex items-start gap-2 text-sm max-sm:min-h-11 max-sm:items-center"><input type="checkbox" name="keepExtra" className="mt-0.5 size-4 shrink-0" /> If this is more than the balance, keep the extra as account credit for their next invoice</label>
               </form>
               <p className="mt-3 text-xs text-ink-soft">A receipt is emailed automatically. e-Transfers should mention <span className="font-semibold text-navy">{inv.etransferRef}</span>.</p>
             </Card>
