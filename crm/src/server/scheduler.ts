@@ -12,8 +12,12 @@ import { reminderDue } from "./billing/invoice";
 import { addDays, dateOnly, todayLocal, toDbDate, TZ } from "./dates";
 import { forecast, snowByDay } from "./forecast";
 import { generateRecurringVisits } from "./ops/jobs";
-import { billingEmailFor, invoiceSeasonalInstalments, invoiceUnbilled } from "./ops/invoices";
+import { billingEmailFor, invoiceRecurringPeriods, invoiceSeasonalInstalments, invoiceUnbilled } from "./ops/invoices";
+import { isInvoiceDay } from "./billing/periods";
 import { parseSettings } from "./settings";
+import { autoPayPending } from "./billing/autopay";
+import { runAutoPay } from "./ops/autopay";
+import { followUpDue } from "./status/quote";
 import { plansTriggered } from "./snow/select";
 import { enqueue, enqueueSms, processOutbox } from "./email/outbox";
 
@@ -55,6 +59,8 @@ async function hourly() {
   for (const b of await db.business.findMany({ select: { id: true } })) await generateRecurringVisits(b.id);
   if (hour === 7) await monthlyInvoices();
   if (hour >= 7 && hour < 20) await invoiceSeasonalInstalments(); // due instalments of seasonal snow plans; emails the client
+  if (hour >= 7 && hour < 20) await invoiceRecurringPeriods(); // recurring jobs on a fixed monthly price: a draft per month due
+  if (hour >= 8 && hour < 20) await runAutoPay().catch((e) => console.error("auto-pay run failed", e)); // saved cards: charge due invoices, retry failed ones
   if (hour >= 6 && hour < 22) await visitReminders(hour);
   if (hour >= 10 && hour < 18) await reviewRequests();
   if (hour === 6) await dailyDigest();
@@ -74,17 +80,17 @@ async function opsAlerts() {
   }
 }
 
-/** 1st of the month: draft invoices for recurring (monthly-billed) work. Re-runs find nothing left to bill. */
+/** A job's invoice day (the 1st unless it picked another): draft invoices for monthly-billed work. Re-runs find nothing left to bill. */
 async function monthlyInvoices() {
-  if (todayLocal().slice(8) !== "01") return;
+  const today = todayLocal();
   const groups = await db.visitCharge.findMany({
     where: { invoiceLineItemId: null, visit: { job: { invoiceSchedule: "MONTHLY" } } },
-    select: { businessId: true, visit: { select: { jobId: true, job: { select: { clientId: true } } } } },
+    select: { businessId: true, visit: { select: { jobId: true, job: { select: { clientId: true, invoiceDay: true } } } } },
   });
   const seen = new Set<string>();
   for (const g of groups) {
     const key = `${g.businessId}:${g.visit.job.clientId}:${g.visit.jobId}`;
-    if (seen.has(key)) continue;
+    if (seen.has(key) || !isInvoiceDay(today, g.visit.job.invoiceDay)) continue;
     seen.add(key);
     await invoiceUnbilled({ id: null, businessId: g.businessId }, { clientId: g.visit.job.clientId, jobId: g.visit.jobId });
   }
@@ -132,17 +138,25 @@ async function dailyDigest() {
   }
 }
 
-/** One nudge, 3 days after sending, for quotes still waiting on the client. */
-async function quoteFollowUps() {
-  const cutoff = new Date(Date.now() - 3 * 86_400_000);
-  const quotes = await db.quote.findMany({ where: { status: "AWAITING_RESPONSE", sentAt: { lte: cutoff }, client: { followUpQuotes: true } }, include: { client: true } });
+/**
+ * Up to two nudges (Settings: days after sending, each on/off) for quotes still waiting on the client, by the channel
+ * the quote was last sent by. Each goes once per quote (dedupe key), whatever the hourly run does.
+ */
+export async function quoteFollowUps(now = new Date()) {
+  const today = todayLocal();
+  const quotes = await db.quote.findMany({ where: { status: "AWAITING_RESPONSE", sentAt: { not: null }, client: { followUpQuotes: true } }, include: { client: true } });
   for (const q of quotes) {
-    const biz = await db.business.findUniqueOrThrow({ where: { id: q.businessId } });
-    if (!parseSettings(biz.settings).quoteFollowUp || q.client.emailBouncedAt) continue;
-    await enqueue(db, {
-      businessId: q.businessId, template: "quote.follow_up", to: q.client.email, replyTo: env.helpEmail, priority: 6, props: { quoteId: q.id },
-      dedupeKey: `quote:${q.id}:followup`, clientId: q.clientId, entityType: "Quote", entityId: q.id,
-    });
+    const s = parseSettings((await db.business.findUniqueOrThrow({ where: { id: q.businessId } })).settings);
+    const n = followUpDue({ status: q.status, validUntil: dateOnly(q.validUntil), sentAt: q.lastSentAt ?? q.sentAt }, [{ on: s.quoteFollowUp, days: s.quoteFollowUpDays }, { on: s.quoteFollowUp2, days: s.quoteFollowUp2Days }], now, today);
+    if (!n) continue;
+    const dedupeKey = `quote:${q.id}:followup${n > 1 ? n : ""}`; // the first keeps the key the single follow-up used
+    if (q.lastSentVia === "SMS") await enqueueSms(db, { businessId: q.businessId, template: "sms.quote", client: q.client, props: { quoteId: q.id, followUp: true }, dedupeKey, entityType: "Quote", entityId: q.id });
+    else if (!q.client.emailBouncedAt) {
+      await enqueue(db, {
+        businessId: q.businessId, template: "quote.follow_up", to: q.client.email, replyTo: env.helpEmail, priority: 6, props: { quoteId: q.id },
+        dedupeKey, clientId: q.clientId, entityType: "Quote", entityId: q.id,
+      });
+    }
   }
 }
 
@@ -183,6 +197,7 @@ async function invoiceReminders() {
   for (const inv of due) {
     const n = reminderDue({ status: inv.status, dueOn: dateOnly(inv.dueOn), remindersSent: inv.remindersSent }, today);
     if (!n || inv.client.emailBouncedAt) continue;
+    if (autoPayPending(inv.autoPayState)) continue; // the card will be charged (or retried): its own emails cover this
     await db.$transaction(async (tx) => {
       await enqueue(tx, {
         businessId: inv.businessId, template: "invoice.reminder", to: await billingEmailFor(tx, inv.client), replyTo: env.helpEmail, priority: 6,

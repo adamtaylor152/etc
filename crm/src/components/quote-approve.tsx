@@ -1,17 +1,20 @@
 "use client";
 // Client-side quote approval: tick optional extras (total updates live), type your name, approve.
 import { useState } from "react";
-import { invoiceTotals, type TaxSettings } from "@/server/billing/invoice";
+import type { TaxSettings } from "@/server/billing/invoice";
+import { quoteDiscountCents, quoteTotals, type QuoteDiscount } from "@/server/status/quote";
 import { SignaturePad } from "./signature-pad";
 
 type Line = { id: string; name: string; description: string | null; totalCents: number; isOptional: boolean; isSelected: boolean; qty: string };
 const money = (c: number) => `$${(c / 100).toLocaleString("en-CA", { minimumFractionDigits: c % 100 ? 2 : 0, maximumFractionDigits: 2 })}`;
 
-export function QuoteApprove({ token, lines, discountCents, tax, taxName, action, canAct }: {
-  token: string; lines: Line[]; discountCents: number; tax: TaxSettings; taxName: string; action: (f: FormData) => Promise<void>; canAct: boolean;
+export function QuoteApprove({ token, lines, discount, tax, taxName, action, canAct }: {
+  token: string; lines: Line[]; discount: QuoteDiscount; tax: TaxSettings; taxName: string; action: (f: FormData) => Promise<void>; canAct: boolean;
 }) {
   const [picked, setPicked] = useState(() => new Set(lines.filter((l) => l.isOptional && l.isSelected).map((l) => l.id)));
-  const { totalCents: total, taxCents, taxIncluded } = invoiceTotals(lines.filter((l) => !l.isOptional || picked.has(l.id)).map((l) => l.totalCents), discountCents, tax);
+  const ticked = lines.map((l) => ({ ...l, isSelected: picked.has(l.id) }));
+  const discountCents = quoteDiscountCents(ticked, discount); // a percent discount moves with the extras ticked
+  const { totalCents: total, taxCents, taxIncluded } = quoteTotals(ticked, discountCents, tax);
   return (
     <form action={action} className="space-y-4">
       <input type="hidden" name="t" value={token} />
@@ -31,7 +34,7 @@ export function QuoteApprove({ token, lines, discountCents, tax, taxName, action
           </li>
         ))}
       </ul>
-      {discountCents > 0 && <p className="flex justify-between text-sm text-ink-soft"><span>Discount</span><span>−{money(discountCents)}</span></p>}
+      {discountCents > 0 && <p className="flex justify-between text-sm text-ink-soft"><span>Discount{discount.discountType === "PERCENT" && ` (${discount.discountValue / 100}%)`}</span><span>−{money(discountCents)}</span></p>}
       {taxCents > 0 && !taxIncluded && <p className="flex justify-between text-sm text-ink-soft"><span>{taxName}</span><span>{money(taxCents)}</span></p>}
       <p className="flex items-baseline justify-between border-t-2 border-navy pt-3"><span className="font-semibold">Total{taxIncluded && ` (includes ${taxName} ${money(taxCents)})`}</span><span className="font-display text-3xl font-bold">{money(total)}</span></p>
       {canAct && (

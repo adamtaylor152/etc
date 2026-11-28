@@ -69,6 +69,27 @@ export async function claimSlot(businessId: string, slot: unknown) {
   return userId ? { date: s.date, start: s.start, userId, window: null } : null;
 }
 
+/**
+ * Open days/windows for moving an existing visit: the people already on it must be free (anyone, if nobody is assigned),
+ * and the visit itself doesn't count as in the way. Same lead time and horizon as online booking.
+ */
+async function visitAvailability(businessId: string, visit: { id: string; assignees: { userId: string }[] }, from: string, to: string) {
+  const av = await loadAvailability(businessId, from, to);
+  const on = visit.assignees.map((a) => a.userId);
+  return { ...av, people: on.length ? av.people.filter((p) => on.includes(p.id)) : av.people, busy: av.busy.filter((x) => x.id !== visit.id) };
+}
+export async function rescheduleTimes(businessId: string, visit: { id: string; assignees: { userId: string }[] }) {
+  const from = addDays(todayLocal(), LEAD_DAYS), wins = (await getSettings(db, businessId)).arrivalWindows;
+  return { windows: wins, days: openTimes(await visitAvailability(businessId, visit, from, addDays(from, WINDOW_DAYS)), from, WINDOW_DAYS, ASSESS_MIN, wins).filter((d) => d.windows.length) };
+}
+/** Re-checks a picked day + window against live availability; null if it's gone. */
+export async function claimReschedule(businessId: string, visit: { id: string; assignees: { userId: string }[] }, date: string, windowKey: string) {
+  const first = addDays(todayLocal(), LEAD_DAYS);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date < first || date > addDays(first, WINDOW_DAYS)) return null;
+  const w = windowOf((await getSettings(db, businessId)).arrivalWindows, windowKey);
+  return w && freeInWindow(await visitAvailability(businessId, visit, date, date), date, w) ? w : null;
+}
+
 /** What the client is told: "Monday, November 30, Early (6–11 am)" or "... at 10:00 am". */
 export function slotText(slot: { date: string; start: number; window: { label: string; hint: string } | null }) {
   const day = new Date(`${slot.date}T12:00:00Z`).toLocaleDateString("en-CA", { weekday: "long", month: "long", day: "numeric", timeZone: "UTC" });

@@ -10,6 +10,7 @@ import { RecordPanel } from "@/components/record-panel";
 import { Button, ButtonLink, Card, Dl, Input, PageHeader, btn, inputCls } from "@/components/ui";
 import { refundableCents, refundRoute } from "@/server/billing/adjustments";
 import { TERMS_LABEL, invoiceView } from "@/server/billing/invoice";
+import { MAX_ATTEMPTS, autoPayPending, cardLabel } from "@/server/billing/autopay";
 import { dateOnly, prettyDate, prettyDateTime, todayLocal } from "@/server/dates";
 import { business, businessId, db } from "@/server/db";
 import { money } from "@/server/money";
@@ -18,6 +19,15 @@ import { paymentRefund } from "../../billing-extras-actions";
 import { invoiceBadDebt, invoiceMarkSent, invoiceSend, invoiceVoid, paymentDelete, paymentRecord, viewAsClient } from "../../billing-actions";
 
 const METHOD: Record<string, string> = { CASH: "Cash", ETRANSFER: "e-Transfer", CARD: "Card", CHEQUE: "Cheque", OTHER: "Other" };
+const ATTEMPT: Record<string, string> = { PENDING: "Waiting for Stripe", SUCCEEDED: "Paid", FAILED: "Failed", REQUIRES_ACTION: "Bank wants the client to approve" };
+const AUTOPAY_NOTE: Record<string, string> = {
+  SCHEDULED: "The client chose automatic payments, and the invoice email told them the date.",
+  RETRYING: "The last charge failed and the client was emailed a link to pay or update the card.",
+  NEEDS_ACTION: "The client's bank wants them to approve the payment, so they were emailed a link to pay on the invoice page. Nothing more is charged automatically for this invoice.",
+  FAILED: "The automatic payment didn't go through and we've stopped trying (details below). Collect this one another way. Auto-pay is still on for the client's next invoices.",
+  PAID: "Paid automatically from the client's saved card.",
+  STOPPED: "Auto-pay was turned off or the card removed before the charge, so the client pays this one the usual way.",
+};
 
 export default async function InvoicePage({ params, searchParams }: PageProps<"/invoices/[id]">) {
   await requireOwner();
@@ -30,6 +40,7 @@ export default async function InvoicePage({ params, searchParams }: PageProps<"/
   });
   if (!inv) notFound();
   const biz = await business();
+  const attempts = inv.autoPayState ? await db.autoPayAttempt.findMany({ where: { invoiceId: inv.id }, orderBy: { n: "desc" } }) : [];
   const view = invoiceView({ ...inv, dueOn: dateOnly(inv.dueOn) }, todayLocal());
   const balance = Math.max(0, inv.totalCents - inv.amountPaidCents);
   const here = `/invoices/${id}`;
@@ -147,6 +158,20 @@ export default async function InvoicePage({ params, searchParams }: PageProps<"/
               </ul>
             ) : <p className="text-sm text-ink-soft">No payments yet.</p>}
           </Card>
+
+          {(attempts.length > 0 || (inv.autoPayState && inv.status === "AWAITING_PAYMENT")) && (
+            <Card title="Auto-pay">
+              <p className="text-sm">{AUTOPAY_NOTE[inv.autoPayState ?? "STOPPED"]}{autoPayPending(inv.autoPayState) && inv.autoPayOn && <> <b>{inv.autoPayState === "RETRYING" ? "Next try" : `${cardLabel(inv.client) ?? "The card"} is charged ${money(balance)}`} on {prettyDate(dateOnly(inv.autoPayOn))}.</b></>}</p>
+              {attempts.length > 0 && (
+                <ul className="mt-2 divide-y divide-line text-sm">
+                  {attempts.map((a) => (
+                    <li key={a.id} className="py-2">Try {a.n} of {MAX_ATTEMPTS} · {money(a.amountCents)} · {a.cardLabel} · <b>{ATTEMPT[a.status]}</b>{a.failureCode && ` (${a.failureCode.replaceAll("_", " ")})`}
+                      <span className="block text-xs text-ink-soft">{prettyDateTime(a.createdAt)}{a.failureMessage && ` · ${a.failureMessage}`}</span></li>
+                  ))}
+                </ul>
+              )}
+            </Card>
+          )}
 
           <Card title="Details">
             <Dl rows={[

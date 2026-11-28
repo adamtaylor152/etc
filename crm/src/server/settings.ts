@@ -16,18 +16,24 @@ export const SettingsSchema = z.object({
   referralRewardCents: z.coerce.number().int().min(0).max(50_000).default(1000), // credit for the referrer
   referralDiscountCents: z.coerce.number().int().min(0).max(50_000).default(0), // credit for the new client // new invoices let clients pay part online       // ask for a Google review after the first job of the season
   serviceMinutes: z.coerce.number().int().min(1).max(240).default(12), // time at a stop, for route ETAs (12 = a snow stop)
-  dailyDigest: z.boolean().default(false),         // 6am summary email to owners
-  quoteFollowUp: z.boolean().default(true),         // nudge unanswered quotes after 3 days
+  dailyDigest: z.boolean().default(false),          // 6am summary email to owners
+  quoteFollowUp: z.boolean().default(true),         // first nudge for unanswered quotes
+  quoteFollowUpDays: z.coerce.number().int().min(1).max(60).default(3), // days after sending
+  quoteFollowUp2: z.boolean().default(false),       // second nudge
+  quoteFollowUp2Days: z.coerce.number().int().min(1).max(60).default(7),
   visitReminders: z.boolean().default(true),        // day-before reminder for scheduled (non-snow) visits
   assignmentAlerts: z.boolean().default(true),      // tell the assigned person when an owner assigns or moves their work
   reminderDaysBefore: z.coerce.number().int().min(1).max(7).default(1), // first visit reminder: this many days ahead...
   reminderHour: z.coerce.number().int().min(6).max(21).default(17),     // ...at this hour (Calgary time)
+  clientReschedule: z.boolean().default(false),      // clients can move their own visit to an open window from the reminder link
   reminderMorningOf: z.boolean().default(false),    // second reminder at 7am on the day
   arrivalWindows: z.array(z.object({
     key: z.string().regex(/^[a-z0-9_-]{1,20}$/), label: z.string().trim().min(1).max(20),
     from: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/), to: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
   }).refine((w) => w.from < w.to, "A window has to end after it starts")).min(1).max(6).default(WINDOWS),
   smsUpdates: z.boolean().default(true),            // texts (on my way, all done, storm day) to clients who opted in; needs Telnyx keys
+  autoPay: z.boolean().default(false),              // clients may save a card and opt in to automatic charges; needs Stripe keys
+  autoPayGraceDays: z.coerce.number().int().min(0).max(14).default(2), // days between the invoice email and the charge (0 = same day)
 });
 export type Settings = z.infer<typeof SettingsSchema>;
 
@@ -40,6 +46,8 @@ export async function getSettings(db: Db, businessId: string): Promise<Settings>
 
 /** The on/off settings (shown as checkboxes in Settings → Automations). */
 export type ToggleKey = { [K in keyof Settings]: Settings[K] extends boolean ? K : never }[keyof Settings];
+/** Toggles that come with a "days after sending" number (shown beside the switch). */
+export const SETTING_DAYS = { quoteFollowUp: "quoteFollowUpDays", quoteFollowUp2: "quoteFollowUp2Days" } as const satisfies Partial<Record<ToggleKey, keyof Settings>>;
 export const SETTING_LABELS: Record<ToggleKey, [string, string]> = {
   visitDoneEmail: ["“All done” email", "Before & after photos to the client after each visit (5 min after Done)."],
   autoSendVisitInvoices: ["Invoice per-visit jobs on Done", "One-off jobs get their invoice right away; the pay link rides in the “all done” email."],
@@ -50,9 +58,12 @@ export const SETTING_LABELS: Record<ToggleKey, [string, string]> = {
   tipsEnabled: ["Tips on card payments", "Clients paying an invoice by card can add a tip (10%, 15%, 20% or their own amount). Tips are kept apart from the invoice and from GST."],
   reviewRequests: ["Google review requests", "Asks happy clients for a review after their first job of the season (needs your review link)."],
   dailyDigest: ["6am daily digest", "Today’s visits, late work, unbilled charges and failed emails."],
-  quoteFollowUp: ["Quote follow-up", "One reminder 3 days after sending if the client hasn’t answered."],
+  quoteFollowUp: ["Quote follow-up", "A reminder if the client hasn’t answered, by email or text (however the quote was last sent)."],
+  quoteFollowUp2: ["Second quote follow-up", "One more reminder later on. Both stop once the client answers or the quote expires."],
   visitReminders: ["Visit reminders", "Reminder before scheduled visits (not snow), by email and text. Clients can confirm with a tap or by replying YES."],
+  clientReschedule: ["Clients can reschedule themselves", "The “confirm or change” link in reminders lets a client pick another open day and arrival window (when the people on the visit are free). You get a notice. Off: they can only ask."],
   reminderMorningOf: ["Morning-of reminder", "A second reminder at 7 am on the day of the visit."],
   assignmentAlerts: ["Assignment alerts to the team", "Emails the person you assign or move work for (and texts them, if their team record has a phone): what, where, when and a link to their route. Never prices."],
   smsUpdates: ["Text updates", "Texts “on the way”, “all done” (with photos link) and storm days to clients who said yes to texts. Needs Telnyx keys."],
+  autoPay: ["Saved cards & auto-pay", "Clients can save a card on their page and choose to have invoices charged to it automatically. A failed charge emails them and is retried after 3 and 7 days. Needs Stripe keys."],
 };

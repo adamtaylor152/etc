@@ -20,8 +20,16 @@ import { invoiceCreate } from "../../billing-actions";
 import { RepeatFields } from "@/components/repeat-fields";
 import { PLAN_MODE, PlanBillingFields } from "@/components/plan-billing-fields";
 import { instalmentKey, instalmentSchedule, planBillingLocked } from "@/server/billing/instalments";
-import { describeRule } from "@/server/recurrence";
-import { jobClose, planPause, recurringUpdate, planUpdate, visitAdd, visitDelete, visitSchedule } from "../../work-actions";
+import { describeRule, fromRRule } from "@/server/recurrence";
+import { currentCharge } from "@/server/ops/drive-size";
+import { jobClose, planPause, planUpdate, visitAdd, visitDelete, visitSchedule, visitTransition } from "../../work-actions";
+import { recurringInvoicing, recurringPause, recurringUpdate } from "../../recurring-actions";
+import { RecurringBillingFields } from "@/components/recurring-billing-fields";
+import { WindowChips } from "@/components/window-chips";
+import { getSettings } from "@/server/settings";
+
+const hm = (min: number) => `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
+const SKIP: [string, string][] = [["CLIENT_CANCELLED", "Client asked to skip"], ["WEATHER", "Weather"], ["NO_ACCESS", "Can't get in"], ["OTHER", "Other"]];
 
 export default async function JobPage({ params, searchParams }: PageProps<"/jobs/[id]">) {
   await requireOwner();
@@ -34,7 +42,7 @@ export default async function JobPage({ params, searchParams }: PageProps<"/jobs
     where: { id },
     include: {
       lineItems: { orderBy: { sortOrder: "asc" } }, season: true, request: true, property: { include: { community: true } },
-      visits: { orderBy: [{ scheduledDate: { sort: "desc", nulls: "first" } }, { createdAt: "desc" }], include: { charges: true, snowEvent: true } },
+      visits: { orderBy: [{ scheduledDate: { sort: "desc", nulls: "first" } }, { createdAt: "desc" }], include: { charges: true, snowEvent: true, extras: true } },
       invoices: { orderBy: { number: "desc" } },
     },
   });
@@ -49,6 +57,9 @@ export default async function JobPage({ params, searchParams }: PageProps<"/jobs
   const checklists = await db.checklistTemplate.findMany({ where: { businessId: bid, active: true }, orderBy: { name: "asc" } });
   const here = `/jobs/${id}`;
   const plan = job.kind === "SNOW_PLAN";
+  const people = await team(bid);
+  const rule = job.rrule ? fromRRule(job.rrule) : null;
+  const fixedMonthly = job.kind === "RECURRING" && job.billingType === "FIXED_PRICE";
   const closed = !!job.closedAt;
   const charges = job.visits.flatMap((v) => v.charges.map((c) => ({ ...c, date: dateOnly(v.scheduledDate) })));
   const unbilled = charges.filter((c) => !c.invoiceLineItemId);
@@ -69,6 +80,7 @@ export default async function JobPage({ params, searchParams }: PageProps<"/jobs
         sub={<><Link className="font-semibold text-blue" href={`/clients/${job.clientId}`}>{clientName(row.client)}</Link> · {job.property.formatted}</>}
         actions={<>
           <ButtonLink href={`${here}/edit`}>Edit</ButtonLink>
+          {!plan && <ButtonLink href={`/jobs/new?client=${job.clientId}&from=${job.id}`}>Create similar job</ButtonLink>}
           <form action={jobClose}>
             <input type="hidden" name="id" value={job.id} /><input type="hidden" name="back" value={here} />
             <input type="hidden" name="closed" value={closed ? "0" : "1"} />
@@ -90,7 +102,10 @@ export default async function JobPage({ params, searchParams }: PageProps<"/jobs
                 <input type="hidden" name="id" value={job.id} /><input type="hidden" name="back" value={here} />
                 <label className="text-sm font-semibold">Trigger (cm)<Input name="triggerCm" type="number" min={0} max={100} defaultValue={job.triggerCm ?? ""} placeholder={`${job.season?.defaultTriggerCm ?? 2} (season)`} /></label>
                 <label className="text-sm font-semibold">Per push / storm ($)<Input name="price" type="number" step="0.01" min={0} defaultValue={(job.pricePerPushCents ?? 3000) / 100} /></label>
-                <label className="flex min-h-11 items-center gap-2 text-sm font-semibold"><input type="checkbox" name="iceMelt" defaultChecked={job.iceMelt} className="size-5" /> Ice melt</label>
+                <span className="space-y-1">
+                  <label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" name="iceMelt" defaultChecked={job.iceMelt} className="size-5" /> Ice melt</label>
+                  <label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" name="extraWalk" defaultChecked={currentCharge(job.lineItems).walk > 0} className="size-5" /> Extra sidewalk</label>
+                </span>
                 <Button variant="secondary">Save</Button>
                 {/* No billing fields once locked: the action then leaves the billing mode alone. */}
                 {!billingLocked && <div className="sm:col-span-4"><PlanBillingFields mode={mode} seasonPriceCents={job.seasonalPriceCents} instalments={job.seasonalInstalments} firstDueOn={dateOnly(job.seasonalFirstDueOn) ?? today} addonsIncluded={mode === "SEASONAL" ? job.addonsIncluded : undefined} /></div>}
@@ -117,15 +132,33 @@ export default async function JobPage({ params, searchParams }: PageProps<"/jobs
           ) : (
             <>
             {job.kind === "RECURRING" && (
-              <Card title={`Repeats: ${describeRule(job.rrule)}`}>
+              <Card title={<>Repeats: {describeRule(job.rrule)}{job.pausedFrom && job.pausedUntil && dateOnly(job.pausedUntil)! >= today && <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-900">Paused {prettyDate(dateOnly(job.pausedFrom))} to {prettyDate(dateOnly(job.pausedUntil))}</span>}</>}>
                 <form action={recurringUpdate} className="space-y-3">
                   <input type="hidden" name="id" value={job.id} /><input type="hidden" name="back" value={here} />
-                  <RepeatFields freq={job.asNeeded ? "AS_NEEDED" : job.rrule?.includes("INTERVAL=2") ? "BIWEEKLY" : job.rrule?.includes("MONTHLY") ? "MONTHLY" : "WEEKLY"}
-                    byDay={["MO", "TU", "WE", "TH", "FR", "SA", "SU"].map((d, i) => (job.rrule && new RegExp(`BYDAY=[^;\\n]*${d}`).test(job.rrule) ? i : -1)).filter((i) => i >= 0)}
-                    startsOn={dateOnly(job.recurrenceStartsOn) ?? today} endsOn={dateOnly(job.recurrenceEndsOn) ?? ""} />
+                  <RepeatFields {...(rule ?? {})} freq={job.asNeeded ? "AS_NEEDED" : rule?.freq} startsOn={rule?.startsOn || (dateOnly(job.recurrenceStartsOn) ?? today)} />
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <label className="text-sm font-semibold">Start time<Input name="startTime" type="time" defaultValue={!job.anytime && job.defaultStartMinute != null ? hm(job.defaultStartMinute) : ""} /><span className="text-xs font-normal text-ink-soft">Blank = any time</span></label>
+                    <label className="text-sm font-semibold">End time<Input name="endTime" type="time" defaultValue={!job.anytime && job.defaultStartMinute != null && job.defaultDurationMin ? hm(job.defaultStartMinute + job.defaultDurationMin) : ""} /></label>
+                  </div>
+                  <WindowChips windows={(await getSettings(db, bid)).arrivalWindows} />
+                  {people.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-3 text-sm"><span className="font-semibold">Assign</span>
+                      {people.map((p) => <label key={p.id} className="flex items-center gap-1.5"><input type="checkbox" name="userId" value={p.id} defaultChecked={job.defaultAssigneeIds.includes(p.id)} className="size-4" /><span className="size-2.5 rounded-full" style={{ background: p.color }} />{p.name}</label>)}
+                    </div>
+                  )}
                   <Button variant="secondary">Update schedule</Button>
-                  <p className="text-xs text-ink-soft">Future visits nobody has touched are rebuilt. Done or moved visits stay as they are.</p>
+                  <p className="text-xs text-ink-soft">Future visits nobody has touched are rebuilt with this time and these people. Done, moved or re-priced visits stay as they are.</p>
                 </form>
+                {!closed && !job.asNeeded && (
+                  <form action={recurringPause} className="mt-4 flex flex-wrap items-end gap-2 border-t border-line pt-3 text-sm">
+                    <input type="hidden" name="id" value={job.id} /><input type="hidden" name="back" value={here} />
+                    <label className="font-semibold">Pause from<Input type="date" name="from" defaultValue={dateOnly(job.pausedFrom) ?? ""} required className="w-40" /></label>
+                    <label className="font-semibold">to<Input type="date" name="until" defaultValue={dateOnly(job.pausedUntil) ?? ""} required className="w-40" /></label>
+                    <Button variant="secondary">{job.pausedFrom ? "Change pause" : "Pause"}</Button>
+                    {job.pausedFrom && <Button variant="secondary" name="resume" value="1" formNoValidate>Resume</Button>}
+                    <p className="w-full text-xs text-ink-soft">No visits are created between these days (both included). Visits already done, moved or re-priced stay.{fixedMonthly && " A month that is paused from its first day to its last is not invoiced."}</p>
+                  </form>
+                )}
               </Card>
             )}
             <Card title="Line items">
@@ -136,7 +169,16 @@ export default async function JobPage({ params, searchParams }: PageProps<"/jobs
                   ))}
                 </tbody>
               </table>
-              <p className="mt-2 text-xs text-ink-soft">{job.billingType === "FIXED_PRICE" ? `Fixed price ${money(job.totalCents ?? 0)}, invoiced when the job is done.` : job.invoiceSchedule === "MONTHLY" ? "Billed monthly for the visits done." : "Billed per visit."} Prices include tax.</p>
+              <p className="mt-2 text-xs text-ink-soft">{fixedMonthly ? `Fixed price ${money(job.totalCents ?? 0)} a month however many visits, drafted on day ${job.invoiceDay ?? 1}. Visits add no charges.`
+                : job.billingType === "FIXED_PRICE" ? `Fixed price ${money(job.totalCents ?? 0)}, invoiced when the job is done.`
+                : job.invoiceSchedule === "MONTHLY" ? `Billed for the visits done, drafted monthly on day ${job.invoiceDay ?? 1}.` : "Billed per visit."} Prices include tax.</p>
+              {job.kind === "RECURRING" && !closed && (
+                <form action={recurringInvoicing} className="mt-3 space-y-2 border-t border-line pt-3">
+                  <input type="hidden" name="id" value={job.id} /><input type="hidden" name="back" value={here} />
+                  <RecurringBillingFields lockMethod method={job.billingType} when={job.invoiceSchedule} invoiceDay={job.invoiceDay} />
+                  <Button variant="secondary">Save invoice schedule</Button>
+                </form>
+              )}
             </Card>
             </>
           )}
@@ -158,8 +200,22 @@ export default async function JobPage({ params, searchParams }: PageProps<"/jobs
                       <Link href={`/visits/${v.id}`} className="min-w-0 font-semibold text-blue">
                         {v.scheduledDate ? prettyDate(dateOnly(v.scheduledDate)) : "Not scheduled"}
                         {v.snowEvent && <span className="font-normal text-ink-soft"> · {v.snowEvent.name}{v.pushNumber ? `, push ${v.pushNumber}` : ""}</span>}
+                        {v.lineOverrides != null && <span className="font-normal text-ink-soft"> · own price</span>}
+                        {v.state === "SKIPPED" && v.skipNote && <span className="font-normal text-ink-soft"> · {v.skipNote}</span>}
+                        {v.extras.length > 0 && <span className="font-normal text-ink-soft"> · + {v.extras.map((e) => e.name).join(", ")}</span>}
                       </Link>
-                      <span className="flex items-center gap-2">
+                      <span className="flex flex-wrap items-center gap-2">
+                        {open && !plan && (
+                          <details className="relative">
+                            <summary className="cursor-pointer rounded-lg border border-line px-2 py-1 font-semibold">Skip</summary>
+                            <form action={visitTransition} className="absolute right-0 z-10 mt-1 w-64 space-y-2 rounded-lg border border-line bg-white p-3 shadow-card">
+                              <input type="hidden" name="id" value={v.id} /><input type="hidden" name="to" value="SKIPPED" /><input type="hidden" name="back" value={here} />
+                              <select name="skipReason" className="w-full rounded-lg border border-line px-2 py-1" aria-label="Reason">{SKIP.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
+                              <input name="skipNote" placeholder="Note (optional)" maxLength={500} className="w-full rounded-lg border border-line px-2 py-1" />
+                              <button className="w-full rounded-lg border border-line px-2 py-1 font-semibold">Skip this visit</button>
+                            </form>
+                          </details>
+                        )}
                         {open && !v.snowEventId && (
                           <form action={visitSchedule} className="flex gap-1">
                             <input type="hidden" name="id" value={v.id} /><input type="hidden" name="back" value={here} />
@@ -193,7 +249,7 @@ export default async function JobPage({ params, searchParams }: PageProps<"/jobs
               <button className="min-h-8 rounded-lg border border-line px-2 text-xs font-semibold hover:bg-tint">{job.requireSignature ? "Turn off" : "Require"}</button>
             </form>
           </section>
-          <JobCosting businessId={bid} jobId={job.id} people={await team(bid)} back={here} />
+          <JobCosting businessId={bid} jobId={job.id} people={people} back={here} />
           <Card title="Photos">
             <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
               <PhotoUploader endpoint="/api/uploads" fields={{ jobId: job.id, kind: "BEFORE" }} label="Before" camera={false} />
@@ -205,10 +261,10 @@ export default async function JobPage({ params, searchParams }: PageProps<"/jobs
 
           <Card title="Charges & invoices" actions={<div className="flex items-center gap-2">
             {unbilled.length > 0 && <span className="text-sm font-semibold text-amber-800">{money(unbilled.reduce((a, c) => a + c.totalCents, 0))} not invoiced</span>}
-            {(unbilled.length > 0 || (job.billingType === "FIXED_PRICE" && !job.invoices.some((i) => i.status !== "VOID"))) && (
+            {(unbilled.length > 0 || (job.billingType === "FIXED_PRICE" && !fixedMonthly && !job.invoices.some((i) => i.status !== "VOID"))) && (
               <form action={invoiceCreate}>
                 <input type="hidden" name="clientId" value={job.clientId} /><input type="hidden" name="jobId" value={job.id} /><input type="hidden" name="back" value={here} />
-                {job.billingType === "FIXED_PRICE" && <input type="hidden" name="fixed" value="1" />}
+                {job.billingType === "FIXED_PRICE" && !fixedMonthly && <input type="hidden" name="fixed" value="1" />}
                 <Button>Create invoice</Button>
               </form>
             )}
@@ -228,7 +284,7 @@ export default async function JobPage({ params, searchParams }: PageProps<"/jobs
                   ))}
                 </tbody>
               </table>
-            ) : <Empty>Charges are added when a visit is marked done.</Empty>}
+            ) : <Empty>{fixedMonthly ? "A draft invoice for the monthly price is made on the invoice day. Visits add no charges." : "Charges are added when a visit is marked done."}</Empty>}
           </Card>
 
           <Card title="Details">

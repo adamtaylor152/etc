@@ -49,11 +49,16 @@ async function applyCharge(tx: Tx, job: { id: string; kind: string }, size: "STA
   const name = (plan ? BASE_NAME.plan : BASE_NAME.once)[size];
   if (base) await tx.jobLineItem.update({ where: { id: base.id }, data: { name, unitPriceCents: c.base, totalCents: c.base, quantity: 1 } });
   else await tx.jobLineItem.create({ data: { jobId: job.id, name, unitPriceCents: c.base, totalCents: c.base, perVisit: true } });
-  const walk = lines.find((l) => isWalk(l.name));
-  if (c.walk && walk) await tx.jobLineItem.update({ where: { id: walk.id }, data: { unitPriceCents: c.walk, totalCents: c.walk } });
-  else if (c.walk) await tx.jobLineItem.create({ data: { jobId: job.id, name: WALK_NAME, unitPriceCents: c.walk, totalCents: c.walk, perVisit: true, sortOrder: 2 } });
-  else if (walk) await tx.jobLineItem.delete({ where: { id: walk.id } });
+  await setWalkLine(tx, job.id, c.walk);
   await tx.job.update({ where: { id: job.id }, data: { ...(plan ? { pricePerPushCents: c.base } : {}), sizeHoldAt: null, pendingPrice: Prisma.DbNull } });
+}
+
+/** The job's extra-sidewalk line at this price per visit (0 = no extra sidewalk). */
+export async function setWalkLine(tx: Tx, jobId: string, cents: number) {
+  const walk = (await tx.jobLineItem.findMany({ where: { jobId } })).find((l) => isWalk(l.name));
+  if (cents && walk) await tx.jobLineItem.update({ where: { id: walk.id }, data: { unitPriceCents: cents, totalCents: cents } });
+  else if (cents) await tx.jobLineItem.create({ data: { jobId, name: WALK_NAME, unitPriceCents: cents, totalCents: cents, perVisit: true, sortOrder: 2 } });
+  else if (walk) await tx.jobLineItem.delete({ where: { id: walk.id } });
 }
 
 export const openSnowJobs = (businessId: string, propertyId: string) => ({

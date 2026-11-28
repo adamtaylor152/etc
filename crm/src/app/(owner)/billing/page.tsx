@@ -7,6 +7,7 @@ import { dateOnly, prettyDate } from "@/server/dates";
 import { businessId, db } from "@/server/db";
 import { money } from "@/server/money";
 import { clientName } from "@/server/queries";
+import { autoPayTrouble } from "@/server/ops/autopay";
 import { invoiceCreate, runBilling, sendDrafts } from "../billing-actions";
 
 export const metadata = { title: "Billing" };
@@ -23,10 +24,11 @@ export default async function Billing({ searchParams }: PageProps<"/billing">) {
     db.invoice.findMany({ where: { businessId: bid, status: "DRAFT" }, include: { client: true }, orderBy: { number: "asc" } }),
     // Fixed-price jobs with every visit done and no invoice yet.
     db.job.findMany({
-      where: { businessId: bid, billingType: "FIXED_PRICE", closedAt: null, invoices: { none: { status: { not: "VOID" } } }, visits: { some: {}, every: { state: { in: ["COMPLETED", "SKIPPED", "CANCELLED"] } } } },
+      where: { businessId: bid, billingType: "FIXED_PRICE", kind: { not: "RECURRING" }, closedAt: null, invoices: { none: { status: { not: "VOID" } } }, visits: { some: {}, every: { state: { in: ["COMPLETED", "SKIPPED", "CANCELLED"] } } } },
       include: { client: true },
     }),
   ]);
+  const trouble = await autoPayTrouble(bid);
   const byClient = new Map<string, typeof charges>();
   for (const c of charges) byClient.set(c.visit.job.clientId, [...(byClient.get(c.visit.job.clientId) ?? []), c]);
   const unbilled = charges.reduce((a, c) => a + c.totalCents, 0);
@@ -38,6 +40,24 @@ export default async function Billing({ searchParams }: PageProps<"/billing">) {
       <PageHeader title="Billing" sub={`${money(unbilled)} done but not invoiced`} actions={
         byClient.size > 0 && <form action={runBilling}><Button>Create drafts for everyone</Button></form>
       } />
+      {trouble.length > 0 && (
+        <Card title={`Failed auto-payments (${trouble.length})`} className="mb-5 border-red-200">
+          <ul className="divide-y divide-line">
+            {trouble.map((i) => (
+              <li key={i.id}>
+                <Link href={`/invoices/${i.id}`} className="flex justify-between gap-2 py-2.5">
+                  <span><span className="font-semibold">#{i.number} {clientName(i.client)}</span><span className="block text-sm text-ink-soft">
+                    {i.autoPayState === "RETRYING" ? `Card declined${i.autoPayAttempts[0]?.failureCode ? ` (${i.autoPayAttempts[0].failureCode.replaceAll("_", " ")})` : ""}. Next try ${prettyDate(dateOnly(i.autoPayOn))}; the client was emailed.`
+                      : i.autoPayState === "NEEDS_ACTION" ? "The bank wants the client to approve it. They were emailed a link to pay."
+                      : "The automatic payment failed and we've stopped trying. Collect this one another way."}
+                  </span></span>
+                  <span className="font-semibold">{money(i.totalCents - i.amountPaidCents)}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
       <div className="grid gap-5 lg:grid-cols-2">
         <Card title={`Not invoiced yet (${byClient.size} client${byClient.size === 1 ? "" : "s"})`}>
           {byClient.size ? (

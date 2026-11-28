@@ -32,5 +32,5 @@ export const INVOICE_LABEL = Object.fromEntries(Object.entries(INVOICE).map(([k,
 
 export const QUOTE: Record<QuoteStatus, [string, Tone]> = {
   DRAFT: ["Draft", "gray"], AWAITING_RESPONSE: ["Awaiting response", "amber"], CHANGES_REQUESTED: ["Changes requested", "red"],
-  APPROVED: ["Approved", "green"], CONVERTED: ["Converted to job", "green"], ARCHIVED: ["Archived", "gray"],
+  APPROVED: ["Approved", "green"], CONVERTED: ["Converted to job", "green"], ARCHIVED: ["Archived", "gray"], DECLINED: ["Declined", "red"],
 };

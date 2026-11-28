@@ -8,13 +8,14 @@ import { QUOTE } from "@/components/status";
 import { Gallery } from "@/components/gallery";
 import { QuoteLinesEditor } from "@/components/quote-lines";
 import { RecordPanel } from "@/components/record-panel";
-import { Badge, Button, Card, Dl, Field, Input, PageHeader, Textarea, btn, inputCls } from "@/components/ui";
+import { Badge, Button, ButtonLink, Card, Dl, Field, Input, PageHeader, Textarea, btn, inputCls } from "@/components/ui";
 import { dateOnly, prettyDate, prettyDateTime, todayLocal } from "@/server/dates";
 import { business, businessId, db } from "@/server/db";
 import { money } from "@/server/money";
 import { clientName } from "@/server/queries";
+import { smsEnabled, toE164 } from "@/server/sms";
 import { quoteEditable, quoteExpired } from "@/server/status/quote";
-import { quoteArchive, quoteConvert, quoteMarkApproved, quoteSend, quoteUpdate, quoteViewAsClient } from "../../quote-actions";
+import { quoteArchive, quoteConvert, quoteDecline, quoteMarkApproved, quoteReopen, quoteSaveTemplate, quoteSend, quoteUpdate, quoteViewAsClient } from "../../quote-actions";
 
 export default async function QuotePage({ params, searchParams }: PageProps<"/quotes/[id]">) {
   await requireOwner();
@@ -33,10 +34,18 @@ export default async function QuotePage({ params, searchParams }: PageProps<"/qu
   const here = `/quotes/${id}`;
   const hidden = <><input type="hidden" name="id" value={q.id} /><input type="hidden" name="back" value={here} /></>;
   const expired = quoteExpired({ status: q.status, validUntil: dateOnly(q.validUntil) }, todayLocal());
+  // Same rule the outbox applies to every automatic text: a mobile number, said yes to texts, hasn't texted STOP.
+  const textable = smsEnabled() && !!toE164(q.client.phone) && q.client.smsOptIn && !q.client.smsOptOutAt;
+  const awaiting = q.status === "AWAITING_RESPONSE" || q.status === "CHANGES_REQUESTED";
+  const more = "cursor-pointer text-sm font-semibold text-blue";
   return (
     <>
       <Flash error={sp.error} />
-      {sp.sent && <p className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-medium text-emerald-800">Quote emailed to {q.client.email}.</p>}
+      {sp.sent && <p className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-medium text-emerald-800">{sp.sent === "text" ? `Quote texted to ${q.client.phone}.` : `Quote emailed to ${q.client.email}.`}</p>}
+      {sp.template && <p className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-medium text-emerald-800">Template saved. Pick it when you start a new quote; rename or delete it in <Link href="/settings" className="underline">Settings</Link>.</p>}
+      {q.status === "DECLINED" && (
+        <div className="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm"><b>Declined {prettyDateTime(q.declinedAt)}</b>{q.declineReason && <p className="mt-1 whitespace-pre-line">{q.declineReason}</p>}<p className="mt-1 text-ink-soft">Reopen it as a draft to rework and send again, or create a similar quote.</p></div>
+      )}
       {q.status === "CHANGES_REQUESTED" && q.changeRequestMessage && (
         <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm"><b>{q.client.firstName} asked for changes:</b><p className="mt-1 whitespace-pre-line">{q.changeRequestMessage}</p></div>
       )}
@@ -45,7 +54,10 @@ export default async function QuotePage({ params, searchParams }: PageProps<"/qu
         sub={<><Link className="font-semibold text-blue" href={`/clients/${q.clientId}`}>{clientName(q.client)}</Link>{q.property && ` · ${q.property.formatted}`}{q.request && <> · <Link className="text-blue" href={`/requests/${q.request.id}`}>request #{q.request.number}</Link></>}</>}
         actions={<>
           {!editable && (q.status === "AWAITING_RESPONSE") && <form action={quoteSend}>{hidden}<Button variant="secondary">Resend</Button></form>}
-          {(q.status === "AWAITING_RESPONSE" || q.status === "CHANGES_REQUESTED") && <form action={quoteMarkApproved}>{hidden}<Button variant="secondary">Mark approved</Button></form>}
+          {q.status === "AWAITING_RESPONSE" && textable && <form action={quoteSend}>{hidden}<input type="hidden" name="via" value="SMS" /><Button variant="secondary">Send by text</Button></form>}
+          {awaiting && <form action={quoteMarkApproved}>{hidden}<Button variant="secondary">Mark approved</Button></form>}
+          {q.status === "DECLINED" && <form action={quoteReopen}>{hidden}<Button variant="secondary">Reopen as draft</Button></form>}
+          <ButtonLink href={`/quotes/new?client=${q.clientId}&similar=${q.id}`}>Create similar quote</ButtonLink>
           {q.status !== "DRAFT" && <form action={quoteViewAsClient}>{hidden}<Button variant="secondary">Client view</Button></form>}
           <a href={`/api/export/pdf/quote/${q.id}`} target="_blank" rel="noreferrer" className={btn("secondary")}>PDF</a>
           {q.jobId && <Link href={`/jobs/${q.jobId}`} className="inline-flex min-h-11 items-center rounded-full border-2 border-blue bg-blue px-5 text-sm font-semibold text-white">Open job</Link>}
@@ -74,7 +86,12 @@ export default async function QuotePage({ params, searchParams }: PageProps<"/qu
                 <Field label="Title"><Input name="title" defaultValue={q.title ?? ""} required /></Field>
                 <QuoteLinesEditor lines={q.lineItems.map((l) => ({ ...l, quantity: Number(l.quantity) }))} services={services.map((s) => ({ name: s.name, description: s.description, unitPriceCents: s.unitPriceCents }))} />
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <Field label="Discount ($)"><Input name="discount" type="number" step="0.01" min="0" defaultValue={q.discountCents / 100 || ""} /></Field>
+                  <Field label="Discount">
+                    <span className="flex gap-2">
+                      <select name="discountType" defaultValue={q.discountType} className="min-h-10 rounded-lg border border-line bg-white px-2 text-sm"><option value="FIXED">$ off</option><option value="PERCENT">% off</option></select>
+                      <Input name="discount" type="number" step="0.01" min="0" defaultValue={(q.discountType === "PERCENT" ? q.discountValue : q.discountCents) / 100 || ""} className="w-28" />
+                    </span>
+                  </Field>
                   <Field label="Good until"><Input name="validUntil" type="date" defaultValue={dateOnly(q.validUntil) ?? ""} /></Field>
                   <Field label="Deposit">
                     <span className="flex gap-2">
@@ -87,6 +104,7 @@ export default async function QuotePage({ params, searchParams }: PageProps<"/qu
                 <Field label="Message to the client"><Textarea name="message" rows={3} defaultValue={q.message ?? ""} /></Field>
                 <div className="flex flex-wrap gap-2">
                   <Button name="send" value="1">Save &amp; send to {q.client.firstName}</Button>
+                  {textable && <Button variant="secondary" name="send" value="sms">Save &amp; text to {q.client.firstName}</Button>}
                   <Button variant="secondary">Save draft</Button>
                 </div>
               </form>
@@ -104,7 +122,7 @@ export default async function QuotePage({ params, searchParams }: PageProps<"/qu
                   ))}
                 </tbody>
                 <tfoot className="border-t-2 border-navy">
-                  {q.discountCents > 0 && <tr><td colSpan={2} className="pt-2 text-ink-soft">Discount</td><td className="pt-2 text-right">−{money(q.discountCents)}</td></tr>}
+                  {q.discountCents > 0 && <tr><td colSpan={2} className="pt-2 text-ink-soft">Discount{q.discountType === "PERCENT" && ` (${q.discountValue / 100}%)`}</td><td className="pt-2 text-right">−{money(q.discountCents)}</td></tr>}
                   {q.taxCents > 0 && <tr><td colSpan={2} className="pt-2 text-ink-soft">{biz.taxName}{biz.pricesIncludeTax ? " (included)" : ""}</td><td className="pt-2 text-right">{money(q.taxCents)}</td></tr>}
                   <tr><td colSpan={2} className="pt-2 font-semibold">Total</td><td className="pt-2 text-right font-display text-xl font-bold">{money(q.totalCents)}</td></tr>
                 </tfoot>
@@ -116,7 +134,20 @@ export default async function QuotePage({ params, searchParams }: PageProps<"/qu
           <Card title="Details">
             {deposit && <p className="mb-2 rounded-lg bg-tint p-3 text-sm">Deposit {money(depositCents(q.totalCents, q.depositType, q.depositValue))}{q.depositRequired && " (required)"}: {deposit.status === "PAID" ? <span className="font-semibold text-emerald-700">paid</span> : <><Link href={`/invoices/${deposit.id}`} className="font-semibold text-blue">invoice #{deposit.number}</Link> · <Link href={`/clients/${q.clientId}/collect?invoice=${deposit.id}`} className="font-semibold text-blue">record deposit</Link></>}{deposit.appliedToInvoiceId && " · applied to the job invoice"}</p>}
             {!deposit && q.depositType !== "NONE" && <p className="mb-2 text-sm text-ink-soft">Deposit {money(depositCents(q.totalCents, q.depositType, q.depositValue))}{q.depositRequired && " (required)"}: invoiced when the client approves.</p>}
-            <Dl rows={[["Sent", q.sentAt ? prettyDateTime(q.sentAt) : "Not yet"], ["Good until", prettyDate(dateOnly(q.validUntil))], ["Approved", q.approvedAt ? `${prettyDateTime(q.approvedAt)} by ${q.approvedByName}` : null]]} />
+            <Dl rows={[["Sent", q.sentAt ? `${prettyDateTime(q.lastSentAt ?? q.sentAt)} by ${q.lastSentVia === "SMS" ? "text" : "email"}` : "Not yet"], ["Good until", prettyDate(dateOnly(q.validUntil))], ["Approved", q.approvedAt ? `${prettyDateTime(q.approvedAt)} by ${q.approvedByName}` : null]]} />
+            {awaiting && !textable && <p className="mt-2 text-xs text-ink-soft">Send by text is offered when texting is set up and the client has a mobile number, said yes to text updates and hasn&apos;t texted STOP.</p>}
+            {awaiting && (
+              <details className="mt-3">
+                <summary className={more}>Mark declined / lost</summary>
+                <form action={quoteDecline} className="mt-2 flex flex-wrap gap-2">{hidden}<Input name="reason" maxLength={500} placeholder="Reason (optional)" className="max-w-sm" /><Button variant="secondary">Mark declined</Button></form>
+              </details>
+            )}
+            <details className="mt-3">
+              <summary className={more}>Save as template</summary>
+              <form action={quoteSaveTemplate} className="mt-2 flex flex-wrap gap-2">{hidden}<Input name="name" required maxLength={80} defaultValue={q.title ?? ""} placeholder="Template name" className="max-w-sm" /><Button variant="secondary">Save template</Button></form>
+              <p className="mt-1 text-xs text-ink-soft">Keeps the title, message, lines, discount and deposit as last saved. An existing template with the same name is replaced.</p>
+            </details>
+            <p className="mt-3"><Link href={`/quotes/new?similar=${q.id}`} className={more}>Create a similar quote for another client</Link></p>
             {q.status !== "CONVERTED" && q.status !== "ARCHIVED" && <form action={quoteArchive} className="mt-3">{hidden}<Button variant="secondary">Archive</Button></form>}
           </Card>
         </div>

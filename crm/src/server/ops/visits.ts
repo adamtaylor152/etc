@@ -1,8 +1,9 @@
 // Visit operations: the field flow (on my way -> arrived -> done / skip), scheduling and reopening.
 import { assertChecklistDone } from "./checklists";
 import { assertSigned } from "./signatures";
-import type { SkipReason, VisitState } from "@/generated/prisma/client";
-import { chargesForVisit, STORM_CHARGE } from "../billing/charges";
+import { Prisma, type SkipReason, type VisitState } from "@/generated/prisma/client";
+import { chargesForVisit, extrasOffered, parseOverrides, STORM_CHARGE, type OverrideLine } from "../billing/charges";
+import { visitLinesLock } from "../status/job";
 import { dueDate } from "../billing/invoice";
 import { dateOnly, todayLocal, toDbDate } from "../dates";
 import { invoiceUnbilled } from "./invoices";
@@ -63,7 +64,9 @@ function transitionTx(user: Actor, visitId: string, to: VisitState, extra: Trans
       const job = { ...v.job, lineItems: v.job.lineItems.map((l) => ({ ...l, quantity: Number(l.quantity) })) };
       const stormCharged = v.job.snowBillingMode === "PER_EVENT" && !!v.snowEventId
         && (await tx.visitCharge.count({ where: { name: STORM_CHARGE, visit: { jobId: v.jobId, snowEventId: v.snowEventId, id: { not: visitId } } } })) > 0;
-      const lines = chargesForVisit(job, { iceMeltApplied: updated.iceMeltApplied, stormCharged }, await iceMeltPrice(tx, user.businessId));
+      // Read after the update above: it holds the visit's row lock, so an extra the client is adding right now is either in or refused.
+      const extras = await tx.visitExtra.findMany({ where: { visitId }, orderBy: { createdAt: "asc" } });
+      const lines = chargesForVisit(job, { iceMeltApplied: updated.iceMeltApplied, stormCharged, overrides: parseOverrides(v.lineOverrides) }, await iceMeltPrice(tx, user.businessId), extras);
       if (lines.length) await tx.visitCharge.createMany({ data: lines.map((l) => ({ ...l, businessId: user.businessId, visitId })) });
       // Billed per visit (one-off jobs): invoice it now so the "all done" email can carry a pay link.
       if (lines.length && v.job.invoiceSchedule === "AFTER_EACH_VISIT") {
@@ -111,6 +114,37 @@ function transitionTx(user: Actor, visitId: string, to: VisitState, extra: Trans
   });
 }
 
+// ---------- one-off extras from the client hub ----------
+/** Fixed-price add-on services: what a client may add to a visit. */
+export const addOnServices = (businessId: string) =>
+  db.service.findMany({ where: { businessId, active: true, isAddon: true, pricingMode: "FIXED", unitPriceCents: { not: null } }, orderBy: { sortOrder: "asc" } });
+
+/** The client adds an add-on to one of their own visits that hasn't started. Charged when the visit is completed (chargesForVisit). */
+export async function addVisitExtra(client: { id: string; businessId: string }, visitId: string, serviceId: string) {
+  return db.$transaction(async (tx) => {
+    const service = (await addOnServices(client.businessId)).find((s) => s.id === serviceId);
+    // Locks the visit row, so this can't slip in while the visit is being completed (see transitionTx).
+    const locked = await tx.visit.updateMany({ where: { id: visitId, businessId: client.businessId, state: "SCHEDULED", job: { clientId: client.id, closedAt: null, sizeHoldAt: null } }, data: { state: "SCHEDULED" } });
+    if (!service || locked.count !== 1) throw new TransitionError("That can't be added to this visit any more");
+    const v = await tx.visit.findUniqueOrThrow({ where: { id: visitId }, include: { job: { include: { lineItems: true } }, extras: true } });
+    if (!extrasOffered([service], v.job, v.extras).length) throw new TransitionError("That's already part of this visit");
+    await tx.visitExtra.create({ data: { businessId: client.businessId, visitId, serviceKey: service.key, name: service.name, unitPriceCents: service.unitPriceCents!, addedByClientId: client.id } });
+    await logActivity(tx, { businessId: client.businessId, type: "visit.extra_added", entityType: "Visit", entityId: visitId, actorType: "CLIENT", actorClientId: client.id, clientId: client.id, jobId: v.jobId, data: { name: service.name, cents: service.unitPriceCents } });
+    return { visit: v, name: service.name, cents: service.unitPriceCents! };
+  });
+}
+
+/** The client takes one back, while the visit still hasn't started. */
+export async function removeVisitExtra(client: { id: string; businessId: string }, extraId: string) {
+  return db.$transaction(async (tx) => {
+    const e = await tx.visitExtra.findFirst({ where: { id: extraId, visit: { businessId: client.businessId, state: "SCHEDULED", job: { clientId: client.id } } }, include: { visit: true } });
+    if (!e || (await tx.visit.updateMany({ where: { id: e.visitId, state: "SCHEDULED" }, data: { state: "SCHEDULED" } })).count !== 1) throw new TransitionError("That visit has already started");
+    await tx.visitExtra.delete({ where: { id: e.id } });
+    await logActivity(tx, { businessId: client.businessId, type: "visit.extra_removed", entityType: "Visit", entityId: e.visitId, actorType: "CLIENT", actorClientId: client.id, clientId: client.id, jobId: e.visit.jobId, data: { name: e.name } });
+    return e;
+  });
+}
+
 /** What an assignment alert watches on a visit that is still to be done (ops/assign-alerts.ts). */
 const visitSnap = (user: Actor, visitId: string) => async (): Promise<Assigned | null> => {
   const v = await db.visit.findFirst({ where: { id: visitId, businessId: user.businessId, state: { in: ["SCHEDULED", "EN_ROUTE", "IN_PROGRESS"] } }, select: { scheduledDate: true, startAt: true, anytime: true, assignees: { select: { userId: true } } } });
@@ -143,6 +177,20 @@ export async function addVisit(user: Actor, jobId: string, date: string | null) 
   const job = await db.job.findFirstOrThrow({ where: { id: jobId, businessId: user.businessId } });
   return db.visit.create({
     data: { businessId: user.businessId, jobId, propertyId: job.propertyId, scheduledDate: date ? toDbDate(date) : null, source: "MANUAL" },
+  });
+}
+
+/** Price this one visit differently from its job (extra work this time); null or no lines = back to the job's lines.
+ *  Only while the visit is still to do (visitLinesLock): the charges are then made from these lines when it's done,
+ *  exactly as they would be from the job's, so it bills once; once invoiced it can't change. */
+export async function setVisitLines(user: Actor, visitId: string, lines: OverrideLine[] | null) {
+  await db.$transaction(async (tx) => {
+    const v = await tx.visit.findFirstOrThrow({ where: { id: visitId, businessId: user.businessId }, include: { job: true, charges: true } });
+    const lock = visitLinesLock({ state: v.state, invoiced: v.charges.some((c) => c.invoiceLineItemId), kind: v.job.kind, billingType: v.job.billingType, closedAt: v.job.closedAt });
+    if (lock) throw new TransitionError(lock);
+    const next = lines?.length ? lines.map((l) => ({ name: l.name, ...(l.description ? { description: l.description } : {}), quantity: l.quantity, unitPriceCents: l.unitPriceCents })) : null;
+    await tx.visit.update({ where: { id: visitId }, data: { lineOverrides: next ?? Prisma.DbNull } });
+    await logActivity(tx, { businessId: user.businessId, type: "visit.lines_changed", entityType: "Visit", entityId: visitId, actorType: "USER", actorUserId: user.id, clientId: v.job.clientId, jobId: v.jobId, data: { lines: next } });
   });
 }
 

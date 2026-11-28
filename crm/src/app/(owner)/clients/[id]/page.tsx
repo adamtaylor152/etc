@@ -1,11 +1,14 @@
 // Client profile, Jobber layout: header (+ Create / More), contact info, properties, contacts, tabbed work/activity/
 // communication/files, billing history; right column: lifetime value + balance, last communication, notes.
+import { siteFacts } from "@/server/clients";
 import { requireOwner } from "@/server/auth";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Archive, Banknote, FileText, Hammer, Inbox, ListTodo, Mail, MapPin, MessageSquare, Pencil, Phone, Plus, Receipt, Repeat, Snowflake } from "lucide-react";
 import { creditAdd, creditRemove } from "../../billing-extras-actions";
 import { clientArchive, clientMerge, propertyArchive } from "../../client-actions";
+import { clientAutoPayOff, clientCardRemove } from "../../card-actions";
+import { cardLabel } from "@/server/billing/autopay";
 import { ConfirmButton } from "@/components/confirm-button";
 import { Flash } from "@/components/flash";
 import { possibleDuplicates } from "@/server/ops/client-import";
@@ -122,6 +125,7 @@ export default async function ClientPage({ params, searchParams }: PageProps<"/c
       />
 
       <Flash error={sp.error} />
+      {c.doNotService && <p role="alert" className="mb-5 rounded-lg border border-red-300 bg-red-50 p-3 text-sm font-semibold text-red-800">Do not service. Check the notes before booking anything for this client.</p>}
       {dups.length > 0 && !c.archivedAt && (
         <div className="mb-5 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm">
           <p className="font-semibold text-amber-900">Possible duplicate{dups.length === 1 ? "" : "s"}</p>
@@ -146,6 +150,13 @@ export default async function ClientPage({ params, searchParams }: PageProps<"/c
               <div><dt className="text-xs font-semibold uppercase text-ink-soft">Lead source</dt><dd>{c.leadSource ?? c.source.replaceAll("_", " ").toLowerCase()}</dd></div>
               <div><dt className="text-xs font-semibold uppercase text-ink-soft">Referrals</dt><dd className="text-sm">{referredBy ? <>Referred by <Link className="text-blue" href={`/clients/${referredBy.id}`}>{clientName(referredBy)}</Link>. </> : ""}{referredCount ? `Referred ${referredCount}. ` : ""}{c.referralCode ? <span className="text-ink-soft">Code {c.referralCode}</span> : <span className="text-ink-soft">Share code made on first hub visit</span>}{credit > 0 && <span className="ml-1 font-semibold text-emerald-700">· {money(credit)} credit</span>}</dd></div>
               <div><dt className="text-xs font-semibold uppercase text-ink-soft">Payment</dt><dd>{c.preferredPayment === "ETRANSFER" ? "e-Transfer" : c.preferredPayment ? c.preferredPayment.toLowerCase() : "—"}</dd></div>
+              {c.cardPaymentMethodId && (
+                <div className="sm:col-span-2"><dt className="text-xs font-semibold uppercase text-ink-soft">Card on file</dt><dd className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <span><b>{cardLabel(c)}</b> · exp {c.cardExpMonth}/{String(c.cardExpYear).slice(-2)} · {c.autoPayConsentAt ? `auto-pay on (client chose it ${prettyDateTime(c.autoPayConsentAt)}, ${c.autoPayConsentSource === "invoice" ? "paying an invoice" : "on their page"})` : "auto-pay off"}</span>
+                  {c.autoPayConsentAt && <form action={clientAutoPayOff}><input type="hidden" name="clientId" value={id} /><ConfirmButton message="Turn off auto-pay for this client? Invoices already waiting on the card go back to being paid the usual way. Only the client can turn it back on." className="text-xs font-semibold text-blue">Turn off auto-pay</ConfirmButton></form>}
+                  <form action={clientCardRemove}><input type="hidden" name="clientId" value={id} /><ConfirmButton message="Remove this card? Auto-pay goes off with it. Only the client can save a card again." className="text-xs font-semibold text-red-700">Remove card</ConfirmButton></form>
+                </dd></div>
+              )}
               <div className="sm:col-span-2"><dt className="text-xs font-semibold uppercase text-ink-soft">Messages</dt><dd className="text-ink-soft">
                 {[c.smsOptOutAt ? "Texted STOP" : c.smsOptIn ? "Text updates on" : "No text updates", c.visitReminders ? "visit reminders" : null, c.followUpQuotes ? "quote follow-ups" : null, c.followUpInvoices ? "invoice reminders" : null, c.marketingOptOut ? "no marketing" : null].filter(Boolean).join(" · ")}
               </dd></div>
@@ -163,7 +174,7 @@ export default async function ClientPage({ params, searchParams }: PageProps<"/c
                         <MapPin className="mt-0.5 size-4 shrink-0 text-ink-soft" aria-hidden />
                         <div className="min-w-0 flex-1">
                           <a className="font-semibold text-blue" href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(p.formatted)}`} target="_blank" rel="noreferrer">{p.label ? `${p.label}: ` : ""}{p.formatted}</a>
-                          <div className="text-xs text-ink-soft">{[p.isDefault && "Main", p.community?.name ?? "No community", p.gateCode && `Gate ${p.gateCode}`, p.accessNotes, p.petNotes && `Pets: ${p.petNotes}`].filter(Boolean).join(" · ")}</div>
+                          <div className="text-xs text-ink-soft">{[p.isDefault && "Main", p.community?.name ?? "No community", p.gateCode && `Gate ${p.gateCode}`, p.accessNotes, p.petNotes && `Pets: ${p.petNotes}`, siteFacts(p)].filter(Boolean).join(" · ")}</div>
                         </div>
                         <Link href={`/properties/${p.id}/edit`} className="text-xs font-semibold text-blue">Edit</Link>
                         {c.properties.length > 1 && <form action={propertyArchive}><input type="hidden" name="id" value={p.id} /><input type="hidden" name="archive" value="1" /><button className="text-xs text-ink-soft hover:text-red-700">Remove</button></form>}
