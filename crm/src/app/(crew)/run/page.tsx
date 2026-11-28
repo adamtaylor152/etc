@@ -18,18 +18,18 @@ export default async function Run({ searchParams }: PageProps<"/run">) {
   const date = typeof sp.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(sp.date) ? sp.date : todayLocal();
   const who = sp.who === "all" && owner ? "all" : user.id;
   const stops = await runStops(user.businessId, date, who);
-  const seg = (on: boolean) => `inline-flex min-h-9 items-center rounded-md px-3 text-sm font-semibold focus-visible:outline-sky ${on ? "bg-white text-night" : "text-white/75 hover:text-white"}`;
+  const seg = (on: boolean) => `inline-flex min-h-9 max-sm:min-h-11 items-center rounded-md px-3 text-sm font-semibold focus-visible:outline-sky ${on ? "bg-white text-night" : "text-white/75 hover:text-white"}`;
   return (
-    <div data-night className={`text-white ${owner ? "lg:mx-auto lg:max-w-2xl lg:rounded-2xl lg:bg-night lg:p-8 lg:shadow-lift" : ""}`}>
+    <div data-night className={`text-white ${owner ? "lg:mx-auto lg:max-w-5xl lg:rounded-2xl lg:bg-night lg:p-8 lg:shadow-lift" : ""}`}>
       {/* The dark backdrop covers the whole page behind the frame's content, whichever frame (crew or owner) is around it. */}
       <div aria-hidden className={`pointer-events-none fixed inset-0 -z-10 bg-night ${owner ? "lg:hidden" : ""}`} />
-      <div className="mx-auto mb-4 max-w-lg">
+      <div className="mx-auto mb-4 max-w-lg lg:max-w-none">
         <div className="flex items-center justify-between gap-3">
           <h1 className="font-display text-[1.7rem] font-semibold leading-tight">My route</h1>
           <Link href="/time" className="inline-flex min-h-11 items-center gap-1.5 rounded-lg px-2 text-sm font-semibold text-sky hover:text-white focus-visible:outline-sky"><Clock className="size-4" aria-hidden />Clock in / out</Link>
         </div>
-        <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-night">
-          <DatePick date={date} who={who === "all" ? "all" : undefined} />
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+          <DatePick date={date} who={who === "all" ? "all" : undefined} night />
           {owner && (
             <span className="flex gap-1 rounded-lg bg-white/10 p-1" role="group" aria-label="Whose stops">
               <Link href={`/run?date=${date}`} aria-current={who !== "all" ? "true" : undefined} className={seg(who !== "all")}>Mine</Link>

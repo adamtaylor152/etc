@@ -50,7 +50,7 @@ export default async function Routes({ searchParams }: PageProps<"/routes">) {
   const multi = next.length > 1
     ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(next.at(-1)!)}&waypoints=${encodeURIComponent(next.slice(0, -1).join("|"))}`
     : null;
-  const dayBtn = "inline-flex size-11 shrink-0 items-center justify-center rounded-lg border border-line bg-white text-ink-soft shadow-sm hover:bg-tint hover:text-navy sm:size-9";
+  const dayBtn = "inline-flex size-11 shrink-0 items-center justify-center rounded-lg border border-line bg-white text-ink-soft shadow-sm hover:bg-tint hover:text-navy sm:size-10";
   const who = (u: { name: string | null; email: string }) => u.name || u.email.split("@")[0];
   return (
     <>
@@ -60,7 +60,8 @@ export default async function Routes({ searchParams }: PageProps<"/routes">) {
         actions={<div className="no-print flex flex-wrap items-center gap-2">
           {!storm && (
             // One control: step a day either way, or pick one (the page reloads on the day picked).
-            <div className="flex items-center gap-1" role="group" aria-label="Day">
+            // The picker's own "Day" label is pulled to the front of the group, so it reads: Day, back, date, forward.
+            <div className="flex items-center gap-1 [&_label]:contents [&_label>span]:order-first [&_label>span]:mr-1" role="group" aria-label="Day">
               <Link href={`/routes?date=${addDays(day, -1)}`} className={dayBtn} aria-label="Previous day"><ChevronLeft className="size-4" aria-hidden /></Link>
               <DatePick key={day} date={day} />
               <Link href={`/routes?date=${addDays(day, 1)}`} className={dayBtn} aria-label="Next day"><ChevronRight className="size-4" aria-hidden /></Link>
@@ -99,7 +100,7 @@ export default async function Routes({ searchParams }: PageProps<"/routes">) {
                 </form>
                 {visits.length > 1 && team.length > 1 && (
                   <details className="mt-4 border-t border-line-soft pt-4">
-                    <summary className="flex min-h-8 items-center text-sm font-semibold">Split this route between people</summary>
+                    <summary className="flex min-h-8 items-center text-sm font-semibold max-sm:min-h-11">Split this route between people</summary>
                     <form action={routeSplit} className="mt-2">
                       <input type="hidden" name="back" value={here} />{storm ? <input type="hidden" name="storm" value={storm.id} /> : <input type="hidden" name="date" value={day} />}
                       <div className="flex flex-wrap items-center gap-x-4">
@@ -168,7 +169,7 @@ export default async function Routes({ searchParams }: PageProps<"/routes">) {
                           <span className="flex shrink-0 flex-col items-end gap-1.5">
                             {eta && <span className="whitespace-nowrap pt-0.5 text-sm font-semibold tabular-nums" title={`${duration(eta.driveMin)} drive`}><span className="sr-only">Arriving about </span><span aria-hidden>~</span>{prettyTime(eta.eta)}</span>}
                             {v.state !== "SCHEDULED" && <Badge tone={done ? "green" : v.state === "SKIPPED" ? "gray" : "blue"}>{done ? "Done" : v.state === "SKIPPED" ? "Skipped" : "On it"}</Badge>}
-                            <a href={mapsLink(v.property.formatted)} aria-label={`Navigate to ${v.property.formatted}`} className={btn("secondary", "no-print min-h-9! px-3!")}><Navigation className="size-3.5" aria-hidden />Go</a>
+                            <a href={mapsLink(v.property.formatted)} aria-label={`Navigate to ${v.property.formatted}`} className={btn("secondary", "no-print sm:min-h-9! px-3!")}><Navigation className="size-3.5" aria-hidden />Go</a>
                           </span>
                           <span className="hidden size-6 shrink-0 rounded border-2 border-navy print:block" aria-hidden />
                         </div>

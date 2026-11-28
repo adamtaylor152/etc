@@ -18,7 +18,7 @@ export async function ClientPick({ businessId, base, keep = {}, q, title }: { bu
   return (
     <>
       <DetailHeader back={{ href: list, label: list[1].toUpperCase() + list.slice(2) }} title={title} sub="Who is this for? Pick a client, or add a new one." />
-      <section className="max-w-2xl rounded-xl border border-line bg-white shadow-card">
+      <section className="max-w-3xl rounded-xl border border-line bg-white shadow-card">
         <form action={base} role="search" className="flex flex-wrap gap-2 border-b border-line p-3">
           {Object.entries(keep).map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
           <label className="flex min-h-11 min-w-0 flex-1 basis-56 items-center gap-2 rounded-lg border border-line bg-white px-3 hover:border-ink-faint/60 focus-within:border-blue focus-within:ring-2 focus-within:ring-blue/20 sm:min-h-10">
