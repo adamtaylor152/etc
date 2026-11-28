@@ -31,6 +31,10 @@ export const SettingsSchema = z.object({
     key: z.string().regex(/^[a-z0-9_-]{1,20}$/), label: z.string().trim().min(1).max(20),
     from: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/), to: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
   }).refine((w) => w.from < w.to, "A window has to end after it starts")).min(1).max(6).default(WINDOWS),
+  lateFee: z.boolean().default(false),              // add a one-time late fee to invoices this many days past due
+  lateFeeDays: z.coerce.number().int().min(1).max(60).default(14),
+  lateFeeCents: z.coerce.number().int().min(0).max(100_000).default(1000), // flat part
+  lateFeeBps: z.coerce.number().int().min(0).max(2500).default(0),          // plus this share of the balance (100 = 1%)
   smsUpdates: z.boolean().default(true),            // texts (on my way, all done, storm day) to clients who opted in; needs Telnyx keys
   autoPay: z.boolean().default(false),              // clients may save a card and opt in to automatic charges; needs Stripe keys
   autoPayGraceDays: z.coerce.number().int().min(0).max(14).default(2), // days between the invoice email and the charge (0 = same day)
@@ -47,7 +51,7 @@ export async function getSettings(db: Db, businessId: string): Promise<Settings>
 /** The on/off settings (shown as checkboxes in Settings → Automations). */
 export type ToggleKey = { [K in keyof Settings]: Settings[K] extends boolean ? K : never }[keyof Settings];
 /** Toggles that come with a "days after sending" number (shown beside the switch). */
-export const SETTING_DAYS = { quoteFollowUp: "quoteFollowUpDays", quoteFollowUp2: "quoteFollowUp2Days" } as const satisfies Partial<Record<ToggleKey, keyof Settings>>;
+export const SETTING_DAYS = { quoteFollowUp: "quoteFollowUpDays", quoteFollowUp2: "quoteFollowUp2Days", lateFee: "lateFeeDays" } as const satisfies Partial<Record<ToggleKey, keyof Settings>>;
 export const SETTING_LABELS: Record<ToggleKey, [string, string]> = {
   visitDoneEmail: ["“All done” email", "Before & after photos to the client after each visit (5 min after Done)."],
   autoSendVisitInvoices: ["Invoice per-visit jobs on Done", "One-off jobs get their invoice right away; the pay link rides in the “all done” email."],
@@ -64,6 +68,7 @@ export const SETTING_LABELS: Record<ToggleKey, [string, string]> = {
   clientReschedule: ["Clients can reschedule themselves", "The “confirm or change” link in reminders lets a client pick another open day and arrival window (when the people on the visit are free). You get a notice. Off: they can only ask."],
   reminderMorningOf: ["Morning-of reminder", "A second reminder at 7 am on the day of the visit."],
   assignmentAlerts: ["Assignment alerts to the team", "Emails the person you assign or move work for (and texts them, if their team record has a phone): what, where, when and a link to their route. Never prices."],
+  lateFee: ["Late fee", "Adds one late fee to an invoice that is still unpaid well past its due date. Once per invoice; never on deposits, refunded invoices, or while a saved card is still being tried. You get a notice each time."],
   smsUpdates: ["Text updates", "Texts “on the way”, “all done” (with photos link) and storm days to clients who said yes to texts. Needs Telnyx keys."],
   autoPay: ["Saved cards & auto-pay", "Clients can save a card on their page and choose to have invoices charged to it automatically. A failed charge emails them and is retried after 3 and 7 days. Needs Stripe keys."],
 };

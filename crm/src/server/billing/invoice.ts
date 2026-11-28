@@ -70,6 +70,20 @@ export function reminderDue(i: { status: InvoiceStatus; dueOn: string | null; re
 export const billingEmail = (clientEmail: string, contacts: { isBilling: boolean; email: string | null }[]) =>
   contacts.find((c) => c.isBilling && c.email)?.email ?? clientEmail;
 
+/**
+ * The one-time late fee an invoice should get today, in cents (0 = none). Flat amount plus a share of what is still owing.
+ * Pure, unit-tested.
+ */
+export function lateFeeDue(
+  inv: { status: InvoiceStatus; kind: string; dueOn: string | null; totalCents: number; amountPaidCents: number; lateFeeAppliedAt: Date | null },
+  today: string, s: { lateFee: boolean; lateFeeDays: number; lateFeeCents: number; lateFeeBps: number },
+) {
+  const owing = inv.totalCents - inv.amountPaidCents;
+  if (!s.lateFee || inv.status !== "AWAITING_PAYMENT" || inv.kind !== "STANDARD" || inv.lateFeeAppliedAt || !inv.dueOn || owing <= 0) return 0;
+  if (today < addDays(inv.dueOn, s.lateFeeDays)) return 0;
+  return s.lateFeeCents + Math.round((owing * s.lateFeeBps) / 10_000);
+}
+
 export const etransferRef = (number: number) => `ETC-${number}`;
 
 /** Deposit amount for a quote total. Pure, unit-tested. */

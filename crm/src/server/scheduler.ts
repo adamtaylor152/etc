@@ -12,7 +12,7 @@ import { reminderDue } from "./billing/invoice";
 import { addDays, dateOnly, todayLocal, toDbDate, TZ } from "./dates";
 import { forecast, snowByDay } from "./forecast";
 import { generateRecurringVisits } from "./ops/jobs";
-import { billingEmailFor, invoiceRecurringPeriods, invoiceSeasonalInstalments, invoiceUnbilled } from "./ops/invoices";
+import { applyLateFees, billingEmailFor, invoiceRecurringPeriods, invoiceSeasonalInstalments, invoiceUnbilled } from "./ops/invoices";
 import { isInvoiceDay } from "./billing/periods";
 import { parseSettings } from "./settings";
 import { autoPayPending } from "./billing/autopay";
@@ -53,6 +53,7 @@ let lastCallSync = 0;
 /** Hourly automations. Each one is idempotent (dedupe keys / state checks), so a missed or doubled run is harmless. */
 async function hourly() {
   const hour = Number(new Intl.DateTimeFormat("en-CA", { timeZone: TZ, hour: "numeric", hourCycle: "h23" }).format(new Date()));
+  if (hour === 9) await applyLateFees().catch((e) => console.error("late fees failed", e)); // once a day, before that day's reminders go out
   if (hour >= 8 && hour < 20) await invoiceReminders(); // no reminder emails at night
   if (hour >= 7 && hour < 22) await snowAlert();
   if (hour >= 9 && hour < 19) await quoteFollowUps();

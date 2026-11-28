@@ -78,3 +78,22 @@ describe("draft editing", () => {
   it("tax on top counts toward what's been paid", () =>
     expect(draftEditProblem([10000], 0, 0, 10500, { taxRegistered: true, taxRateBps: 500, pricesIncludeTax: false })).toBeNull());
 });
+
+import { lateFeeDue } from "@/server/billing/invoice";
+describe("lateFeeDue", () => {
+  const s = { lateFee: true, lateFeeDays: 14, lateFeeCents: 1000, lateFeeBps: 200 };
+  const inv = { status: "AWAITING_PAYMENT" as const, kind: "STANDARD", dueOn: "2026-12-01", totalCents: 20000, amountPaidCents: 5000, lateFeeAppliedAt: null };
+  it("is the flat fee plus a share of what is owing, from the grace day on", () => {
+    expect(lateFeeDue(inv, "2026-12-14", s)).toBe(0);
+    expect(lateFeeDue(inv, "2026-12-15", s)).toBe(1000 + 300); // 2% of the $150 still owing
+  });
+  it("is never added twice, to deposits, to paid or draft invoices, or when switched off", () => {
+    const day = "2027-01-15";
+    expect(lateFeeDue({ ...inv, lateFeeAppliedAt: new Date() }, day, s)).toBe(0);
+    expect(lateFeeDue({ ...inv, kind: "DEPOSIT" }, day, s)).toBe(0);
+    expect(lateFeeDue({ ...inv, status: "PAID" }, day, s)).toBe(0);
+    expect(lateFeeDue({ ...inv, status: "DRAFT" }, day, s)).toBe(0);
+    expect(lateFeeDue({ ...inv, dueOn: null }, day, s)).toBe(0);
+    expect(lateFeeDue(inv, day, { ...s, lateFee: false })).toBe(0);
+  });
+});
