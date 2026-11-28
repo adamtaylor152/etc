@@ -130,7 +130,7 @@ export async function convertQuote(user: Actor, quoteId: string, input: { date: 
     }
     const propertyId = q.propertyId ?? q.request?.propertyId ?? (await tx.property.findFirst({ where: { clientId: q.clientId, archivedAt: null }, orderBy: { isDefault: "desc" } }))?.id;
     if (!propertyId) throw new TransitionError("The client needs an address first");
-    const prop = await tx.property.findUniqueOrThrow({ where: { id: propertyId } });
+    await tx.property.findUniqueOrThrow({ where: { id: propertyId } });
     const lines = q.lineItems.filter((l) => !l.isOptional || l.isSelected);
     const job = await tx.job.create({
       data: {
@@ -139,7 +139,7 @@ export async function convertQuote(user: Actor, quoteId: string, input: { date: 
         invoiceSchedule: input.billingType === "PER_VISIT" ? "AFTER_EACH_VISIT" : "ON_COMPLETION",
         totalCents: input.billingType === "FIXED_PRICE" ? quoteTotal(q.lineItems, q.discountCents) : null, // pre-tax: the invoice adds GST itself
         lineItems: { create: lines.map((l, i) => ({ name: l.name, description: l.description, quantity: l.quantity, unitPriceCents: l.unitPriceCents, totalCents: l.totalCents, perVisit: input.billingType === "PER_VISIT", sortOrder: i })) },
-        visits: { create: [{ businessId: user.businessId, propertyId, scheduledDate: input.date ? toDbDate(input.date) : null, routeSort: prop.routeSort }] },
+        visits: { create: [{ businessId: user.businessId, propertyId, scheduledDate: input.date ? toDbDate(input.date) : null }] },
       },
     });
     await tx.quote.update({ where: { id: q.id }, data: { status: "CONVERTED", convertedAt: new Date(), jobId: job.id } });

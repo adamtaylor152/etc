@@ -16,7 +16,7 @@ export const visitScope = (u: { id: string; role: string }) =>
   u.role === "OWNER" ? {} : { OR: [{ assignees: { some: { userId: u.id } } }, { assignees: { none: {} } }] };
 
 export async function runStops(businessId: string, date: string, userId: string | "all") {
-  // Same order as the route planner (service-area community order, then standing routeSort).
+  // Same order as the route planner (community order, do-first stops, then the day's or the standing routeSort).
   const { visits } = await routeVisits(businessId, {
     scheduledDate: toDbDate(date), state: { not: "CANCELLED" },
     ...(userId === "all" ? {} : visitScope({ id: userId, role: "CREW" })),
@@ -58,27 +58,28 @@ export function sizeNote(snow: boolean, p: { sizeCheckedAt: Date | null; driveSi
 }
 
 /**
- * Split stops (already in route order) between people: keep each community together where possible and balance counts.
+ * Split stops (already in route order) between people: keep each community together where possible and balance the
+ * load. A stop's `weight` is its estimated minutes (drive there + time on site); without weights every stop counts 1.
  * Pure, unit-tested. Returns userId per visitId.
  */
-export function splitRoute(stops: { id: string; community: string | null }[], people: string[]) {
+export function splitRoute(stops: { id: string; community: string | null; weight?: number }[], people: string[]) {
   if (!people.length) return new Map<string, string>();
-  const groups: { community: string | null; ids: string[] }[] = [];
+  const groups: { community: string | null; stops: typeof stops; weight: number }[] = [];
   for (const s of stops) {
     const g = groups.at(-1);
-    if (g && g.community === s.community) g.ids.push(s.id);
-    else groups.push({ community: s.community, ids: [s.id] });
+    if (g && g.community === s.community) { g.stops.push(s); g.weight += s.weight ?? 1; }
+    else groups.push({ community: s.community, stops: [s], weight: s.weight ?? 1 });
   }
-  const target = Math.ceil(stops.length / people.length);
+  const target = Math.ceil(groups.reduce((a, g) => a + g.weight, 0) / people.length);
   const out = new Map<string, string>();
-  let p = 0, count = 0;
+  let p = 0, load = 0;
   for (const g of groups) {
     // Move to the next person when this group would push us well past the fair share.
-    if (count > 0 && count + g.ids.length > target + Math.floor(target / 3) && p < people.length - 1) { p++; count = 0; }
-    for (const id of g.ids) {
-      out.set(id, people[p]);
-      count++;
-      if (count >= target && p < people.length - 1 && g.ids.length > target) { p++; count = 0; } // a huge community gets split
+    if (load > 0 && load + g.weight > target + Math.floor(target / 3) && p < people.length - 1) { p++; load = 0; }
+    for (const s of g.stops) {
+      out.set(s.id, people[p]);
+      load += s.weight ?? 1;
+      if (load >= target && p < people.length - 1 && g.weight > target) { p++; load = 0; } // a huge community gets split
     }
   }
   return out;

@@ -90,7 +90,7 @@ export async function propertySave(f: FormData) {
       postalCode: str(f, "postalCode") || null, communityCode: str(f, "communityCode") || null, accessNotes: str(f, "accessNotes") || null,
       gateCode: str(f, "gateCode") || null, petNotes: str(f, "petNotes") || null, hazards: str(f, "hazards") || null,
     });
-    const data = await propertyData(user.businessId, clientId, input);
+    const data = { ...(await propertyData(user.businessId, clientId, input)), routePriority: f.get("routePriority") === "on" };
     const makeDefault = f.get("isDefault") === "on";
     if (makeDefault) await db.property.updateMany({ where: { clientId }, data: { isDefault: false } });
     if (id) {

@@ -60,7 +60,7 @@ export async function createOneOffJob(user: Actor, input: {
     for (const [i, d] of dates.entries()) {
       await tx.visit.create({
         data: {
-          businessId: user.businessId, jobId: job.id, propertyId: prop.id, scheduledDate: d ? toDbDate(d) : null, routeSort: prop.routeSort,
+          businessId: user.businessId, jobId: job.id, propertyId: prop.id, scheduledDate: d ? toDbDate(d) : null,
           ...(i === 0 && input.startAt ? { startAt: input.startAt, endAt: input.endAt ?? null, anytime: false } : {}), assignees,
         },
       });
@@ -159,7 +159,7 @@ export async function updateJob(user: Actor, jobId: string, input: {
       if (!prop) throw new TransitionError("Pick one of this client's properties");
       data.property = { connect: { id: prop.id } };
       // Visits still to do follow the job; done, skipped, cancelled or already-arrived ones stay where they happened.
-      await tx.visit.updateMany({ where: { jobId, state: { in: ["SCHEDULED", "EN_ROUTE"] } }, data: { propertyId: prop.id, routeSort: prop.routeSort } });
+      await tx.visit.updateMany({ where: { jobId, state: { in: ["SCHEDULED", "EN_ROUTE"] } }, data: { propertyId: prop.id, routeSort: null } }); // a today-only order belonged to the old address
       changed.push("property");
     }
 
@@ -201,7 +201,6 @@ export async function generateRecurringVisits(businessId: string, jobId?: string
   const today = todayLocal();
   const jobs = await db.job.findMany({
     where: { businessId, kind: "RECURRING", closedAt: null, asNeeded: false, rrule: { not: null }, ...(jobId ? { id: jobId } : {}) },
-    include: { property: { select: { routeSort: true } } },
   });
   let created = 0;
   for (const j of jobs) {
@@ -211,7 +210,7 @@ export async function generateRecurringVisits(businessId: string, jobId?: string
       skipDuplicates: true,
       data: dates.map((d) => ({
         businessId, jobId: j.id, propertyId: j.propertyId, scheduledDate: toDbDate(d), recurrenceDate: toDbDate(d),
-        source: "RECURRENCE" as const, anytime: true, routeSort: j.property.routeSort,
+        source: "RECURRENCE" as const, anytime: true,
       })),
     });
     created += res.count;

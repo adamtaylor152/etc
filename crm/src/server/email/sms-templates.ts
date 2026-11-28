@@ -2,6 +2,9 @@
 import { dateOnly, dayWord, todayLocal } from "../dates";
 import { db } from "../db";
 import { env } from "../env";
+import { routeEnds } from "../routing";
+import { travelMatrix } from "../routing-matrix";
+import { etaWindow } from "../routing/eta";
 import { mintToken } from "../tokens";
 import { dollars } from "../ops/drive-size";
 import { prettyDate } from "../dates";
@@ -10,10 +13,27 @@ import { dayCount, dayLines } from "../runner";
 type Ctx = { businessId: string };
 const first = (n: string) => n.trim().split(" ")[0] || "there";
 
+/**
+ * ", arriving around 9:00-9:30am" for a visit the crew just set off to, or "" when we can't say honestly: only with
+ * real road times (never the straight-line guess), from where the crew last finished today (else their start point).
+ */
+async function arrival(v: { id: string; businessId: string; enRouteAt: Date | null; scheduledDate: Date | null; property: { lat: number | null; lng: number | null }; assignees: { userId: string }[] }) {
+  if (!v.enRouteAt || v.property.lat == null || v.property.lng == null) return "";
+  const crew = v.assignees.map((a) => a.userId);
+  const last = await db.visit.findFirst({
+    where: { businessId: v.businessId, id: { not: v.id }, state: "COMPLETED", completedAt: { gte: new Date(v.enRouteAt.getTime() - 3 * 3_600_000), lte: v.enRouteAt }, ...(crew.length ? { assignees: { some: { userId: { in: crew } } } } : {}) },
+    orderBy: { completedAt: "desc" }, select: { property: { select: { lat: true, lng: true } } },
+  });
+  const from = last?.property.lat != null && last.property.lng != null ? { lat: last.property.lat, lng: last.property.lng } : (await routeEnds(v.businessId, crew[0])).start;
+  const m = await travelMatrix([from, { lat: v.property.lat, lng: v.property.lng }]);
+  const min = m.minutes[0][1];
+  return m.road && min <= 90 ? `, arriving around ${etaWindow(new Date(v.enRouteAt.getTime() + min * 60_000))}` : "";
+}
+
 export const smsTemplates = {
   "sms.on_my_way": async (p: { visitId: string }) => {
-    const v = await db.visit.findUniqueOrThrow({ where: { id: p.visitId }, include: { job: { include: { client: true } }, property: true } });
-    return `Hi ${first(v.job.client.firstName)}, the etc. crew is on the way to ${v.property.formatted.split(",")[0]}. No need to be home. - etc. (Reply STOP to opt out)`;
+    const v = await db.visit.findUniqueOrThrow({ where: { id: p.visitId }, include: { job: { include: { client: true } }, property: true, assignees: { select: { userId: true } } } });
+    return `Hi ${first(v.job.client.firstName)}, the etc. crew is on the way to ${v.property.formatted.split(",")[0]}${await arrival(v)}. No need to be home. - etc. (Reply STOP to opt out)`;
   },
   "sms.visit_done": async (p: { visitId: string }, ctx: Ctx) => {
     const v = await db.visit.findUniqueOrThrow({ where: { id: p.visitId }, include: { job: { include: { client: true } }, property: true } });

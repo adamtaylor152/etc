@@ -1,0 +1,39 @@
+// Route settings: the order routes visit communities in, and how long a stop takes (for ETAs).
+import { requireOwner } from "@/server/auth";
+import { DetailHeader } from "@/components/detail-header";
+import { ReorderList } from "@/components/reorder-list";
+import { Button, Card, Field, Input } from "@/components/ui";
+import { business, businessId, db } from "@/server/db";
+import { env } from "@/server/env";
+import { parseSettings } from "@/server/settings";
+import { saveCommunityOrder, saveRouteSettings } from "../actions";
+
+export const metadata = { title: "Route settings" };
+
+export default async function RouteSettings({ searchParams }: PageProps<"/settings/route">) {
+  await requireOwner();
+  const sp = await searchParams;
+  const bid = await businessId();
+  const settings = parseSettings((await business()).settings);
+  const area = await db.serviceCommunity.findMany({ where: { businessId: bid, active: true }, include: { community: true }, orderBy: [{ sortOrder: "asc" }, { communityCode: "asc" }] });
+  return (
+    <>
+      <DetailHeader back={{ href: "/settings", label: "Settings" }} title="Route" sub="Routes visit communities in this order; inside each one, “do first” properties come first, then the rest by drive time." />
+      {sp.saved && <p className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm font-medium text-emerald-800">Saved.</p>}
+      <div className="grid gap-5 lg:grid-cols-2">
+        <Card title="Community order">
+          <p className="mb-2 text-sm text-ink-soft">Drag the handle or tap the arrows, then save. The route for every day follows this straight away; press Auto-order on the Route page to re-plan the stops inside each community.</p>
+          <ReorderList action={saveCommunityOrder} saves={[{ label: "Save order", scope: "order" }]}
+            items={area.map((a, i) => ({ id: a.communityCode, node: <p className="py-2 text-sm font-semibold"><span className="mr-2 inline-block w-6 text-right tabular-nums text-ink-soft">{i + 1}</span>{a.community.name}</p> }))} />
+        </Card>
+        <Card title="Estimated times">
+          <form action={saveRouteSettings} className="space-y-3">
+            <Field label="Minutes at a stop" hint="Added to the driving time for ETAs, route totals and splitting a route between people. About 12 for a snow stop."><Input name="serviceMinutes" type="number" min={1} max={240} defaultValue={settings.serviceMinutes} className="w-28" /></Field>
+            <Button>Save</Button>
+          </form>
+          <p className="mt-3 text-xs text-ink-soft">Drive times: {env.routingUrl ? "from your road-routing server (ROUTING_URL)." : "straight-line estimates at 30 km/h. Set ROUTING_URL to a road-routing (OSRM) server for real drive times."} Each person&apos;s start and end points are on Settings › Team.</p>
+        </Card>
+      </div>
+    </>
+  );
+}

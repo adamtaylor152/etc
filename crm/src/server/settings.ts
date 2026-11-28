@@ -14,7 +14,8 @@ export const SettingsSchema = z.object({
   reviewDelayHours: z.coerce.number().int().min(1).max(240).default(24), // after a visit is done
   referralRewardCents: z.coerce.number().int().min(0).max(50_000).default(1000), // credit for the referrer
   referralDiscountCents: z.coerce.number().int().min(0).max(50_000).default(0), // credit for the new client // new invoices let clients pay part online       // ask for a Google review after the first job of the season
-  dailyDigest: z.boolean().default(false),          // 6am summary email to owners
+  serviceMinutes: z.coerce.number().int().min(1).max(240).default(12), // time at a stop, for route ETAs (12 = a snow stop)
+  dailyDigest: z.boolean().default(false),         // 6am summary email to owners
   quoteFollowUp: z.boolean().default(true),         // nudge unanswered quotes after 3 days
   visitReminders: z.boolean().default(true),        // day-before reminder for scheduled (non-snow) visits
   assignmentAlerts: z.boolean().default(true),      // tell the assigned person when an owner assigns or moves their work

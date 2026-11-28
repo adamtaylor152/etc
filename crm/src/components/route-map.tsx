@@ -1,6 +1,6 @@
 "use client";
 import dynamic from "next/dynamic";
-export type { MapArea, MapStop } from "./route-map-inner";
+export type { MapArea, MapLine, MapStop } from "./route-map-inner";
 
 export const RouteMap = dynamic(() => import("./route-map-inner"), {
   ssr: false,
