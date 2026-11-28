@@ -16,6 +16,7 @@ import { addOnServices } from "@/server/ops/visits";
 import { stripeEnabled } from "@/server/stripe";
 import { referralCodeFor, referralLink } from "@/server/ops/marketing";
 import { parseSettings } from "@/server/settings";
+import { describeTiers, parseTiers } from "@/server/snow/tiers";
 import { autoPayPending, cardLabel } from "@/server/billing/autopay";
 import { hubPausePlan, hubPayAll, hubPlanAddOn, hubRemoveCard, hubRenewPlan, hubRequestWork, hubSaveCard, hubSetAutoPay, hubSetTexts, hubVisitExtra } from "./actions";
 
@@ -129,6 +130,7 @@ export default async function Hub({ params, searchParams }: PageProps<"/hub/[tok
         <Card title={`Renew your snow plan for ${renewTo!.name}?`} className="border-blue/30">
           <p className="text-sm">{lastPlan!.snowBillingMode === "SEASONAL"
             ? `Same address, same ${money(lastPlan!.seasonalPriceCents ?? 0)} season price. We'll send the invoice when the season starts.`
+            : parseTiers(lastPlan!.depthTiers).length ? `Same address, same prices: from ${money(lastPlan!.pricePerPushCents ?? 3000)} per clearing (${describeTiers(parseTiers(lastPlan!.depthTiers), lastPlan!.pricePerPushCents ?? 3000, money)}). Nothing to pay now.`
             : "Same address, same price per clearing. Nothing to pay now."}</p>
           <form action={hubRenewPlan} className="mt-3">{hidden}<button className="min-h-12 rounded-full bg-blue px-6 font-semibold text-white">Renew my plan</button></form>
         </Card>
@@ -136,11 +138,13 @@ export default async function Hub({ params, searchParams }: PageProps<"/hub/[tok
       {plans.map((p) => {
         const walk = currentCharge(p.lineItems).walk;
         const per = p.snowBillingMode === "PER_EVENT" ? "per storm" : "per clearing";
+        const tiers = p.snowBillingMode === "SEASONAL" ? [] : parseTiers(p.depthTiers);
         return (
         <Card key={p.id} title="Every-snowfall plan">
           <p className="text-sm">{p.property.formatted} · {p.season?.name} · we come when {p.triggerCm ?? p.season?.defaultTriggerCm ?? 2} cm or more falls · {p.snowBillingMode === "SEASONAL"
             ? `${money(p.seasonalPriceCents ?? 0)} for the season${p.iceMelt ? (p.addonsIncluded ? ", ice melt included" : " + ice melt") : ""}`
-            : `${money(p.pricePerPushCents ?? 3000)} per ${p.snowBillingMode === "PER_EVENT" ? "storm" : "clearing"}${p.iceMelt ? " + ice melt" : ""}${walk ? " + extra sidewalk" : ""}`}.</p>
+            : `${tiers.length ? "from " : ""}${money(p.pricePerPushCents ?? 3000)} per ${p.snowBillingMode === "PER_EVENT" ? "storm" : "clearing"}${p.iceMelt ? " + ice melt" : ""}${walk ? " + extra sidewalk" : ""}`}.</p>
+          {tiers.length > 0 && <p className="mt-1 text-sm text-ink-soft">By snow depth: {describeTiers(tiers, p.pricePerPushCents ?? 3000, money)}.</p>}
           {/* Add-ons are charged with each clearing, so not on a season-price plan, and not while a new price is waiting for an OK. */}
           {!p.sizeHoldAt && p.snowBillingMode !== "SEASONAL" && (
             <ul className="mt-3 divide-y divide-line rounded-xl border border-line">

@@ -22,7 +22,7 @@ export default async function CrewLayout({ children }: LayoutProps<"/">) {
           <button className="font-semibold text-blue">Sign out</button>
         </form>
       </header>
-      <main className="p-4">{children}</main>
+      <main id="main" className="p-4">{children}</main>
       <ServiceWorker />
     </>
   );

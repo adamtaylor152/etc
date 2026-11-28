@@ -6,6 +6,7 @@ import type { SignatureKind } from "@/generated/prisma/client";
 import { db } from "../db";
 import { logActivity } from "../records";
 import { saveImage } from "../media";
+import { optionLines, quoteDiscountCents, quoteOptions, quoteTotals } from "../status/quote";
 import { TransitionError } from "../status/visit";
 
 export const STATEMENTS: Record<SignatureKind, string> = {
@@ -38,9 +39,19 @@ export function docHash(doc: unknown) {
   return createHash("sha256").update(JSON.stringify(doc)).digest("hex");
 }
 
-export async function quoteDoc(quoteId: string) {
+/**
+ * What a quote signature covers. With option sets it is the option being approved (`choice`, or the one already on
+ * record): its key and name, only its lines plus the common ones with the extras as ticked, and that option's total.
+ */
+export async function quoteDoc(quoteId: string, choice?: { option: string; selected: string[] }) {
   const q = await db.quote.findUniqueOrThrow({ where: { id: quoteId }, include: { lineItems: { orderBy: { sortOrder: "asc" } } } });
-  return { number: q.number, total: q.totalCents, discount: q.discountCents, lines: q.lineItems.map((l) => [l.name, String(l.quantity), l.unitPriceCents, l.isOptional, l.isSelected]) };
+  const row = (l: (typeof q.lineItems)[number]) => [l.name, String(l.quantity), l.unitPriceCents, l.isOptional, l.isSelected];
+  const option = quoteOptions(q.options).find((o) => o.key === (choice?.option ?? q.chosenOption));
+  if (!option) return { number: q.number, total: q.totalCents, discount: q.discountCents, lines: q.lineItems.map(row) };
+  const lines = optionLines(q.lineItems, option.key).map((l) => (choice ? { ...l, isSelected: !l.isOptional || choice.selected.includes(l.id) } : l));
+  const discount = quoteDiscountCents(lines, q);
+  const { totalCents } = quoteTotals(lines, discount, await db.business.findUniqueOrThrow({ where: { id: q.businessId } }));
+  return { number: q.number, total: totalCents, discount, option: [option.key, option.name], lines: lines.map(row) };
 }
 export async function invoiceDoc(invoiceId: string) {
   const i = await db.invoice.findUniqueOrThrow({ where: { id: invoiceId }, include: { lineItems: { orderBy: { sortOrder: "asc" } } } });
@@ -50,6 +61,7 @@ export async function invoiceDoc(invoiceId: string) {
 export async function saveSignature(input: {
   businessId: string; kind: SignatureKind; quoteId?: string; visitId?: string; invoiceId?: string; clientId: string;
   dataUrl: string; signerName: string; ip?: string | null; userAgent?: string | null; inPerson: boolean; actorUserId?: string;
+  quoteChoice?: { option: string; selected: string[] }; // the option (and extras) being approved with this signature
 }) {
   const name = input.signerName.trim().slice(0, 100);
   if (!name) throw new TransitionError("Type your name");
@@ -62,7 +74,7 @@ export async function saveSignature(input: {
     kind: "DOCUMENT", uploadedByType: input.inPerson ? "USER" : "CLIENT", uploadedById: input.actorUserId, clientId: input.clientId,
     quoteId: input.quoteId, visitId: input.visitId, caption: `Signature: ${name}`,
   });
-  const doc = input.quoteId ? await quoteDoc(input.quoteId) : input.invoiceId ? await invoiceDoc(input.invoiceId) : null;
+  const doc = input.quoteId ? await quoteDoc(input.quoteId, input.quoteChoice) : input.invoiceId ? await invoiceDoc(input.invoiceId) : null;
   const sig = await db.signature.create({
     data: {
       businessId: input.businessId, kind: input.kind, quoteId: input.quoteId, visitId: input.visitId, invoiceId: input.invoiceId, attachmentId: att.id,
@@ -70,7 +82,7 @@ export async function saveSignature(input: {
     },
   });
   const entity = input.quoteId ? ["Quote", input.quoteId] : input.invoiceId ? ["Invoice", input.invoiceId] : ["Visit", input.visitId!];
-  await logActivity(db, { businessId: input.businessId, type: `${entity[0].toLowerCase()}.signed`, entityType: entity[0], entityId: entity[1], actorType: input.inPerson ? "USER" : "CLIENT", actorUserId: input.actorUserId, actorClientId: input.inPerson ? undefined : input.clientId, clientId: input.clientId, data: { name } });
+  await logActivity(db, { businessId: input.businessId, type: `${entity[0].toLowerCase()}.signed`, entityType: entity[0], entityId: entity[1], actorType: input.inPerson ? "USER" : "CLIENT", actorUserId: input.actorUserId, actorClientId: input.inPerson ? undefined : input.clientId, clientId: input.clientId, data: { name, ...(doc && "option" in doc && doc.option ? { option: doc.option[1] } : {}) } });
   return sig;
 }
 

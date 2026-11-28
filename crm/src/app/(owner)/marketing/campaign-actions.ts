@@ -7,7 +7,7 @@ import { requireOwner } from "@/server/auth";
 import { fromLocalInput } from "@/server/dates";
 import { db } from "@/server/db";
 import { env } from "@/server/env";
-import { Audience, Block, sendCampaign } from "@/server/ops/campaigns";
+import { Audience, Block, cancelCampaign, duplicateCampaign, sendCampaign } from "@/server/ops/campaigns";
 import { TransitionError } from "@/server/status/visit";
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? "");
@@ -29,7 +29,7 @@ function audienceFrom(f: FormData) {
 export async function campaignSave(f: FormData) {
   const user = await requireOwner();
   const id = str(f, "id");
-  const c = await db.campaign.findFirstOrThrow({ where: { id, businessId: user.businessId } });
+  const c = await db.campaign.findFirstOrThrow({ where: { id, businessId: user.businessId, automation: null } });
   if (c.status !== "DRAFT") redirect(`/marketing/campaigns/${id}`);
   const blocks = z.array(Block).max(30).parse(JSON.parse(str(f, "blocks") || "[]"));
   await db.campaign.update({ where: { id }, data: {
@@ -48,4 +48,26 @@ export async function campaignSave(f: FormData) {
     }
   }
   redirect(`/marketing/campaigns/${id}?saved=1`);
+}
+
+/** Stop a scheduled (or still going out) campaign: whatever hasn't been sent never will be. */
+export async function campaignCancel(f: FormData) {
+  const user = await requireOwner();
+  const id = str(f, "id");
+  let stopped = 0;
+  try {
+    stopped = await cancelCampaign(user, id);
+  } catch (e) {
+    if (e instanceof TransitionError) redirect(`/marketing/campaigns/${id}?error=${encodeURIComponent(e.message)}`);
+    throw e;
+  }
+  revalidatePath("/marketing");
+  redirect(`/marketing/campaigns/${id}?cancelled=${stopped}`);
+}
+
+/** Copy a campaign into a new draft. */
+export async function campaignDuplicate(f: FormData) {
+  const user = await requireOwner();
+  const copy = await duplicateCampaign(user, str(f, "id")).catch((e) => { if (e instanceof TransitionError) redirect("/marketing/campaigns"); throw e; });
+  redirect(`/marketing/campaigns/${copy.id}?copied=1`);
 }

@@ -19,7 +19,8 @@ export default async function Payments({ searchParams }: PageProps<"/payments">)
   const payments = await db.payment.findMany({ where: { businessId: bid }, include: { client: true, invoice: true }, orderBy: [{ receivedAt: "desc" }, { id: "desc" }], skip: at.skip, take: at.take });
   const year = todayLocal().slice(0, 4);
   // Totals come from the database, not from the page of rows listed below.
-  const sums = await db.payment.groupBy({ by: ["method"], where: { businessId: bid, receivedAt: { gte: fromLocalInput(`${year}-01-01T00:00`)!, lt: fromLocalInput(`${Number(year) + 1}-01-01T00:00`)! } }, _sum: { amountCents: true, refundedCents: true } });
+  const sums = await db.payment.groupBy({ by: ["method"], where: { businessId: bid, receivedAt: { gte: fromLocalInput(`${year}-01-01T00:00`)!, lt: fromLocalInput(`${Number(year) + 1}-01-01T00:00`)! } }, _sum: { amountCents: true, refundedCents: true, tipCents: true } });
+  const tips = sums.reduce((a, x) => a + (x._sum.tipCents ?? 0), 0); // shown on their own: never part of invoice money
   const byMethod = sums.map((s) => [s.method, (s._sum.amountCents ?? 0) - (s._sum.refundedCents ?? 0)] as const).filter(([, c]) => c !== 0);
   return (
     <>
@@ -28,6 +29,7 @@ export default async function Payments({ searchParams }: PageProps<"/payments">)
       {byMethod.length > 0 && (
         <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
           {byMethod.map(([m, c]) => <div key={m} className="rounded-2xl border border-line bg-white p-4"><div className="font-display text-2xl font-bold">{money(c)}</div><div className="text-sm text-ink-soft">{METHOD[m]}</div></div>)}
+          {tips > 0 && <div className="rounded-2xl border border-line bg-white p-4"><div className="font-display text-2xl font-bold">{money(tips)}</div><div className="text-sm text-ink-soft">Tips (on top)</div></div>}
         </div>
       )}
       <Card>
@@ -37,7 +39,7 @@ export default async function Payments({ searchParams }: PageProps<"/payments">)
               <li key={p.id}>
                 <Link href={`/invoices/${p.invoiceId}`} className="flex items-center justify-between gap-3 py-3 text-sm">
                   <span><span className="font-semibold">{clientName(p.client)}</span><span className="block text-ink-soft">Invoice #{p.invoice.number} · {METHOD[p.method]} · {prettyDateTime(p.receivedAt)}</span></span>
-                  <span className="font-semibold">{money(p.amountCents)}</span>
+                  <span className="text-right font-semibold">{money(p.amountCents)}{p.tipCents ? <span className="block text-xs font-normal text-emerald-700">+ {money(p.tipCents)} tip</span> : null}{p.refundedCents > 0 && <span className="block text-xs font-normal text-red-700">{money(p.refundedCents)} refunded</span>}</span>
                 </Link>
               </li>
             ))}

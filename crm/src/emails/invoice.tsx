@@ -86,6 +86,24 @@ export function InvoiceSent({ d, reminder }: { d: InvoiceEmailData; reminder?: 1
   );
 }
 
+/** `how`: "to your card (allow 5 to 10 business days)" or "by e-Transfer". */
+export function RefundReceipt({ d, amount, how, when }: { d: InvoiceEmailData; amount: string; how: string; when: string }) {
+  return (
+    <EtcEmail title={`Refund for invoice #${d.number}`} preheader={`We refunded ${amount}.`}>
+      <Header right="Refund" />
+      <tr>
+        <td className="px" style={{ padding: "32px 40px 26px" }}>
+          <Eyebrow>Refund · {when}</Eyebrow>
+          <H1>Hi {firstName(d.name)}, your refund is on its way</H1>
+          <P>We refunded <b style={{ color: NAVY }}>{amount}</b> {how} for invoice #{d.number} ({d.subject}).</P>
+          <P>Questions? Just reply to this email.</P>
+        </td>
+      </tr>
+      <Footer site={d.site} phone={d.phone} reason="Keep this email as your refund receipt." />
+    </EtcEmail>
+  );
+}
+
 /** An automatic charge didn't go through: what failed, how to pay or fix the card, and when (if ever) we try again. */
 export function AutoPayFailed({ d, card, why, retryOn, needsAction, hubUrl }: { d: InvoiceEmailData; card: string; why: string; retryOn: string | null; needsAction: boolean; hubUrl: string }) {
   return (
@@ -111,7 +129,24 @@ export function AutoPayFailed({ d, card, why, retryOn, needsAction, hubUrl }: { 
   );
 }
 
-export function PaymentReceipt({ d, amount, method, when, paidInFull }: { d: InvoiceEmailData; amount: string; method: string; when: string; paidInFull: boolean }) {
+export function StatementEmail({ name, balance, owing, period, etransferEmail, site, phone }: { name: string; balance: string; owing: boolean; period: string; etransferEmail: string; site: string; phone: string }) {
+  return (
+    <EtcEmail title="Your statement" preheader={owing ? `Your balance is ${balance}` : "Your account statement from etc."}>
+      <Header right="Statement" />
+      <tr>
+        <td className="px" style={{ padding: "32px 40px 26px" }}>
+          <Eyebrow>{period}</Eyebrow>
+          <H1>Hi {firstName(name)}, here&apos;s your statement</H1>
+          <P>Your statement is attached as a PDF: every invoice and payment, with a running balance. {owing ? <>Your balance is <b style={{ color: NAVY }}>{balance}</b>.</> : "You're all paid up. Thank you!"}</P>
+          {owing && etransferEmail && <P>To pay by e-Transfer, send it to <a href={`mailto:${etransferEmail}`} style={{ color: BLUE, fontWeight: 600 }}>{etransferEmail}</a> with your invoice&apos;s ETC- code in the message. Cash to the crew works too.</P>}
+        </td>
+      </tr>
+      <Footer site={site} phone={phone} reason="You're getting this because etc. did a job for you." />
+    </EtcEmail>
+  );
+}
+
+export function PaymentReceipt({ d, amount, method, when, paidInFull, extra }: { d: InvoiceEmailData; amount: string; method: string; when: string; paidInFull: boolean; extra?: string }) {
   return (
     <EtcEmail title={`Receipt for invoice #${d.number}`} preheader={`We got your ${amount} payment. Thank you!`}>
       <Header right="Receipt" />
@@ -119,7 +154,7 @@ export function PaymentReceipt({ d, amount, method, when, paidInFull }: { d: Inv
         <td className="px" style={{ padding: "32px 40px 18px" }}>
           <Eyebrow>Payment received · {when}</Eyebrow>
           <H1>Thank you, {firstName(d.name)}!</H1>
-          <P>We received <b style={{ color: NAVY }}>{amount}</b> by {method} for invoice #{d.number}. {paidInFull ? "You're all paid up." : `${d.balance} is still owing.`}</P>
+          <P>We received <b style={{ color: NAVY }}>{amount}</b> by {method} for invoice #{d.number}. {paidInFull ? "You're all paid up." : `${d.balance} is still owing.`}{extra && ` ${extra}`}</P>
         </td>
       </tr>
       <tr><td className="px" style={{ padding: "0 40px 26px" }}><Lines d={d} /></td></tr>

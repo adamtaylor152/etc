@@ -4,6 +4,7 @@ import { saveAny } from "../media";
 import { TransitionError } from "../status/visit";
 import { addDays, localDayStart, toDbDate } from "../dates";
 import { clockPlan, type ClockAction } from "../status/clock";
+import { MAX_ON_SITE, onSiteMinutes } from "./visit-times";
 
 type Actor = { id: string; businessId: string };
 export const EXPENSE_CATEGORIES = ["Materials", "Ice melt / salt", "Fuel", "Dump fees", "Equipment", "Subcontractor", "Other"];
@@ -127,6 +128,39 @@ export function profitOf(revenueCents: number, time: { minutes: number | null; h
   const expenseCents = expenses.reduce((n, e) => n + e.amountCents, 0);
   const profitCents = revenueCents - labourCents - expenseCents;
   return { revenueCents, labourCents, expenseCents, profitCents, marginPct: revenueCents > 0 ? Math.round((profitCents / revenueCents) * 100) : null, minutes: time.reduce((n, t) => n + (t.minutes ?? 0), 0) };
+}
+
+/**
+ * A snow plan's season in money. Revenue = invoiced (void left out) + charges not invoiced yet. Labour = every time
+ * entry on the plan × that person's hourly cost; a completed visit nobody timed uses its minutes on site (Arrived to
+ * Done) × the hourly cost of whoever completed it, and one with neither counts no labour (`labourFrom` says how many
+ * of each). `losing` flags a plan that costs more than it brings in: the seasonal-price risk. Pure, unit-tested.
+ */
+export function planProfit(p: {
+  invoicedCents: number;
+  visits: { id: string; isReturn: boolean; snowEventId: string | null; arrivedAt: Date | null; completedAt: Date | null; completedById: string | null; unbilledCents: number }[]; // completed only
+  time: { visitId: string | null; userId: string; minutes: number | null }[];
+  expenses: { amountCents: number }[];
+  hourlyCost: (userId: string) => number;
+}) {
+  const timed = new Set(p.time.map((t) => t.visitId));
+  const labourFrom = { timers: 0, onSite: 0, none: 0 };
+  const time = p.time.map((t) => ({ minutes: t.minutes, hourlyCostCents: p.hourlyCost(t.userId) }));
+  for (const v of p.visits) {
+    const min = timed.has(v.id) ? null : onSiteMinutes(v);
+    if (timed.has(v.id)) labourFrom.timers++;
+    else if (min != null && min <= MAX_ON_SITE && v.completedById) { labourFrom.onSite++; time.push({ minutes: min, hourlyCostCents: p.hourlyCost(v.completedById) }); }
+    else labourFrom.none++;
+  }
+  const unbilledCents = p.visits.reduce((a, v) => a + v.unbilledCents, 0);
+  const money = profitOf(p.invoicedCents + unbilledCents, time, p.expenses);
+  const visitsDone = p.visits.length;
+  return {
+    ...money, invoicedCents: p.invoicedCents, unbilledCents, visitsDone, labourFrom,
+    pushes: p.visits.filter((v) => v.snowEventId && !v.isReturn).length, returns: p.visits.filter((v) => v.isReturn).length,
+    storms: new Set(p.visits.map((v) => v.snowEventId).filter(Boolean)).size,
+    perVisitCents: visitsDone ? Math.round(money.revenueCents / visitsDone) : null, losing: money.profitCents < 0,
+  };
 }
 
 /** A job's numbers: invoiced (not void) + work done but not billed yet, or the fixed price if nothing's billed. */

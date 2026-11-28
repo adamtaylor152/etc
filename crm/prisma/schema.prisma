@@ -553,6 +553,8 @@ model Quote {
   convertedAt          DateTime?
   archivedAt           DateTime?
   jobId                String?     @unique
+  options              Json        @default("[]") // good/better/best: [{key,name,recommended}]; empty = one plain list of lines
+  chosenOption         String? // the option key the client approved
   createdAt            DateTime    @default(now())
 
   lineItems   QuoteLineItem[]
@@ -569,6 +571,7 @@ model QuoteTemplate {
   title           String?
   message         String?
   lines           Json     @default("[]")
+  options         Json     @default("[]") // same shape as Quote.options
   discountType    String   @default("FIXED")
   discountValue   Int      @default(0)
   depositType     String   @default("NONE")
@@ -592,6 +595,8 @@ model QuoteLineItem {
   isOptional     Boolean @default(false)
   isSelected     Boolean @default(true)
   sortOrder      Int     @default(0)
+  optionKey      String? // which option this line belongs to; null = common to every option
+  photoId        String? // Attachment id: one picture shown beside the line
 }
 
 // ---------- snow ----------
@@ -674,6 +679,7 @@ model Job {
   planPausedAt       DateTime?
   sizeHoldAt         DateTime? // waiting on the client to OK a new price for a bigger driveway; no visits until then
   pendingPrice       Json? // { size, extraWalk, baseCents, walkCents } offered to the client
+  depthTiers         Json? // [{ overCm, addCents }]: deeper snow adds to the per-push / per-storm price (snow/tiers.ts); null = flat price
   closedAt           DateTime?
   closeReason        String?
   createdAt          DateTime         @default(now())
@@ -743,6 +749,9 @@ model Visit {
   iceMeltApplied         Boolean?
   instructions           String?
   lineOverrides          Json? // this visit only: [{ name, description?, quantity, unitPriceCents }] charged instead of the job's lines
+  isReturn               Boolean     @default(false) // a return visit on the same storm (the city plough buried the driveway end)
+  returnPriceCents       Int? // return visit: what it bills when done; null = included, no charge
+  iceMeltBags            Decimal?    @db.Decimal(6, 2) // how much ice melt went down (the charge stays flat per visit)
   createdAt              DateTime    @default(now())
 
   charges      VisitCharge[]
@@ -809,6 +818,7 @@ model Invoice {
   taxCents                Int           @default(0)
   totalCents              Int           @default(0)
   amountPaidCents         Int           @default(0)
+  lateFeeAppliedAt        DateTime? // the one late fee this invoice can get (Settings: late fee)
   etransferRef            String
   sentAt                  DateTime?
   firstViewedAt           DateTime?
@@ -907,6 +917,7 @@ model Payment {
   amountCents             Int
   feeCents                Int?
   refundedCents           Int           @default(0)
+  tipCents                Int? // card tip on top of amountCents: never part of the invoice balance or GST
   receivedAt              DateTime      @default(now())
   reference               String?
   note                    String?
@@ -1314,6 +1325,7 @@ model ReviewRequest {
   feedback        String?
   ratedAt         DateTime?
   googleClickedAt DateTime?
+  followUpAt      DateTime? // the one reminder, if it was sent
 
   @@index([businessId, sentAt])
   @@index([clientId])
@@ -1346,6 +1358,7 @@ model ClientCredit {
   amountCents        Int
   reason             String
   referralId         String?
+  paymentId          String? // overpayment: the payment whose excess became this credit
   appliedToInvoiceId String?
   createdAt          DateTime @default(now())
 
@@ -1380,8 +1393,11 @@ model Campaign {
   sentAt       DateTime?
   createdById  String?
   createdAt    DateTime        @default(now())
+  automation   String? // "WINBACK" | "RENEWAL": sent by the hourly scheduler, not by hand; its numbers live in `audience`
+  automationOn Boolean         @default(false)
   recipients   CampaignRecipient[]
 
+  @@unique([businessId, automation])
   @@index([businessId, createdAt])
 }
 

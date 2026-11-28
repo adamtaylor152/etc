@@ -57,7 +57,7 @@ export default async function StormPage({ params, searchParams }: PageProps<"/sn
                 {g.visits.map((v) => (
                   <li key={v.id}>
                     <Link href={`/visits/${v.id}`} className="flex items-center justify-between gap-3 py-2.5 text-sm">
-                      <span><span className="font-semibold">{v.property.formatted}</span>{v.pushNumber && v.pushNumber > 1 && <span className="text-ink-soft"> · push {v.pushNumber}</span>}</span>
+                      <span><span className="font-semibold">{v.property.formatted}</span>{v.pushNumber && v.pushNumber > 1 && <span className="text-ink-soft"> · push {v.pushNumber}</span>}{v.isReturn && <span className="text-ink-soft"> · return visit</span>}</span>
                       <Badge tone={v.state === "COMPLETED" ? "green" : v.state === "SKIPPED" || v.state === "CANCELLED" ? "gray" : "blue"}>{v.state === "COMPLETED" ? "Done" : v.state === "SKIPPED" ? (v.skipReason === "BELOW_TRIGGER" ? "Below trigger" : "Skipped") : v.state === "CANCELLED" ? "Cancelled" : "To do"}</Badge>
                     </Link>
                   </li>

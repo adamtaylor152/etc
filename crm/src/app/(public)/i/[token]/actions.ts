@@ -3,7 +3,9 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { saveSignature } from "@/server/ops/signatures";
 import { TransitionError } from "@/server/status/visit";
+import { tipCents } from "@/server/billing/adjustments";
 import { db } from "@/server/db";
+import { getSettings } from "@/server/settings";
 import { cardsOffered, customerFor } from "@/server/ops/autopay";
 import { checkoutForInvoice, stripeEnabled } from "@/server/stripe";
 import { peekToken } from "@/server/tokens";
@@ -19,6 +21,8 @@ export async function payByCard(f: FormData) {
   const asked = inv.allowPartial && f.get("amount") ? Math.round(Number(f.get("amount")) * 100) : owed;
   const balance = Number.isFinite(asked) ? Math.min(owed, Math.max(50, asked)) : owed;
   if (inv.status !== "AWAITING_PAYMENT" || balance < 50) redirect(`/i/${token}`); // Stripe's minimum is $0.50
+  // Optional tip, only when the business turned tips on: a preset percent, or the amount typed under "Other" when no preset is picked.
+  const tip = (await getSettings(db, inv.businessId)).tipsEnabled ? tipCents(inv.totalCents, String(f.get("tip") || (f.get("tipCustom") ? "custom" : "")), String(f.get("tipCustom") ?? "")) : 0;
   // A deposit paid from its quote's page (right after approving) comes back to that page.
   const qt = String(f.get("q") ?? "");
   const q = qt ? await peekToken(db, qt, ["QUOTE"]) : null;
@@ -29,7 +33,7 @@ export async function payByCard(f: FormData) {
     const autoPay = f.get("autopay") === "on";
     const keep = (autoPay || f.get("save") === "on") && !inv.client.cardPaymentMethodId && (await cardsOffered(inv.businessId));
     const save = keep ? { customerId: await customerFor(inv.client), clientId: inv.clientId, autoPay } : undefined;
-    const s = await checkoutForInvoice({ id: inv.id, businessId: inv.businessId, number: inv.number, balanceCents: balance, email: inv.client.email }, back, save);
+    const s = await checkoutForInvoice({ id: inv.id, businessId: inv.businessId, number: inv.number, balanceCents: balance, email: inv.client.email, tipCents: tip }, back, save);
     await db.invoice.update({ where: { id: inv.id }, data: { stripeCheckoutSessionId: s.id } });
     url = s.url;
   } catch (e) {

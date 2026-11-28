@@ -5,7 +5,8 @@ import { db } from "@/server/db";
 import { missingRequired, visitChecklist, type Answers, type ChecklistItem } from "@/server/ops/checklists";
 import { PhotoUploader } from "./photo-uploader";
 
-export async function VisitChecklistCard({ businessId, visitId, editable }: { businessId: string; visitId: string; editable: boolean }) {
+/** `action`: who saves it. The owner's visit page by default; the crew's stop page passes its own (scoped to their route). */
+export async function VisitChecklistCard({ businessId, visitId, editable, action = checklistAnswer }: { businessId: string; visitId: string; editable: boolean; action?: (f: FormData) => Promise<void> }) {
   const vc = await visitChecklist(businessId, visitId);
   if (!vc) return null;
   const items = vc.items as ChecklistItem[];
@@ -19,7 +20,7 @@ export async function VisitChecklistCard({ businessId, visitId, editable }: { bu
         <h2 className="text-base font-bold">Checklist · {vc.templateName}</h2>
         {missing.length ? <span className="text-xs font-semibold text-amber-700">{missing.length} required left</span> : <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700"><Check className="size-3.5" />Complete</span>}
       </div>
-      <form action={checklistAnswer} className="space-y-3">
+      <form action={action} className="space-y-3">
         <input type="hidden" name="visitId" value={visitId} />
         {items.map((it) => (
           <div key={it.id}>
