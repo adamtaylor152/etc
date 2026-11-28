@@ -4,9 +4,11 @@ import { TERMS_LABEL } from "../billing/invoice";
 import { dateOnly, todayLocal, toDbDate } from "../dates";
 import { db } from "../db";
 import { env } from "../env";
+import { logoPng } from "../media";
 import { money } from "../money";
 import { clientName } from "../queries";
 import { loadStatement, type StatementRange } from "../statement";
+import { parseSettings } from "../settings";
 import { stripeEnabled } from "../stripe";
 import { renderPdf, type PdfDoc } from "./render";
 
@@ -40,6 +42,11 @@ export function totalRows(b: Biz, t: { subtotalCents: number; discountCents: num
   }
   return rows;
 }
+/** The owner's colour and logo (Settings › Messages) for the top of the page. */
+async function brand(b: Pick<Business, "settings">): Promise<PdfDoc["brand"]> {
+  const s = parseSettings(b.settings);
+  return { color: s.brandColor, logo: s.logoId ? await logoPng(s.logoId).catch(() => null) : null };
+}
 const taxNote = (b: Biz) => (b.taxRegistered ? "" : "Prices include tax. No GST is charged.");
 
 const INVOICE_BADGE: Record<string, string> = { DRAFT: "DRAFT", PAID: "PAID", VOID: "VOID", BAD_DEBT: "" };
@@ -56,7 +63,7 @@ export async function invoicePdf(invoiceId: string, businessId: string): Promise
   const owing = balance > 0 && inv.status !== "VOID" && inv.status !== "PAID";
   const bytes = await renderPdf({
     title: inv.kind === "DEPOSIT" ? "Deposit invoice" : "Invoice", number: `#${inv.number}`, badge: INVOICE_BADGE[inv.status] ?? (inv.amountPaidCents > 0 ? "PARTLY PAID" : ""),
-    business: businessLines(biz),
+    business: businessLines(biz), brand: await brand(biz),
     to: [clientName(inv.client), ...(inv.client.companyName ? [`${inv.client.firstName} ${inv.client.lastName}`.trim()] : []), ...(property ? [property.formatted] : []), inv.client.email],
     meta: [["Issued", day(dateOnly(inv.issuedOn)) || "Not sent yet"], ["Due", day(dateOnly(inv.dueOn)) || TERMS_LABEL[inv.paymentTerms]], ["Terms", TERMS_LABEL[inv.paymentTerms]], ["e-Transfer code", inv.etransferRef]],
     subject: inv.subject ?? undefined,
@@ -82,7 +89,7 @@ export async function quotePdf(quoteId: string, businessId: string): Promise<Pdf
   const deposit = q.depositType === "PERCENT" ? `${q.depositValue}% of the total` : q.depositType === "FIXED" ? money(q.depositValue) : "";
   const bytes = await renderPdf({
     title: "Quote", number: `#${q.number}`, badge: q.status === "DRAFT" ? "DRAFT" : q.status === "APPROVED" || q.status === "CONVERTED" ? "APPROVED" : "",
-    business: businessLines(biz),
+    business: businessLines(biz), brand: await brand(biz),
     to: [clientName(q.client), ...(q.client.companyName ? [`${q.client.firstName} ${q.client.lastName}`.trim()] : []), ...(q.property ? [q.property.formatted] : []), q.client.email],
     meta: [["Date", day(todayLocal(q.sentAt ?? q.createdAt))], ...(q.validUntil ? [["Good until", day(dateOnly(q.validUntil))] as [string, string]] : [])],
     subject: q.title ?? undefined,
@@ -112,7 +119,7 @@ export async function statementPdf(clientId: string, businessId: string, range: 
   const etransfer = biz.etransferEmail || env.etransferEmail;
   const bytes = await renderPdf({
     title: "Statement", number: day(today),
-    business: businessLines(biz),
+    business: businessLines(biz), brand: await brand(biz),
     to: [clientName(client), ...(client.properties[0] ? [client.properties[0].formatted] : []), client.email],
     meta: [["Period", since ? `From ${day(dateOnly(since))}` : "All history"], ["Balance owing", money(st.balanceCents)]],
     table: {

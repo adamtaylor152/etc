@@ -1,4 +1,4 @@
-import { BLUE, BODY_FONT, Button, EtcEmail, Eyebrow, FONT, Footer, H1, Header, INK_SOFT, NAVY, P, Table, TINT, firstName } from "./ui";
+import { Intro, BLUE, BODY_FONT, Button, EtcEmail, Eyebrow, FONT, Footer, H1, Header, INK_SOFT, NAVY, P, Table, TINT, firstName } from "./ui";
 
 type Photo = { url: string; kind: "BEFORE" | "AFTER" };
 export type VisitDoneProps = {
@@ -31,13 +31,13 @@ export function VisitDone(p: VisitDoneProps) {
   const before = p.photos.filter((x) => x.kind === "BEFORE");
   const after = p.photos.filter((x) => x.kind === "AFTER");
   return (
-    <EtcEmail title="All done!" preheader={`${p.what} at ${p.address} is done.`}>
+    <EtcEmail title="All done!" preheader={`${p.what} at ${p.address} is done.`} vars={{ first_name: first, service: p.what, visit_date: p.when, address: p.address }}>
       <Header right="Job done" />
       <tr>
         <td className="px" style={{ padding: "32px 40px 8px" }}>
           <Eyebrow>{p.when}</Eyebrow>
           <H1>All done, {first}!</H1>
-          <P>{p.what} at {p.address} is finished{p.depthCm ? ` (${p.depthCm} cm cleared)` : ""}. {before.length || after.length ? "Here's the before and after:" : ""}</P>
+          <Intro><P>{p.what} at {p.address} is finished{p.depthCm ? ` (${p.depthCm} cm cleared)` : ""}. {before.length || after.length ? "Here's the before and after:" : ""}</P></Intro>
         </td>
       </tr>
       <PhotoRow label="Before" photos={before} />
@@ -83,13 +83,13 @@ export function OwnerPhotosUploaded({ number, url }: { number: number; url: stri
 
 export function PhotoUploadRequest({ name, services, url, site, phone }: { name: string; services: string[]; url: string; site: string; phone: string }) {
   return (
-    <EtcEmail title="Send us a few photos" preheader="Snap the job on your phone and we'll send a quote">
+    <EtcEmail title="Send us a few photos" preheader="Snap the job on your phone and we'll send a quote" vars={{ first_name: firstName(name), services: services.join(", ") }}>
       <Header right="Quick quote" />
       <tr>
         <td className="px" style={{ padding: "32px 40px 26px" }}>
           <Eyebrow>{services.join(", ")}</Eyebrow>
           <H1>Hi {name}, can you send a few photos?</H1>
-          <P>Snap the job on your phone (no app needed) and we&apos;ll price it without a visit. A wide shot from the street plus a couple of close-ups is perfect.</P>
+          <Intro><P>Snap the job on your phone (no app needed) and we&apos;ll price it without a visit. A wide shot from the street plus a couple of close-ups is perfect.</P></Intro>
           <Button href={url} label="Add photos" />
         </td>
       </tr>
