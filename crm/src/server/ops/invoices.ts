@@ -232,6 +232,12 @@ export async function voidInvoice(user: Actor, invoiceId: string, reason: string
     const inv = await tx.invoice.findFirstOrThrow({ where: { id: invoiceId, businessId: user.businessId }, include: { payments: true } });
     if (inv.payments.length) throw new TransitionError("Remove its payments first");
     await tx.visitCharge.updateMany({ where: { invoiceLineItem: { invoiceId } }, data: { invoiceLineItemId: null } });
+    // Deposits and account credits this invoice used up go back to unused, so the re-issued invoice gets them again.
+    await tx.invoice.updateMany({ where: { kind: "DEPOSIT", appliedToInvoiceId: invoiceId }, data: { appliedToInvoiceId: null } });
+    const credits = await tx.clientCredit.findMany({ where: { appliedToInvoiceId: invoiceId } });
+    await tx.clientCredit.updateMany({ where: { appliedToInvoiceId: invoiceId }, data: { appliedToInvoiceId: null } });
+    const refIds = credits.flatMap((c) => (c.referralId ? [c.referralId] : []));
+    if (refIds.length) await tx.referral.updateMany({ where: { id: { in: refIds }, status: "REWARDED" }, data: { status: "QUALIFIED" } });
     await tx.invoice.update({ where: { id: invoiceId }, data: { status: "VOID", voidedAt: new Date(), voidReason: reason || null } });
     await logActivity(tx, { businessId: user.businessId, type: "invoice.voided", entityType: "Invoice", entityId: invoiceId, actorType: "USER", actorUserId: user.id ?? undefined, clientId: inv.clientId });
   });
