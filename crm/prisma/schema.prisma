@@ -1120,7 +1120,9 @@ model Expense {
   date         DateTime @db.Date
   category     String   @default("Materials")
   description  String
-  amountCents  Int
+  amountCents  Int // what was paid, GST included
+  gstCents     Int      @default(0) // the GST part of amountCents (input tax credit)
+  vendor       String? // where it was bought
   attachmentId String?
   createdAt    DateTime @default(now())
 

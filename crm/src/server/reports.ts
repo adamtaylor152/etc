@@ -69,6 +69,17 @@ export const REPORTS: Record<string, Report> = {
       };
     },
   },
+  "gst-paid": {
+    title: "GST paid", sub: "GST on expenses in the period (input tax credits), to set against GST collected.", ranged: true,
+    async run(businessId, r) {
+      const rows = await db.expense.findMany({ where: { businessId, date: dates(r) }, orderBy: { date: "asc" } });
+      return {
+        columns: [["Date", "text"], ["Bought from", "text"], ["What", "text"], ["Category", "text"], ["Before GST", "money"], ["GST", "money"], ["Paid", "money"]],
+        rows: rows.map((e) => [dateOnly(e.date) ?? "", e.vendor ?? "", e.description, e.category, e.amountCents - e.gstCents, e.gstCents, e.amountCents]),
+        note: "Only expenses with a GST amount entered count toward the GST column.",
+      };
+    },
+  },
   "client-balances": {
     title: "Client balances", sub: "Everyone who owes money or has credit waiting. As of today.", ranged: false,
     async run(businessId) {

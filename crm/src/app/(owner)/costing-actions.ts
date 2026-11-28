@@ -2,7 +2,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireOwner } from "@/server/auth";
-import { addExpense, addTime, deleteExpense, deleteTime, startTimer, stopTimer, updateTime } from "@/server/ops/costing";
+import { addExpense, addTime, deleteExpense, updateExpense, deleteTime, startTimer, stopTimer, updateTime } from "@/server/ops/costing";
 import { TransitionError } from "@/server/status/visit";
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? "");
@@ -15,6 +15,7 @@ async function run(f: FormData, fn: () => Promise<unknown>) {
   revalidatePath(back(f).split("?")[0]);
   revalidatePath("/timesheets");
 }
+const cents = (f: FormData, k: string) => Math.round(Number(str(f, k) || 0) * 100);
 /** "1.5", "1:30", "90m" -> minutes. */
 const minutes = (s: string) => { const t = s.trim(); const hm = t.match(/^(\d+):(\d{1,2})$/); if (hm) return Number(hm[1]) * 60 + Number(hm[2]); if (/m$/i.test(t)) return Number(t.slice(0, -1)); return Math.round(Number(t) * 60); };
 
@@ -30,7 +31,12 @@ export async function expenseAdd(f: FormData) {
   const user = await requireOwner();
   const file = f.get("receipt");
   const receipt = file instanceof File && file.size > 0 ? { bytes: Buffer.from(await file.arrayBuffer()), contentType: file.type, filename: file.name } : undefined;
-  await run(f, () => addExpense(user, { jobId: str(f, "jobId") || undefined, date: str(f, "date"), category: str(f, "category"), description: str(f, "description"), amountCents: Math.round(Number(str(f, "amount") || 0) * 100), receipt }));
+  await run(f, () => addExpense(user, { jobId: str(f, "jobId") || undefined, date: str(f, "date"), category: str(f, "category"), description: str(f, "description"), amountCents: cents(f, "amount"), gstCents: cents(f, "gst"), vendor: str(f, "vendor"), receipt }));
+  revalidatePath("/expenses");
+}
+export async function expenseUpdate(f: FormData) {
+  const user = await requireOwner();
+  await run(f, () => updateExpense(user, str(f, "id"), { date: str(f, "date"), category: str(f, "category"), description: str(f, "description"), amountCents: cents(f, "amount"), gstCents: cents(f, "gst"), vendor: str(f, "vendor") }));
   revalidatePath("/expenses");
 }
 export async function expenseDelete(f: FormData) { const user = await requireOwner(); await run(f, () => deleteExpense(user, str(f, "id"))); revalidatePath("/expenses"); }

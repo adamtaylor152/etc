@@ -44,14 +44,32 @@ export async function deleteTime(user: Actor, id: string) {
   await db.timeEntry.deleteMany({ where: { id, businessId: user.businessId } });
 }
 
-export async function addExpense(user: Actor, input: { jobId?: string; date: string; category: string; description: string; amountCents: number; receipt?: { bytes: Buffer; contentType: string; filename?: string } }) {
+export async function addExpense(user: Actor, input: { jobId?: string; date: string; category: string; description: string; amountCents: number; gstCents?: number; vendor?: string; receipt?: { bytes: Buffer; contentType: string; filename?: string } }) {
   if (!input.description.trim()) throw new TransitionError("Describe the expense");
   if (!(input.amountCents > 0)) throw new TransitionError("Enter the amount");
+  const extra = expenseExtras(input);
   const job = input.jobId ? await db.job.findFirst({ where: { id: input.jobId, businessId: user.businessId } }) : null;
   if (input.jobId && !job) throw new TransitionError("That job is gone");
   const att = input.receipt ? await saveAny(user.businessId, input.receipt, { kind: "DOCUMENT", uploadedByType: "USER", uploadedById: user.id, jobId: job?.id, clientId: job?.clientId }) : null;
   return db.expense.create({
-    data: { businessId: user.businessId, jobId: job?.id, userId: user.id, date: toDbDate(input.date), category: input.category.slice(0, 40) || "Other", description: input.description.trim().slice(0, 300), amountCents: input.amountCents, attachmentId: att?.id },
+    data: { businessId: user.businessId, jobId: job?.id, userId: user.id, date: toDbDate(input.date), category: input.category.slice(0, 40) || "Other", description: input.description.trim().slice(0, 300), amountCents: input.amountCents, ...extra, attachmentId: att?.id },
+  });
+}
+
+/** Vendor and the GST part of an expense. The GST can't be more than what was paid. */
+function expenseExtras(i: { amountCents: number; gstCents?: number; vendor?: string }) {
+  const gstCents = Math.round(i.gstCents ?? 0);
+  if (!(gstCents >= 0) || gstCents > i.amountCents) throw new TransitionError("The GST can't be more than the amount");
+  return { gstCents, vendor: i.vendor?.trim().slice(0, 80) || null };
+}
+
+/** Fix a typo: everything but the receipt and the job it belongs to. */
+export async function updateExpense(user: Actor, id: string, input: { date: string; category: string; description: string; amountCents: number; gstCents?: number; vendor?: string }) {
+  if (!input.description.trim()) throw new TransitionError("Describe the expense");
+  if (!(input.amountCents > 0)) throw new TransitionError("Enter the amount");
+  await db.expense.updateMany({
+    where: { id, businessId: user.businessId },
+    data: { date: toDbDate(input.date), category: input.category.slice(0, 40) || "Other", description: input.description.trim().slice(0, 300), amountCents: input.amountCents, ...expenseExtras(input) },
   });
 }
 
