@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { openTimes, whoIsFree } from "@/server/booking/slots";
+import { freeInWindow, openTimes, slotText, whoIsFree } from "@/server/booking/slots";
 import { splitRoute } from "@/server/runner";
 
 describe("splitRoute", () => {
@@ -29,7 +29,7 @@ describe("booking slots", () => {
     busy: busy.map((b, i) => ({ id: `t${i}`, date: MON, label: "x", ...b })),
   });
   it("lists hourly times inside working hours, nothing on days off", () => {
-    expect(openTimes(av(), MON, 2)).toEqual([{ date: MON, times: [540, 600, 660].map((start) => ({ start, label: expect.any(String) })) }]);
+    expect(openTimes(av(), MON, 2)).toEqual([{ date: MON, windows: ["early", "midday"], times: [540, 600, 660].map((start) => ({ start, label: expect.any(String) })) }]);
   });
   it("a time stays open while anyone is free", () => {
     const r = openTimes(av([{ userIds: ["a"], start: 540, end: 600 }]), MON, 1);
@@ -43,5 +43,15 @@ describe("booking slots", () => {
   it("rejects times outside hours", () => {
     expect(whoIsFree(av(), MON, 690)).toBeNull();
     expect(whoIsFree(av(), MON, 480)).toBeNull();
+  });
+  it("windows: first free person and time inside the window", () => {
+    expect(freeInWindow(av(), MON, "early")).toEqual({ userId: "a", start: 540 });
+    expect(freeInWindow(av([{ userIds: ["a"], start: 540, end: 720 }]), MON, "midday")).toEqual({ userId: "b", start: 600 });
+    expect(freeInWindow(av(), MON, "evening")).toBeNull();
+    expect(freeInWindow(av([{ userIds: [], start: 540, end: 720 }]), MON, "early")).toBeNull();
+  });
+  it("tells the client the window, not the planned time", () => {
+    expect(slotText({ date: MON, start: 540, window: { label: "Early", hint: "6–11 am" } })).toBe("Monday, December 7, Early (6–11 am)");
+    expect(slotText({ date: MON, start: 540, window: null })).toBe("Monday, December 7 at 9:00 am");
   });
 });

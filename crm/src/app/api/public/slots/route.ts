@@ -2,6 +2,7 @@
 import { publicTimes } from "@/server/booking/slots";
 import { businessId } from "@/server/db";
 import { env } from "@/server/env";
+import { WINDOWS } from "@/server/windows";
 
 function cors(req: Request): Record<string, string> {
   const origin = req.headers.get("origin");
@@ -10,5 +11,5 @@ function cors(req: Request): Record<string, string> {
 }
 
 export async function GET(req: Request) {
-  return Response.json({ days: await publicTimes(await businessId()) }, { headers: { ...cors(req), "Cache-Control": "public, max-age=60" } });
+  return Response.json({ windows: WINDOWS, days: await publicTimes(await businessId()) }, { headers: { ...cors(req), "Cache-Control": "public, max-age=60" } });
 }

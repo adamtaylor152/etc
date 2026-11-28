@@ -73,6 +73,8 @@
   .slots-days button, .slots-times label { flex: none; border: 1.5px solid var(--line); border-radius: 12px; background: #fff; padding: 8px 12px; font: inherit; cursor: pointer; }
   .slots-days button[aria-pressed=true], .slots-times label:has(input:checked) { border-color: var(--brand); background: #eef5fe; font-weight: 700; }
   .slots-times { display: flex; flex-wrap: wrap; gap: 8px; }
+  .slots-times label small { display: block; font-weight: 400; color: var(--ink-soft); font-size: .8rem; }
+  .slot-mode { background: none; border: 0; padding: 8px 0 0; color: var(--brand); font: inherit; font-size: .92rem; font-weight: 600; cursor: pointer; text-decoration: underline; }
   .slots-times input { position: absolute; opacity: 0; pointer-events: none; }
   .choice .price { margin-left: auto; font-weight: 700; white-space: nowrap; color: var(--ink); }
   .group-title { font-weight: 700; margin: 22px 0 10px; }
@@ -222,9 +224,10 @@
         <input type="date" name="date" id="date">
       </label>
       <div class="field" id="slot-field" hidden>
-        <span>Pick a time for us to come see the job and quote it <small>(optional, about an hour)</small></span>
+        <span>When can we come see the job and quote it? <small>(optional, about an hour)</small></span>
         <div class="slots-days" id="slot-days" role="group" aria-label="Day"></div>
-        <div class="slots-times" id="slot-times" role="radiogroup" aria-label="Time"></div>
+        <div class="slots-times" id="slot-times" role="radiogroup" aria-label="Arrival window"></div>
+        <button type="button" class="slot-mode" id="slot-mode">Need an exact time?</button>
       </div>
       <label class="field">Notes <small>(optional)</small>
         <textarea name="notes" placeholder="Anything else? Tell us about extra jobs, pets in the yard, where to leave the bin…"></textarea>
@@ -272,7 +275,7 @@
   const bars = [...document.querySelectorAll(".progress i")];
   const $ = id => document.getElementById(id);
   let i = 0;
-  let slotDays = [], pickedSlot = null, slotDay = null; // assessment time picker state
+  let slotDays = [], pickedSlot = null, slotDay = null, slotWindows = [], exactTime = false; // assessment picker state: arrival windows by default
 
   // Pre-select from homepage buttons: book.html?plan=once|every
   const params = new URLSearchParams(location.search);
@@ -313,30 +316,39 @@
   // ---- assessment time picker (only when the CRM takes bookings) ----
   const slotsUrl = window.ETC_BOOKING_URL ? window.ETC_BOOKING_URL.replace(/\/bookings\/?$/, "/slots") : null;
   const dayName = d => new Date(d + "T12:00").toLocaleDateString("en-CA", { weekday: "short", month: "short", day: "numeric" });
+  const shownDays = () => slotDays.filter(d => exactTime ? d.times.length : (d.windows || []).length);
   function renderSlots() {
-    $("slot-days").replaceChildren(...slotDays.map(d => {
+    const days = shownDays();
+    if (!days.some(d => d.date === slotDay)) slotDay = days[0]?.date ?? null;
+    $("slot-days").replaceChildren(...days.map(d => {
       const b = document.createElement("button");
       b.type = "button"; b.textContent = dayName(d.date); b.setAttribute("aria-pressed", String(d.date === slotDay));
       b.onclick = () => { slotDay = d.date; renderSlots(); };
       return b;
     }));
-    const day = slotDays.find(d => d.date === slotDay);
-    $("slot-times").replaceChildren(...(day ? day.times : []).map(t => {
+    const day = days.find(d => d.date === slotDay);
+    const opts = !day ? [] : exactTime
+      ? day.times.map(t => ({ id: "t" + t.start, text: t.label, sub: "", pick: { date: day.date, start: t.start, label: `${dayName(day.date)} at ${t.label}` } }))
+      : slotWindows.filter(w => day.windows.includes(w.key)).map(w => ({ id: w.key, text: w.label, sub: w.hint, pick: { date: day.date, window: w.key, label: `${dayName(day.date)}, ${w.label} (${w.hint})` } }));
+    $("slot-times").replaceChildren(...opts.map(o => {
       const l = document.createElement("label"), r = document.createElement("input");
-      r.type = "radio"; r.name = "slot"; r.checked = !!pickedSlot && pickedSlot.date === day.date && pickedSlot.start === t.start;
-      r.onchange = () => { pickedSlot = { date: day.date, start: t.start, label: `${dayName(day.date)} at ${t.label}` }; };
-      l.append(r, document.createTextNode(t.label));
+      r.type = "radio"; r.name = "slot"; r.checked = !!pickedSlot && pickedSlot.label === o.pick.label;
+      r.onchange = () => { pickedSlot = o.pick; };
+      l.append(r, document.createTextNode(o.text));
+      if (o.sub) { const sm = document.createElement("small"); sm.textContent = o.sub; l.append(sm); }
       return l;
     }));
+    $("slot-mode").textContent = exactTime ? "Pick an arrival window instead" : "Need an exact time?";
   }
+  $("slot-mode").onclick = () => { exactTime = !exactTime; pickedSlot = null; renderSlots(); };
   async function loadSlots() {
     if (!slotsUrl) return;
     try {
       const r = await fetch(slotsUrl, { cache: "no-store" });
-      slotDays = r.ok ? (await r.json()).days || [] : [];
+      const body = r.ok ? await r.json() : {};
+      slotDays = body.days || []; slotWindows = body.windows || [];
     } catch { slotDays = []; }
-    if (pickedSlot && !slotDays.some(d => d.date === pickedSlot.date && d.times.some(t => t.start === pickedSlot.start))) pickedSlot = null;
-    slotDay = slotDay && slotDays.some(d => d.date === slotDay) ? slotDay : slotDays[0]?.date ?? null;
+    if (pickedSlot && !slotDays.some(d => d.date === pickedSlot.date && (pickedSlot.window ? (d.windows || []).includes(pickedSlot.window) : d.times.some(t => t.start === pickedSlot.start)))) pickedSlot = null;
     renderSlots();
     if (steps[i] && steps[i].dataset.title === "Details") syncDate();
   }
@@ -422,7 +434,7 @@
       name: d.name, email: d.email, phone: d.phone, address: d.address, access: d.access,
       services: d.raw, plan: form.plan.value, icemelt: form.icemelt.checked,
       date: d.date, notes: d.notes, payment: d.payment, website: form.website.value, smsOptIn: !!d.phone && form.smsOptIn.checked, offers: form.offers.checked, ...(geo || {}),
-      slot: pickedSlot && d.quoted.length ? { date: pickedSlot.date, start: pickedSlot.start } : undefined,
+      slot: pickedSlot && d.quoted.length ? (pickedSlot.window ? { date: pickedSlot.date, window: pickedSlot.window } : { date: pickedSlot.date, start: pickedSlot.start }) : undefined,
       ref: new URLSearchParams(location.search).get("ref") || localStorage.getItem("etcRef") || undefined, // referral code from a friend's link
     });
     const post = url => fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: payload });

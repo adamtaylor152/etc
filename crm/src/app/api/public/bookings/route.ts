@@ -1,8 +1,7 @@
 // Public booking endpoint for etccrew.ca/book.html (cross-origin). Same rules as the Python /api/bookings:
 // 16KB cap, honeypot, 5 bookings / 10 min / IP, identical validation and estimate.
-import { fmtMin } from "@/server/availability";
 import { createBooking } from "@/server/booking/create";
-import { bookAssessment, claimSlot } from "@/server/booking/slots";
+import { bookAssessment, claimSlot, slotText } from "@/server/booking/slots";
 import { recordReferral } from "@/server/ops/marketing";
 import { BookingError, validate } from "@/server/booking/validate";
 import { todayLocal } from "@/server/dates";
@@ -50,9 +49,9 @@ export async function POST(req: Request) {
   const bid = await businessId();
   const quoted = booking.services.some((s) => s !== "Snow shovelling");
   const slot = quoted && data.slot ? await claimSlot(bid, data.slot) : null;
-  if (quoted && data.slot && !slot) return json(req, 409, { error: "Sorry, that time was just taken. Please pick another.", slotTaken: true });
+  if (quoted && data.slot && !slot) return json(req, 409, { error: "Sorry, that time just filled up. Please pick another.", slotTaken: true });
   const res = await createBooking(booking, {
-    businessId: bid, source: "BOOKING_FORM", when: slot ? `Assessment visit ${new Date(`${slot.date}T12:00:00Z`).toLocaleDateString("en-CA", { weekday: "long", month: "long", day: "numeric", timeZone: "UTC" })} at ${fmtMin(slot.start)}` : undefined, ip: clientIp(req), userAgent: req.headers.get("user-agent") ?? undefined, raw: data,
+    businessId: bid, source: "BOOKING_FORM", when: slot ? `Assessment visit ${slotText(slot)}` : undefined, ip: clientIp(req), userAgent: req.headers.get("user-agent") ?? undefined, raw: data,
   });
   if (data.smsOptIn === true && booking.phone) {
     const client = await db.client.update({ where: { id: res.clientId }, data: { smsOptIn: true } });

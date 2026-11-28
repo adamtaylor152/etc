@@ -1,4 +1,5 @@
 // New job or every-snowfall plan for an existing client (/jobs/new?client=...&kind=plan).
+import { WindowChips } from "@/components/window-chips";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Button, Card, Field, Input, PageHeader, Textarea, inputCls } from "@/components/ui";
@@ -100,6 +101,7 @@ export default async function NewJob({ searchParams }: PageProps<"/jobs/new">) {
                 <Field label="Start time" hint="Blank = any time"><Input name="startTime" type="time" defaultValue={s("time")} /></Field>
                 <Field label="End time"><Input name="endTime" type="time" /></Field>
               </div>
+              <WindowChips />
               <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="later" className="size-4" />Schedule later (goes to the Unscheduled list)</label>
               <details>
                 <summary className="cursor-pointer text-sm font-semibold text-blue">More visits on other days</summary>
