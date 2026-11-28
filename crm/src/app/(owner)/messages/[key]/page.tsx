@@ -2,12 +2,13 @@
 import { requireOwner } from "@/server/auth";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { ChevronLeft, CircleAlert, Film, Paperclip, Phone, Plus, User, X } from "lucide-react";
 import type { Attachment } from "@/generated/prisma/client";
 import { Flash } from "@/components/flash";
 import { ClientSelect } from "@/components/client-select";
 import { Composer } from "@/components/messages/composer";
 import { LiveThread } from "@/components/messages/live";
-import { Input } from "@/components/ui";
+import { Badge, Button, Input, btn, inputCls } from "@/components/ui";
 import { businessId, db } from "@/server/db";
 import { clientName } from "@/server/queries";
 import { getSettings } from "@/server/settings";
@@ -39,49 +40,53 @@ export default async function Thread({ params, searchParams }: PageProps<"/messa
   ]);
   await db.textMessage.updateMany({ where: { ...where, direction: "IN", readAt: null }, data: { readAt: new Date() } });
 
+  const optedOut = !!client?.smsOptOutAt;
   const disabled = !smsEnabled() ? "Texting turns on once the Telnyx key is set in Coolify."
     : !phone ? "No mobile number on file. Add one on the client page."
     : client?.smsOptOutAt ? `${client.firstName} texted STOP. They have to text START before you can text them.` : undefined;
+  const name = client ? clientName(client) : pretty(number!);
 
   return (
-    <section className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-line bg-white">
-      <header className="flex items-center gap-3 border-b border-line px-3 py-2.5 sm:px-4">
-        <Link href="/messages" className="text-2xl leading-none text-blue md:hidden" aria-label="Back to conversations">‹</Link>
-        <div className="min-w-0 flex-1">
-          <h1 className="truncate font-display text-lg font-bold">{client ? clientName(client) : pretty(number!)}</h1>
-          <p className="truncate text-xs text-ink-soft">
-            {phone ? pretty(phone) : "No mobile number"}{client?.smsOptOutAt && " · texted STOP"}{unknown && " · not linked to a client"}
+    <section className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-line bg-white shadow-card">
+      <header className="flex items-center gap-2 border-b border-line px-2 py-2 sm:gap-3 sm:px-4">
+        <Link href="/messages" className="grid size-11 shrink-0 place-items-center rounded-lg text-ink-soft hover:bg-tint hover:text-navy md:hidden" aria-label="Back to conversations"><ChevronLeft className="size-5" aria-hidden /></Link>
+        <div className="min-w-0 flex-1 md:pl-0">
+          <h1 className="truncate font-display text-lg font-semibold leading-tight">{name}</h1>
+          <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-ink-soft">
+            <span className="tabular-nums">{phone ? pretty(phone) : "No mobile number"}</span>
+            {optedOut && <Badge tone="amber">Texted STOP</Badge>}
+            {unknown && <Badge tone="amber">Not linked to a client</Badge>}
           </p>
         </div>
-        {phone && <a href={`tel:${phone}`} className="inline-flex min-h-10 items-center rounded-full border-2 border-line px-4 text-sm font-semibold">Call</a>}
-        {client && <Link href={`/clients/${client.id}`} className="inline-flex min-h-10 items-center rounded-full border-2 border-line px-4 text-sm font-semibold">Client</Link>}
+        {phone && <a href={`tel:${phone}`} className={btn("secondary", "min-h-11 px-3 sm:min-h-10 sm:px-4")} aria-label={`Call ${name}`}><Phone className="size-4" aria-hidden /><span className="hidden sm:inline">Call</span></a>}
+        {client && <Link href={`/clients/${client.id}`} className={btn("secondary", "min-h-11 px-3 sm:min-h-10 sm:px-4")} aria-label={`Open ${name}'s client page`}><User className="size-4" aria-hidden /><span className="hidden sm:inline">Client</span></Link>}
       </header>
 
       {unknown && (
-        <details className="border-b border-line bg-amber-50 px-4 py-2 text-sm" open={!texts.some((t) => t.direction === "OUT")}>
-          <summary className="cursor-pointer font-semibold text-amber-900">Who is this? Link this number to a client</summary>
-          <div className="grid gap-4 py-3 sm:grid-cols-2">
+        <details className="border-b border-amber-200 bg-amber-50 px-4 text-sm text-amber-950" open={!texts.some((t) => t.direction === "OUT")}>
+          <summary className="flex min-h-11 items-center font-semibold">Who is this? Link this number to a client</summary>
+          <div className="grid gap-5 pb-4 pt-1 text-navy sm:grid-cols-2">
             <form action={textLinkClient} className="space-y-2">
               <input type="hidden" name="key" value={key} />
               <p className="font-semibold">Existing client</p>
               <ClientSelect required none="Choose" />
-              <button className="inline-flex min-h-10 items-center rounded-full bg-navy px-4 font-semibold text-white">Link</button>
+              <Button variant="secondary">Link to this client</Button>
             </form>
             <form action={textNewClient} className="space-y-2">
               <input type="hidden" name="key" value={key} />
               <p className="font-semibold">New client</p>
-              <div className="grid grid-cols-2 gap-2"><Input name="firstName" placeholder="First name" required /><Input name="lastName" placeholder="Last name" /></div>
-              <Input name="email" type="email" placeholder="Email (optional)" />
-              <button className="inline-flex min-h-10 items-center rounded-full bg-navy px-4 font-semibold text-white">Create client</button>
+              <div className="grid grid-cols-2 gap-2"><Input name="firstName" placeholder="First name" aria-label="First name" required /><Input name="lastName" placeholder="Last name" aria-label="Last name" /></div>
+              <Input name="email" type="email" placeholder="Email (optional)" aria-label="Email (optional)" />
+              <Button variant="secondary">Create client</Button>
             </form>
           </div>
         </details>
       )}
-      <div className="px-3 pt-2"><Flash error={sp.error} /></div>
+      {sp.error && <div className="px-3 pt-3"><Flash error={sp.error} /></div>}
 
       <LiveThread count={texts.length + texts.reduce((n, t) => n + t.media.length, 0)}>
-        {!texts.length && <p className="py-10 text-center text-sm text-ink-soft">No texts yet. Say hi below.</p>}
-        <ol className="space-y-1.5">
+        {!texts.length && <p className="mx-auto max-w-[40ch] py-10 text-center text-sm text-ink-soft">No texts with {name} yet. {disabled ? "" : "Write the first one below."}</p>}
+        <ol className="space-y-2">
           {texts.map((t, i) => {
             const d = day(t.createdAt);
             const sep = i === 0 || day(texts[i - 1].createdAt) !== d ? d : null;
@@ -92,30 +97,34 @@ export default async function Thread({ params, searchParams }: PageProps<"/messa
             const failed = t.status.includes("fail");
             return (
               <li key={t.id}>
-                {sep && <p className="my-3 text-center text-xs font-semibold text-ink-soft">{sep}</p>}
+                {sep && <p className="my-4 flex items-center gap-3 text-xs font-medium text-ink-soft before:h-px before:flex-1 before:bg-line-soft after:h-px after:flex-1 after:bg-line-soft">{sep}</p>}
                 <div className={`flex flex-col ${out ? "items-end" : "items-start"}`}>
+                  <span className="sr-only">{out ? "You:" : `${name}:`}</span>
                   {photos.length > 0 && (
-                    <div className={`mb-1 grid w-64 max-w-[85%] gap-1 sm:w-80 ${photos.length > 1 ? "grid-cols-2" : ""}`}>
-                      {photos.map((p) => (
-                        <a key={p.id} href={`/api/media/${p.id}/lg`} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-2xl border border-line bg-tint">
+                    <div className={`mb-1 flex max-w-[85%] flex-wrap gap-1.5 ${out ? "justify-end" : ""}`}>
+                      {photos.map((p, n) => (
+                        <a key={p.id} href={`/api/media/${p.id}/lg`} target="_blank" rel="noreferrer" className="block size-28 overflow-hidden rounded-lg border border-line bg-tint hover:border-ink-faint/60 sm:size-32" title="Open full size">
                           {/* eslint-disable-next-line @next/next/no-img-element -- private media, our own variants */}
-                          <img src={`/api/media/${p.id}/md`} alt="Texted photo" loading="lazy" className={`w-full object-cover ${photos.length > 1 ? "aspect-square" : "max-h-80"}`} />
+                          <img src={`/api/media/${p.id}/md`} alt={`Texted photo ${n + 1} of ${photos.length}`} loading="lazy" className="size-full object-cover" />
                         </a>
                       ))}
                     </div>
                   )}
                   {files.map((f) => (
-                    <a key={f.id} href={`/api/media/${f.id}/file`} className="mb-1 inline-flex items-center gap-2 rounded-2xl border border-line bg-white px-3 py-2 text-sm font-semibold text-blue">
-                      <span aria-hidden>{f.mediaType === "VIDEO" ? "🎬" : "📎"}</span>{f.filename ?? (f.mediaType === "VIDEO" ? "Video" : "Attachment")} · {Math.max(1, Math.round(f.bytes / 1024))} KB
+                    <a key={f.id} href={`/api/media/${f.id}/file`} className="mb-1 inline-flex min-h-10 max-w-[85%] items-center gap-2 rounded-lg border border-line bg-white px-3 py-2 text-sm font-medium text-blue hover:bg-tint">
+                      {f.mediaType === "VIDEO" ? <Film className="size-4 shrink-0" aria-hidden /> : <Paperclip className="size-4 shrink-0" aria-hidden />}
+                      <span className="truncate">{f.filename ?? (f.mediaType === "VIDEO" ? "Video" : "Attachment")}</span><span className="shrink-0 tabular-nums text-ink-soft">{Math.max(1, Math.round(f.bytes / 1024))} KB</span>
                     </a>
                   ))}
-                  {pending > 0 && <p className="mb-1 rounded-2xl bg-tint px-3 py-2 text-xs text-ink-soft">Downloading {pending} attachment{pending === 1 ? "" : "s"}…</p>}
+                  {pending > 0 && <p className="mb-1 rounded-lg bg-tint px-3 py-2 text-xs text-ink-soft">Downloading {pending} attachment{pending === 1 ? "" : "s"}…</p>}
                   {t.body && (
-                    <div className={`max-w-[85%] whitespace-pre-line break-words rounded-2xl px-3.5 py-2 text-[15px] leading-snug sm:max-w-md ${out ? (failed ? "bg-red-100 text-red-900" : "bg-blue text-white") : "bg-tint text-navy"}`}>{t.body}</div>
+                    <div className={`max-w-[85%] whitespace-pre-line break-words rounded-2xl px-3.5 py-2 text-[15px] leading-snug sm:max-w-md ${out ? (failed ? "rounded-br-md border border-red-200 bg-red-50 text-red-900" : "rounded-br-md bg-blue text-white") : "rounded-bl-md border border-line-soft bg-tint text-navy"}`}>{t.body}</div>
                   )}
-                  <p className="mt-0.5 px-1 text-[11px] text-ink-soft">
-                    {time(t.createdAt)}{t.type !== "SMS" && ` · ${t.type}`}{out && ` · ${STATUS[t.status] ?? t.status}`}{t.error && <span className="text-red-700"> · {t.error}</span>}
+                  <p className={`mt-1 flex flex-wrap items-center gap-x-1 px-1 text-[11px] tabular-nums text-ink-soft ${out ? "justify-end" : ""}`}>
+                    {failed && <CircleAlert className="size-3.5 text-red-700" aria-hidden />}
+                    <time dateTime={t.createdAt.toISOString()}>{time(t.createdAt)}</time>{t.type !== "SMS" && <span>· {t.type}</span>}{out && <span className={failed ? "font-semibold text-red-700" : ""}>· {STATUS[t.status] ?? t.status}</span>}
                   </p>
+                  {t.error && <p className={`max-w-[85%] px-1 text-[11px] text-red-700 ${out ? "text-right" : ""}`}>{t.error}</p>}
                   {t.media.length > 0 && <PhotoLinks messageKey={key} messageId={t.id} media={t.media} jobs={jobs} quotes={quotes} canLink={!!client} out={out} />}
                 </div>
               </li>
@@ -124,7 +133,7 @@ export default async function Thread({ params, searchParams }: PageProps<"/messa
         </ol>
       </LiveThread>
 
-      <Composer convoKey={key} disabled={disabled} quick={(await getSettings(db, bid)).quickReplies} rcs={rcsEnabled()} />
+      <Composer convoKey={key} disabled={disabled} optedOut={optedOut && smsEnabled() && !!phone} quick={(await getSettings(db, bid)).quickReplies} rcs={rcsEnabled()} />
     </section>
   );
 }
@@ -139,37 +148,37 @@ function PhotoLinks({ messageKey, messageId, media, jobs, quotes, canLink, out }
   const onJobs = [...new Map(media.filter((m) => m.jobId && m.job).map((m) => [m.jobId!, m.job!])).entries()];
   const onQuotes = [...new Map(media.filter((m) => m.quoteId && m.quote).map((m) => [m.quoteId!, m.quote!])).entries()];
   const chip = (href: string, label: string, target: string) => (
-    <span key={href} className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 py-0.5 pl-2.5 pr-1 text-xs font-semibold text-emerald-800">
-      <Link href={href}>{label}</Link>
+    <span key={href} className="inline-flex items-center gap-0.5 rounded-full border border-emerald-200 bg-emerald-50 py-0.5 pl-3 pr-1 text-xs font-semibold text-emerald-900">
+      <Link href={href} className="hover:underline">Filed on {label}</Link>
       <form action={textPhotosLink}>
         <input type="hidden" name="key" value={messageKey} /><input type="hidden" name="messageId" value={messageId} /><input type="hidden" name="target" value={target} />
-        <button className="grid size-5 place-items-center rounded-full hover:bg-emerald-100" aria-label={`Remove from ${label}`}>✕</button>
+        <button className="grid size-7 place-items-center rounded-full hover:bg-emerald-100" aria-label={`Remove from ${label}`} title={`Remove from ${label}`}><X className="size-3.5" aria-hidden /></button>
       </form>
     </span>
   );
   return (
-    <div className={`mt-1 flex max-w-[85%] flex-wrap items-center gap-1.5 ${out ? "justify-end" : ""}`}>
+    <div className={`mt-1.5 flex max-w-[85%] flex-wrap items-center gap-1.5 ${out ? "justify-end" : ""}`}>
       {onJobs.map(([id, j]) => chip(`/jobs/${id}`, `Job #${j.number}`, "unjob"))}
       {onQuotes.map(([id, q]) => chip(`/quotes/${id}`, `Quote #${q.number}`, "unquote"))}
       {canLink ? (
         (jobs.length > 0 || quotes.length > 0) ? (
           <details className="relative">
-            <summary className="cursor-pointer list-none rounded-full border border-line px-2.5 py-0.5 text-xs font-semibold text-blue hover:bg-tint">+ Add to job / quote</summary>
-            <form action={textPhotosLink} className={`absolute z-10 mt-1 w-72 space-y-2 rounded-xl border border-line bg-white p-3 text-sm shadow-lg ${out ? "right-0" : "left-0"}`}>
+            <summary className="list-none inline-flex min-h-8 cursor-pointer items-center gap-1 rounded-full border border-line bg-white px-3 text-xs font-semibold text-navy hover:border-ink-faint/60 hover:bg-tint"><Plus className="size-3.5 text-ink-soft" aria-hidden />Add to a job or quote</summary>
+            <form action={textPhotosLink} className={`absolute z-10 mt-1 w-72 max-w-[80vw] space-y-2 rounded-xl border border-line bg-white p-3 text-sm shadow-lg ${out ? "right-0" : "left-0"}`}>
               <input type="hidden" name="key" value={messageKey} /><input type="hidden" name="messageId" value={messageId} />
               {media.length > 1 && (
-                <div className="flex flex-wrap gap-1.5">
+                <div className="flex flex-wrap gap-x-3">
                   {media.map((m, i) => (
-                    <label key={m.id} className="flex items-center gap-1 text-xs"><input type="checkbox" name="photo" value={m.id} defaultChecked className="size-4" />{m.mediaType === "IMAGE" ? `Photo ${i + 1}` : (m.filename ?? `File ${i + 1}`)}</label>
+                    <label key={m.id} className="flex min-h-9 items-center gap-1.5 text-sm"><input type="checkbox" name="photo" value={m.id} defaultChecked className="size-5" />{m.mediaType === "IMAGE" ? `Photo ${i + 1}` : (m.filename ?? `File ${i + 1}`)}</label>
                   ))}
                 </div>
               )}
-              <select name="target" required className="min-h-10 w-full rounded-lg border border-line bg-white px-2">
+              <select name="target" required aria-label="Job or quote" className={inputCls}>
                 <option value="">Choose…</option>
                 {jobs.length > 0 && <optgroup label="Jobs">{jobs.map((j) => <option key={j.id} value={`job:${j.id}`}>Job #{j.number} {j.title}{j.closedAt ? " (closed)" : ""}</option>)}</optgroup>}
                 {quotes.length > 0 && <optgroup label="Quotes">{quotes.map((q) => <option key={q.id} value={`quote:${q.id}`}>Quote #{q.number} {q.title ?? ""}</option>)}</optgroup>}
               </select>
-              <button className="inline-flex min-h-9 items-center rounded-full bg-blue px-4 text-sm font-semibold text-white">Save</button>
+              <Button>File here</Button>
             </form>
           </details>
         ) : <span className="text-xs text-ink-soft">No jobs or quotes yet to file this on.</span>
