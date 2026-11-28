@@ -490,6 +490,7 @@ model Request {
   assessmentAt     DateTime?
   convertedAt      DateTime?
   archivedAt       DateTime?
+  lostReason       String? // why it didn't go ahead (asked when archiving)
   createdAt        DateTime        @default(now())
 
   jobs        Job[]
