@@ -64,7 +64,18 @@ export async function syncStripeRefund(paymentIntentId: string, refundedTotalCen
   const changed = await db.$transaction(async (tx) => {
     await lock(tx, (await tx.payment.findMany({ where, select: { id: true } })).map((r) => r.id));
     const rows = await tx.payment.findMany({ where, orderBy: { receivedAt: "asc" } }); // read again: now under the lock
-    const updates = splitRefund(rows, refundedTotalCents);
+    // What Stripe has refunded beyond what we have recorded goes to the tip first, then to the invoice money.
+    let fresh = refundedTotalCents - rows.reduce((n, x) => n + x.refundedCents + x.tipRefundedCents, 0);
+    for (const row of rows) {
+      const tipLeft = (row.tipCents ?? 0) - row.tipRefundedCents;
+      const take = Math.min(tipLeft, Math.max(0, fresh));
+      if (take > 0) {
+        await tx.payment.update({ where: { id: row.id }, data: { tipRefundedCents: { increment: take } } });
+        await logActivity(tx, { businessId: row.businessId, type: "payment.refunded", entityType: "Invoice", entityId: row.invoiceId, actorType: "SYSTEM", clientId: row.clientId, data: { amountCents: take, method: row.method, via: "stripe-dashboard", tip: true } });
+        fresh -= take;
+      }
+    }
+    const updates = fresh > 0 ? splitRefund(rows, rows.reduce((n, x) => n + x.refundedCents, 0) + fresh) : [];
     for (const u of updates) {
       const row = rows.find((r) => r.id === u.id)!;
       await applyRefund(tx, row, u.refundedCents - row.refundedCents, { via: "stripe-dashboard" });

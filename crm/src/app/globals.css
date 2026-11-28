@@ -10,8 +10,8 @@
 @theme inline {
   --color-navy: #14213d;
   --color-night: #0e1830;
-  --color-blue: #1d6fd8;
-  --color-blue-deep: #1558b0;
+  --color-blue: var(--brand, #1d6fd8); /* client pages set --brand to the owner's colour (Settings › Messages) */
+  --color-blue-deep: color-mix(in srgb, var(--brand, #1d6fd8) 80%, #000);
   --color-sky: #7cb8ff;
   --color-ink-soft: #4a5672;
   --color-ink-faint: #7a859c;

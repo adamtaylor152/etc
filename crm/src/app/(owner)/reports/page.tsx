@@ -1,32 +1,28 @@
 import { requireOwner } from "@/server/auth";
 import Link from "next/link";
+import { ChevronRight } from "lucide-react";
 import { hm, jobProfit } from "@/server/ops/costing";
 import { team } from "@/server/schedule";
 // Reports: money in by month, what sells, where the work is, storms, quotes, tuition.
-// Single-series horizontal bars (one hue), every row labelled with its value; hover shows the exact figure.
-import { Button, Card, Input, PageHeader } from "@/components/ui";
+// Single-series horizontal bars (one hue), every row labelled with its value.
+import { Amount } from "@/components/billing/money";
+import { Bars } from "@/components/reports/bars";
+import { RangeBar, rangeLabel } from "@/components/reports/range-bar";
+import { Card, PageHeader, Stat } from "@/components/ui";
 import { instants, parseRange, PRESETS, REPORTS } from "@/server/reports";
-import { prettyDate, TZ, todayLocal, toDbDate } from "@/server/dates";
+import { TZ, todayLocal, toDbDate } from "@/server/dates";
 import { businessId, db } from "@/server/db";
 import { money } from "@/server/money";
 
 export const metadata = { title: "Reports" };
 
-function Bars({ rows, format = money, empty }: { rows: [string, number][]; format?: (n: number) => string; empty: string }) {
-  const max = Math.max(1, ...rows.map(([, v]) => v));
-  if (!rows.length) return <p className="text-sm text-ink-soft">{empty}</p>;
-  return (
-    <ul className="space-y-1.5">
-      {rows.map(([label, v]) => (
-        <li key={label} className="grid grid-cols-[7.5rem_1fr_auto] items-center gap-2 text-sm" title={`${label}: ${format(v)}`}>
-          <span className="truncate text-ink-soft">{label}</span>
-          <span className="h-4 rounded-r bg-tint"><span className="block h-4 rounded-r bg-blue" style={{ width: v > 0 ? `${Math.max(2, (100 * v) / max)}%` : 0 }} /></span>
-          <span className="min-w-14 text-right font-semibold tabular-nums">{format(v)}</span>
-        </li>
-      ))}
-    </ul>
-  );
-}
+// The tabular reports, grouped by what the owner is asking about. Anything not listed lands under "More".
+const GROUPS: [string, string[]][] = [
+  ["Money", ["aged-receivables", "payments", "invoices", "gst", "gst-paid"]],
+  ["Work", ["jobs", "quotes", "plan-profit", "community-profit", "materials"]],
+  ["Clients", ["client-balances", "lead-source"]],
+  ["Team", ["timesheets"]],
+];
 
 /** Server-side "now" math kept out of the component body. */
 function daysAgo(n: number) { return new Date(Date.now() - n * 86_400_000); }
@@ -81,50 +77,81 @@ export default async function Reports({ searchParams }: PageProps<"/reports">) {
   const won = quotes.filter((q) => q.status === "APPROVED" || q.status === "CONVERTED").reduce((a, q) => a + q._count, 0);
   const storms = season?.events.filter((e) => e.status !== "CANCELLED") ?? [];
 
+  const grouped = new Set(GROUPS.flatMap(([, keys]) => keys));
+  const rest = Object.keys(REPORTS).filter((k) => !grouped.has(k));
+  const index = [...GROUPS, ...(rest.length ? [["More", rest] as [string, string[]]] : [])].map(([name, keys]) => [name, keys.filter((k) => REPORTS[k])] as const).filter(([, keys]) => keys.length);
+  const period = rangeLabel(r.from, r.to);
+
   return (
     <>
-      <PageHeader title="Reports" sub={`${prettyDate(r.from)} to ${prettyDate(r.to)} unless noted. Card fees aren't subtracted.`} />
-      <form className="no-print mb-4 flex flex-wrap items-end gap-2 text-sm">
-        {Object.entries(PRESETS).map(([k, label]) => <Link key={k} href={`/reports?range=${k}`} className={`rounded-full border px-3 py-1.5 font-semibold ${r.preset === k ? "border-navy bg-navy text-white" : "border-line bg-white"}`}>{label}</Link>)}
-        <label className="ml-2">From<Input type="date" name="from" defaultValue={r.from} /></label>
-        <label>To<Input type="date" name="to" defaultValue={r.to} /></label>
-        <Button variant="secondary">Show</Button>
-      </form>
-      <div className="no-print mb-5 flex flex-wrap gap-2">
-        {Object.entries(REPORTS).map(([k, d]) => <Link key={k} href={`/reports/${k}${d.ranged ? `?from=${r.from}&to=${r.to}` : ""}`} title={d.sub} className="rounded-lg border border-line bg-white px-3 py-2 text-sm font-semibold text-blue hover:bg-tint">{d.title}</Link>)}
+      <PageHeader title="Reports" sub={`${period}, unless a card says otherwise. Card fees aren't subtracted.`} />
+      <RangeBar base="/reports" presets={PRESETS} range={r} />
+      <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Stat label="Money in" value={money(total)} sub="payments received, after refunds" />
+        <Stat label="Visits done" value={visitsDone.toLocaleString("en-CA")} sub="completed in the period" />
+        <Stat label="Quotes approved" value={sent ? `${Math.round((100 * won) / sent)}%` : "–"} sub={sent ? `${won} of ${sent} sent` : "no quotes sent in the period"} />
+        <Stat label="Storms this season" value={String(storms.length)} sub={season?.name ?? "no season running"} />
       </div>
-      <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {[["Money in", money(total)], ["Visits done", String(visitsDone)], ["Quotes approved", sent ? `${Math.round((100 * won) / sent)}%` : "–"], ["Storms this season", String(storms.length)]].map(([l, v]) => (
-          <div key={l} className="rounded-2xl border border-line bg-white p-4"><div className="font-display text-3xl font-bold">{v}</div><div className="text-sm text-ink-soft">{l}</div></div>
-        ))}
-      </div>
+
+      <Card title="Detailed reports" className="no-print mb-5">
+        <nav aria-label="Detailed reports" className="grid gap-x-6 gap-y-5 sm:grid-cols-2 lg:grid-cols-4">
+          {index.map(([name, keys]) => (
+            <div key={name}>
+              <h3 className="mb-1 border-b border-line pb-1.5 text-xs font-medium text-ink-soft">{name}</h3>
+              <ul>
+                {keys.map((k) => (
+                  <li key={k}>
+                    <Link href={`/reports/${k}${REPORTS[k].ranged ? `?from=${r.from}&to=${r.to}` : ""}`} className="group -mx-2 flex min-h-11 items-start gap-2 rounded-lg px-2 py-2 hover:bg-tint">
+                      <span className="min-w-0 flex-1"><span className="block text-sm font-semibold text-blue group-hover:text-blue-deep">{REPORTS[k].title}</span><span className="block text-xs text-ink-soft">{REPORTS[k].sub}</span></span>
+                      <ChevronRight className="mt-0.5 size-4 shrink-0 text-ink-faint" strokeWidth={1.75} aria-hidden />
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </nav>
+      </Card>
+
       <div className="grid gap-5 lg:grid-cols-2">
+        <Card title="Money in by month"><Bars rows={[...byMonth].map(([k, v]) => [monthLabel(k), v])} empty="No payments in this period." /></Card>
+        <Card title="Invoiced by service"><Bars rows={top(byService)} empty="No invoices issued in this period." /></Card>
+        <Card title="Money in by community"><Bars rows={top(byCommunity)} empty="No payments in this period." /></Card>
+        <Card title={`Storms · ${season?.name ?? "no season"}`}>
+          {storms.length ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead><tr className="border-b border-line text-left text-xs font-medium text-ink-soft"><th scope="col" className="pb-2 font-medium">Storm</th><th scope="col" className="pb-2 pl-3 text-right font-medium">Snow (cm)</th><th scope="col" className="pb-2 pl-3 text-right font-medium">Visits done</th><th scope="col" className="pb-2 pl-3 text-right font-medium">Invoiced</th></tr></thead>
+                <tbody className="divide-y divide-line-soft">
+                  {storms.map((e) => (
+                    <tr key={e.id}><td className="py-2">{e.name}</td><td className="py-2 pl-3 text-right tabular-nums">{e.measuredCm ?? <span className="text-ink-soft"><span className="sm:hidden" aria-hidden>–</span><span className="sr-only sm:not-sr-only">not measured</span></span>}</td>
+                      <td className="whitespace-nowrap py-2 pl-3 text-right tabular-nums">{e.visits.filter((v) => v.state === "COMPLETED").length} of {e.visits.filter((v) => v.state !== "CANCELLED").length}</td>
+                      <td className="py-2 pl-3 text-right"><Amount cents={e.invoices.filter((i) => i.status !== "VOID").reduce((a, i) => a + i.totalCents, 0)} /></td></tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : <p className="text-sm text-ink-soft">No storms yet this season.</p>}
+        </Card>
         <Card title="Hours by person · past 30 days">
-          {hours.length ? <ul className="space-y-1.5 text-sm">{hours.map((h) => <li key={h.name} className="flex justify-between"><span className="flex items-center gap-1.5"><span className="size-2.5 rounded-full" style={{ background: h.color }} />{h.name}</span><span className="font-semibold">{hm(h.minutes)}</span></li>)}</ul> : <p className="text-sm text-ink-soft">No time tracked yet. Start timers on visits.</p>}
+          <Bars rows={hours.map((h) => [h.name, h.minutes])} format={hm} empty="No time tracked yet. Start timers on visits." />
         </Card>
         <Card title="Profit by job · past 90 days">
           {profits.length ? (
-            <ul className="divide-y divide-line text-sm">
-              {profits.map((p) => <li key={p.id}><Link href={`/jobs/${p.id}`} className="flex justify-between gap-2 py-1.5"><span className="truncate">#{p.number} {p.title}</span><span className={`font-semibold ${p.profitCents < 0 ? "text-red-700" : "text-emerald-700"}`}>{money(p.profitCents)}{p.marginPct != null && <span className="ml-1 font-normal text-ink-soft">{p.marginPct}%</span>}</span></Link></li>)}
+            <ul className="divide-y divide-line-soft text-sm">
+              {profits.map((p) => (
+                <li key={p.id}>
+                  <Link href={`/jobs/${p.id}`} className="group flex items-baseline justify-between gap-3 py-2">
+                    <span className="min-w-0 truncate group-hover:text-blue-deep"><span className="tabular-nums text-ink-soft">#{p.number}</span> {p.title}</span>
+                    <span className="flex shrink-0 items-baseline gap-2">
+                      {p.marginPct != null && <span className="text-xs tabular-nums text-ink-soft">{p.marginPct}% margin</span>}
+                      <span className={`w-24 text-right ${p.profitCents < 0 ? "text-red-700" : ""}`}><Amount cents={p.profitCents} className="font-medium" />{p.profitCents < 0 && <span className="sr-only"> loss</span>}</span>
+                    </span>
+                  </Link>
+                </li>
+              ))}
             </ul>
           ) : <p className="text-sm text-ink-soft">Profit shows once jobs have time or expenses logged.</p>}
-        </Card>
-        <Card title="Money in by month"><Bars rows={[...byMonth].map(([k, v]) => [monthLabel(k), v])} empty="No payments yet." /></Card>
-        <Card title="Invoiced by service"><Bars rows={top(byService)} empty="No invoices yet." /></Card>
-        <Card title="Money in by community"><Bars rows={top(byCommunity)} empty="No payments yet." /></Card>
-        <Card title={`Storms · ${season?.name ?? "no season"}`}>
-          {storms.length ? (
-            <table className="w-full text-sm">
-              <thead><tr className="text-left text-xs uppercase text-ink-soft"><th className="pb-1">Storm</th><th className="pb-1 text-right">cm</th><th className="pb-1 text-right">Done</th><th className="pb-1 text-right">Invoiced</th></tr></thead>
-              <tbody className="divide-y divide-line">
-                {storms.map((e) => (
-                  <tr key={e.id}><td className="py-1.5">{e.name}</td><td className="text-right">{e.measuredCm ?? "?"}</td>
-                    <td className="text-right">{e.visits.filter((v) => v.state === "COMPLETED").length}/{e.visits.filter((v) => v.state !== "CANCELLED").length}</td>
-                    <td className="text-right">{money(e.invoices.filter((i) => i.status !== "VOID").reduce((a, i) => a + i.totalCents, 0))}</td></tr>
-                ))}
-              </tbody>
-            </table>
-          ) : <p className="text-sm text-ink-soft">No storms yet this season.</p>}
         </Card>
       </div>
     </>

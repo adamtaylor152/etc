@@ -82,6 +82,22 @@ export async function mmsJpeg(storageKey: string) {
   await put(key, await sharp(bytes).resize(1280, 1280, { fit: "inside", withoutEnlargement: true }).jpeg({ quality: 72, mozjpeg: true }).toBuffer());
 }
 
+// ---------- the business logo (Settings › Messages) ----------
+/** Stored like any photo, plus a PNG: PDFs can't embed WebP and some mail apps don't show it. */
+export async function saveLogo(businessId: string, file: { bytes: Buffer; contentType: string }, userId: string) {
+  const a = await saveImage(businessId, file, { kind: "OTHER", uploadedByType: "USER", uploadedById: userId });
+  await put(`${a.storageKey}/logo.png`, await sharp(file.bytes).rotate().resize(600, 240, { fit: "inside", withoutEnlargement: true }).png().toBuffer());
+  return a;
+}
+const MONTH = 30 * 86_400_000;
+/** Signed link for emails and client pages (no sign-in). Good for years, and the same all month so it caches. */
+export const logoPath = (id: string) => signedMediaPath(id, "logo", 3650, Math.floor(Date.now() / MONTH) * MONTH);
+export async function logoPng(id: string): Promise<Uint8Array | null> {
+  const a = await db.attachment.findUnique({ where: { id }, select: { storageKey: true } });
+  const f = a && await getStream(`${a.storageKey}/logo.png`);
+  return f ? new Uint8Array(await new Response(f.stream).arrayBuffer()) : null;
+}
+
 // ---------- signed URLs (stateless HMAC; emails embed several images, no DB row per link) ----------
 function secret() {
   const s = process.env.MEDIA_SIGNING_SECRET;
@@ -93,7 +109,7 @@ function secret() {
 }
 const sign = (id: string, variant: string, exp: number) => createHmac("sha256", secret()).update(`${id}.${variant}.${exp}`).digest("base64url");
 
-export function signedMediaPath(id: string, variant: Variant | "mms" | "file", ttlDays = 365, now = Date.now()) {
+export function signedMediaPath(id: string, variant: Variant | "mms" | "file" | "logo", ttlDays = 365, now = Date.now()) {
   const exp = Math.floor(now / 1000) + ttlDays * 86_400;
   return `/api/media/${id}/${variant}?exp=${exp}&sig=${sign(id, variant, exp)}`;
 }

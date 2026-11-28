@@ -1,14 +1,14 @@
-import { BODY_FONT, Button, EtcEmail, Eyebrow, Footer, H1, Header, INK_SOFT, LINE, NAVY, P, Table, firstName } from "./ui";
+import { Intro, BODY_FONT, Button, EtcEmail, Eyebrow, Footer, H1, Header, INK_SOFT, LINE, NAVY, P, Table, firstName } from "./ui";
 
 export function OnMyWay({ name, address, site, phone }: { name: string; address: string; site: string; phone: string }) {
   return (
-    <EtcEmail title="We're on our way" preheader={`The etc. crew is heading to ${address}`}>
+    <EtcEmail title="We're on our way" preheader={`The etc. crew is heading to ${address}`} vars={{ first_name: firstName(name), address }}>
       <Header right="On our way" />
       <tr>
         <td className="px" style={{ padding: "32px 40px 26px" }}>
           <Eyebrow>Heads up</Eyebrow>
           <H1>Hi {firstName(name)}, we&apos;re on our way!</H1>
-          <P>The crew is heading to {address} now. No need to be home. We&apos;ll send before &amp; after photos when we&apos;re done.</P>
+          <Intro><P>The crew is heading to {address} now. No need to be home. We&apos;ll send before &amp; after photos when we&apos;re done.</P></Intro>
         </td>
       </tr>
       <Footer site={site} phone={phone} reason="You're getting this because you booked a job with etc." />
@@ -18,14 +18,14 @@ export function OnMyWay({ name, address, site, phone }: { name: string; address:
 
 export function VisitSkipped({ name, address, what, next, site, phone }: { name: string; address: string; what: string; next: string; site: string; phone: string }) {
   return (
-    <EtcEmail title="We couldn't do your visit" preheader={`We came by ${address} but couldn't do the job`}>
+    <EtcEmail title="We couldn't do your visit" preheader={`We came by ${address} but couldn't do the job`} vars={{ first_name: firstName(name), address, reason: what, next_step: next }}>
       <Header right="Visit update" />
       <tr>
         <td className="px" style={{ padding: "32px 40px 26px" }}>
           <Eyebrow>Heads up</Eyebrow>
           <H1>Hi {firstName(name)}, we couldn&apos;t do your visit today</H1>
-          <P>We came by {address}, but {what}. You won&apos;t be charged for this visit.</P>
-          <P>{next}</P>
+          <Intro><P>We came by {address}, but {what}. You won&apos;t be charged for this visit.</P>
+          <P>{next}</P></Intro>
         </td>
       </tr>
       <Footer site={site} phone={phone} reason="You're getting this because you booked a job with etc." />
@@ -35,13 +35,13 @@ export function VisitSkipped({ name, address, what, next, site, phone }: { name:
 
 export function StormHeadsUp({ name, address, cm, site, phone }: { name: string; address: string; cm: number | null; site: string; phone: string }) {
   return (
-    <EtcEmail title="You're on our snow route" preheader={`We'll clear ${address} today`}>
+    <EtcEmail title="You're on our snow route" preheader={`We'll clear ${address} today`} vars={{ first_name: firstName(name), address }}>
       <Header right="Snow day" />
       <tr>
         <td className="px" style={{ padding: "32px 40px 26px" }}>
           <Eyebrow>Every-snowfall plan{cm ? ` · ~${cm} cm` : ""}</Eyebrow>
           <H1>Snow&apos;s here, {firstName(name)}. You&apos;re on our route.</H1>
-          <P>We&apos;ll clear {address} today. You&apos;ll get photos when it&apos;s done. Away or don&apos;t need it this time? Just reply and let us know.</P>
+          <Intro><P>We&apos;ll clear {address} today. You&apos;ll get photos when it&apos;s done. Away or don&apos;t need it this time? Just reply and let us know.</P></Intro>
         </td>
       </tr>
       <Footer site={site} phone={phone} reason="You're getting this because you're on etc.'s every-snowfall plan. Reply 'stop' to turn these off." />

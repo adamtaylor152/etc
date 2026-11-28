@@ -8,8 +8,12 @@ import { db, type Db } from "../db";
 import { env } from "../env";
 import { unsubscribeUrl } from "../ops/campaigns";
 import { clip, sendSms, smsEnabled, smsFrom, toE164 } from "../sms";
-import { smsTemplates, type SmsTemplateName } from "./sms-templates";
+import { logoPath } from "../media";
+import { parseSettings } from "../settings";
+import { mailStore, type Mail } from "@/emails/ui";
+import { renderSms, type smsTemplates, type SmsTemplateName } from "./sms-templates";
 import { templates, type PropsOf, type TemplateName } from "./templates";
+import { emailMeta, fill, type Wording } from "./wording";
 
 const MAX_ATTEMPTS = 6;
 const DAILY_CAP = Number(process.env.EMAIL_DAILY_CAP ?? 300); // Brevo free plan
@@ -45,12 +49,28 @@ function mailer() {
   return transport;
 }
 
+/**
+ * Settings › Messages is applied here, for every template: the logo and colour always, and for client emails the owner's
+ * own subject, opening and closing. `subject` is null unless the owner set one: it needs the same {{variables}} as the
+ * body, so it is worked out now rather than when the email was queued.
+ */
 export async function renderMessage(m: Pick<EmailMessage, "template" | "props" | "businessId" | "to">) {
   const t = templates[m.template as TemplateName];
   if (!t) throw new Error(`unknown template ${m.template}`);
   const el = await (t.render as (p: unknown, c: { businessId: string; to: string }) => Promise<React.ReactElement>)(m.props, { businessId: m.businessId, to: m.to });
-  const html = await render(el);
-  return { html, text: toPlainText(html) };
+  // A preview or "send me a test" stands in for the template it names, with the wording from the editor (saved or not).
+  const test = m.template === "owner.template_test" ? (m.props as PropsOf<"owner.template_test">) : null;
+  const key = test?.template ?? m.template;
+  const biz = await db.business.findUniqueOrThrow({ where: { id: m.businessId }, select: { name: true, phone: true, settings: true } });
+  const s = parseSettings(biz.settings);
+  const o: Wording | null = !emailMeta(key) ? null : test?.wording ?? await db.emailTemplateOverride.findFirst({ where: { businessId: m.businessId, template: key, enabled: true } });
+  const mail: Mail = {
+    color: s.brandColor, logoUrl: s.logoId ? env.appUrl + logoPath(s.logoId) : null, business: biz.name,
+    intro: o?.intro, closing: o?.closing, vars: { business_name: biz.name, business_phone: biz.phone ?? env.phone },
+  };
+  const html = await mailStore.run(mail, () => render(el));
+  const subject = o?.subject?.trim() ? (test ? "Test: " : "") + fill(o.subject, mail.vars).replace(/\s+/g, " ").trim() : null;
+  return { html, text: toPlainText(html), subject };
 }
 
 /**
@@ -78,13 +98,13 @@ async function sendOne(m: EmailMessage) {
     return;
   }
   try {
-    const { html, text } = await renderMessage(m);
+    const { html, text, subject } = await renderMessage(m);
     // Marketing emails carry one-click unsubscribe headers (Gmail/Yahoo require them; CASL wants an easy opt-out).
     const cid = m.template === "campaign.email" ? (m.props as { clientId?: string }).clientId : null;
     const headers = cid ? { "List-Unsubscribe": `<${unsubscribeUrl(cid)}>`, "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" } : undefined;
     const attachments = (await attachmentsFor(m)).map((f) => ({ filename: f.filename, content: Buffer.from(f.bytes), contentType: "application/pdf" }));
-    const info = await tx.sendMail({ from: env.mailFrom, to: m.to, cc: m.cc.length ? m.cc : undefined, replyTo: m.replyTo ?? undefined, subject: m.subject, html, text, headers, attachments });
-    await db.emailMessage.update({ where: { id: m.id }, data: { status: "SENT", sentAt: new Date(), providerMessageId: info.messageId, lastError: null } });
+    const info = await tx.sendMail({ from: env.mailFrom, to: m.to, cc: m.cc.length ? m.cc : undefined, replyTo: m.replyTo ?? undefined, subject: subject || m.subject, html, text, headers, attachments });
+    await db.emailMessage.update({ where: { id: m.id }, data: { status: "SENT", sentAt: new Date(), providerMessageId: info.messageId, lastError: null, ...(subject ? { subject } : {}) } });
   } catch (e) {
     const dead = permanentRejection(e); // no such mailbox: retrying won't help
     if (dead) await markBounced(m.businessId, m.to);
@@ -147,14 +167,12 @@ async function sendText(m: EmailMessage) {
     return;
   }
   try {
-    const t = smsTemplates[m.template as SmsTemplateName];
-    if (!t) throw new Error(`unknown sms template ${m.template}`);
     const client = m.clientId ? await db.client.findUnique({ where: { id: m.clientId } }) : null;
     if (client?.smsOptOutAt) {
       await db.emailMessage.update({ where: { id: m.id }, data: { status: "SUPPRESSED", lastError: "client texted STOP" } });
       return;
     }
-    const body = clip(await t(m.props as never, { businessId: m.businessId }));
+    const body = clip(await renderSms(m.template as SmsTemplateName, m.props, { businessId: m.businessId }));
     const sid = await sendSms(m.to, body);
     await db.emailMessage.update({ where: { id: m.id }, data: { status: "SENT", sentAt: new Date(), providerMessageId: sid, lastError: null } });
     // Texts to the team (assignment alerts) stay out of the client inbox.
