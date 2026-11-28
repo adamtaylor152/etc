@@ -37,6 +37,28 @@ export function computeJobStatus(job: JobLike, visits: VisitLike[], today: strin
   return "ACTION_REQUIRED";
 }
 
+/** What can still be edited on a job (null = editable, otherwise why not). Charges are copied from the line items when a
+ *  visit is done, so editing lines only prices visits done from now on; the locks cover the cases where it would not. */
+export type JobEditFacts = {
+  kind: JobKind; closedAt: Date | null; sizeHoldAt: Date | null; billingType: "FIXED_PRICE" | "PER_VISIT";
+  invoiced: boolean; // a non-void invoice bills this job (its fixed price, or any of its visits)
+  hasCharges: boolean; // a done visit already has per-visit charges
+};
+export function jobEditLocks(j: JobEditFacts) {
+  const lines = j.kind === "SNOW_PLAN" ? "A snow plan is priced per push: change it on the plan card"
+    : j.closedAt ? "This job is closed: reopen it to change what it bills"
+    : j.sizeHoldAt ? "Waiting on the client to OK a new driveway price"
+    : j.billingType === "FIXED_PRICE" && j.invoiced ? "The fixed price is already invoiced: void the invoice to change it"
+    : null;
+  const billing = lines ?? (j.kind !== "ONE_OFF" ? "Only one-off jobs can switch billing"
+    : j.invoiced || j.hasCharges ? "Visits are already charged or invoiced, so the billing type is locked"
+    : null);
+  const property = j.kind === "SNOW_PLAN" ? "A snow plan is priced for its driveway: end it and start a plan at the other address"
+    : j.closedAt ? "This job is closed: reopen it to move it"
+    : null;
+  return { lines, billing, property };
+}
+
 export const JOB_STATUS_LABEL: Record<JobStatus, string> = {
   ARCHIVED: "Archived", LATE: "Late", TODAY: "Today", REQUIRES_INVOICING: "Requires invoicing", UPCOMING: "Upcoming",
   ON_PLAN: "Waiting for snow", PAUSED: "Paused", UNSCHEDULED: "Unscheduled", ACTION_REQUIRED: "Action required",

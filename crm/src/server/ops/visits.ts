@@ -40,8 +40,9 @@ function transitionTx(user: Actor, visitId: string, to: VisitState, extra: Trans
     const now = new Date();
 
     if (to === "SCHEDULED" && v.charges.some((c) => c.invoiceLineItemId)) throw new TransitionError("Already invoiced: void the invoice line first");
-    // Any un-invoiced charges are rebuilt from scratch, so completing twice never double-bills.
-    if (to === "SCHEDULED" || to === "COMPLETED") await tx.visitCharge.deleteMany({ where: { visitId, invoiceLineItemId: null } });
+    // Any un-invoiced charges are rebuilt from scratch, so completing twice never double-bills (and a cancelled visit bills nothing).
+    if (v.state === "CANCELLED" && v.job.closedAt) throw new TransitionError("This job is closed: reopen the job first");
+    if (to === "SCHEDULED" || to === "COMPLETED" || to === "CANCELLED") await tx.visitCharge.deleteMany({ where: { visitId, invoiceLineItemId: null } });
 
     const data: Parameters<typeof tx.visit.update>[0]["data"] = { state: to };
     if (to === "EN_ROUTE") data.enRouteAt = now;
