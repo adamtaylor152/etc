@@ -7,6 +7,7 @@ import { Button, Card, Field, Input, PageHeader, Textarea, inputCls } from "@/co
 import { businessId, db } from "@/server/db";
 import { clientName } from "@/server/queries";
 import { RepeatFields } from "@/components/repeat-fields";
+import { PlanBillingFields } from "@/components/plan-billing-fields";
 import { todayLocal } from "@/server/dates";
 import { planCreate, recurringCreate } from "../../work-actions";
 import { jobCreateFull } from "../../work2-actions";
@@ -60,6 +61,7 @@ export default async function NewJob({ searchParams }: PageProps<"/jobs/new">) {
               <Field label="Per push ($)"><Input name="price" type="number" step="0.01" defaultValue={30} /></Field>
               <label className="flex items-center gap-2 pt-6 text-sm font-semibold"><input type="checkbox" name="iceMelt" className="size-5" /> Ice melt (+$5)</label>
             </div>
+            <PlanBillingFields firstDueOn={todayLocal()} />
             <Button>Create plan</Button>
           </form>
         </Card>

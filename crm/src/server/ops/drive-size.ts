@@ -69,6 +69,7 @@ export async function confirmSize(user: Actor, propertyId: string, size: DriveSi
     const prop = await tx.property.update({ where: { id: propertyId, businessId: user.businessId }, data: { driveSize: size, extraWalk, sizeCheckedAt: new Date() }, include: { client: true } });
     const jobs = await tx.job.findMany({ where: openSnowJobs(user.businessId, propertyId), include: { lineItems: true } });
     for (const job of jobs) {
+      if (job.snowBillingMode === "SEASONAL") { out.push("applied"); continue; } // flat season price: the size doesn't reprice it
       const next = snowCharge(prices, job.kind === "SNOW_PLAN", size, extraWalk);
       if (!next) {
         await tx.job.update({ where: { id: job.id }, data: { sizeHoldAt: new Date(), pendingPrice: { size, extraWalk, base: 0, walk: 0, quote: true } satisfies Pending as unknown as Prisma.InputJsonValue } });

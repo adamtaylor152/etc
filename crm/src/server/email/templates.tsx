@@ -284,7 +284,7 @@ const planRenewal: Template<{ clientId: string; seasonId: string }> = {
       db.job.findFirst({ where: { clientId: p.clientId, kind: "SNOW_PLAN" }, orderBy: { createdAt: "desc" } }),
     ]);
     const raw = await mintToken(db, ctx.businessId, "CLIENT_HUB", { clientId: c.id });
-    return <PlanRenewal name={clientName(c)} season={season.name} price={money(last?.pricePerPushCents ?? 3000)} url={`${env.appUrl}/hub/${raw}`} site={env.siteUrl} phone={env.phone} />;
+    return <PlanRenewal name={clientName(c)} season={season.name} price={money(last?.pricePerPushCents ?? 3000)} seasonPrice={last?.snowBillingMode === "SEASONAL" && last.seasonalPriceCents ? money(last.seasonalPriceCents) : undefined} url={`${env.appUrl}/hub/${raw}`} site={env.siteUrl} phone={env.phone} />;
   },
 };
 
