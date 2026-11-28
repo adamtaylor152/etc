@@ -4,7 +4,10 @@ import { requireOwner } from "@/server/auth";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Archive, Banknote, FileText, Hammer, Inbox, ListTodo, Mail, MapPin, MessageSquare, Pencil, Phone, Plus, Receipt, Repeat, Snowflake } from "lucide-react";
-import { clientArchive, propertyArchive } from "../../client-actions";
+import { clientArchive, clientMerge, propertyArchive } from "../../client-actions";
+import { ConfirmButton } from "@/components/confirm-button";
+import { Flash } from "@/components/flash";
+import { possibleDuplicates } from "@/server/ops/client-import";
 import { sendHubLink } from "../../quote-actions";
 import { ActivityFeed, parseTypes } from "@/components/activity-feed";
 import { DetailHeader } from "@/components/detail-header";
@@ -50,6 +53,7 @@ export default async function ClientPage({ params, searchParams }: PageProps<"/c
     },
   });
   if (!c) notFound();
+  const dups = await possibleDuplicates(bid, id);
   const [jobs, visits, notes, lastText, lastEmail, lastCall, feed, files] = await Promise.all([
     jobsWithStatus({ businessId: bid, clientId: id }, today),
     db.visit.findMany({ where: { businessId: bid, job: { clientId: id }, state: "SCHEDULED", OR: [{ scheduledDate: { gte: toDbDate(today) } }, { scheduledDate: null }] }, include: { job: true }, orderBy: { scheduledDate: { sort: "asc", nulls: "last" } }, take: 8 }),
@@ -116,6 +120,22 @@ export default async function ClientPage({ params, searchParams }: PageProps<"/c
         </>}
       />
 
+      <Flash error={sp.error} />
+      {dups.length > 0 && !c.archivedAt && (
+        <div className="mb-5 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm">
+          <p className="font-semibold text-amber-900">Possible duplicate{dups.length === 1 ? "" : "s"}</p>
+          <ul className="mt-2 space-y-2">
+            {dups.map((d) => (
+              <li key={d.id} className="flex flex-wrap items-center justify-between gap-2">
+                <span><Link href={`/clients/${d.id}`} className="font-semibold text-blue">{clientName(d)}</Link> <span className="text-ink-soft">{[d.email, d.phone].filter(Boolean).join(" · ")}</span></span>
+                <form action={clientMerge}><input type="hidden" name="id" value={id} /><input type="hidden" name="dupId" value={d.id} />
+                  <ConfirmButton message={`Merge ${clientName(d)} into ${clientName(c)}? Their jobs, quotes, invoices, messages and notes move here and ${clientName(d)} is deleted. This can't be undone.`} className="rounded-lg border border-amber-300 bg-white px-3 py-1.5 font-semibold hover:bg-amber-100">Merge into this client</ConfirmButton>
+                </form>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       <div className="grid gap-5 lg:grid-cols-3">
         <div className="min-w-0 space-y-5 lg:col-span-2">
           <Card title="Contact info" actions={<Link href={`/clients/${id}/edit`} className="text-sm font-semibold text-blue">Edit</Link>}>

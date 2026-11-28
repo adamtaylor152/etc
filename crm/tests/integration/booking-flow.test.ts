@@ -49,10 +49,10 @@ describe("booking → size check → route → done", () => {
     await transitionVisit(owner, visit.id, "IN_PROGRESS", {});
     await transitionVisit(owner, visit.id, "COMPLETED", { depthCm: 8, iceMeltApplied: false });
     expect((await db.visit.findUniqueOrThrow({ where: { id: visit.id } })).state).toBe("COMPLETED");
-  });
+  }, 30_000); // real database, several transactions: slow when the machine is busy
 
   it("public booking times and health don't crash", async () => {
     expect(Array.isArray(await publicTimes(await businessId()))).toBe(true);
     expect((await health()).checks.db).toBe(true);
-  });
+  }, 30_000);
 });

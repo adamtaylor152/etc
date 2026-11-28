@@ -8,6 +8,7 @@ import { propertyData, PropertyInput, saveClient } from "@/server/clients";
 import { fromLocalInput } from "@/server/dates";
 import { db } from "@/server/db";
 import { logCall } from "@/server/ops/calls";
+import { importClients, mergeClients } from "@/server/ops/client-import";
 import { addNote, deleteNote, editNote, pinNote, type NoteTarget } from "@/server/ops/notes";
 import { TransitionError } from "@/server/status/visit";
 
@@ -40,6 +41,29 @@ export async function clientArchive(f: FormData) {
   const id = str(f, "id");
   await db.client.updateMany({ where: { id, businessId: user.businessId }, data: { archivedAt: str(f, "archive") === "1" ? new Date() : null } });
   revalidatePath(`/clients/${id}`);
+}
+
+/** Merge a duplicate into the client being viewed. */
+export async function clientMerge(f: FormData) {
+  const user = await requireOwner();
+  const id = str(f, "id");
+  try { await mergeClients(user, id, str(f, "dupId")); } catch (e) { withError(`/clients/${id}`, e); }
+  revalidatePath("/", "layout");
+  redirect(`/clients/${id}`);
+}
+
+/** CSV upload from /clients/import. */
+export async function clientImport(f: FormData) {
+  const user = await requireOwner();
+  const file = f.get("file");
+  let res = { created: 0, skipped: 0, errors: [] as string[] };
+  try {
+    if (!(file instanceof File) || !file.size) throw new TransitionError("Choose a CSV file");
+    if (file.size > 1_000_000) throw new TransitionError("That file is over 1 MB; split it up");
+    res = await importClients(user, await file.text());
+  } catch (e) { withError("/clients/import", e); }
+  revalidatePath("/clients");
+  redirect(`/clients/import?${new URLSearchParams({ created: String(res.created), skipped: String(res.skipped), ...(res.errors.length ? { problems: res.errors.join("\n").slice(0, 1500) } : {}) })}`);
 }
 
 export async function clientTagsBulk(f: FormData) {
