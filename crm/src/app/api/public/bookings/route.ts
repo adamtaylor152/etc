@@ -1,6 +1,8 @@
 // Public booking endpoint for etccrew.ca/book.html (cross-origin). Same rules as the Python /api/bookings:
 // 16KB cap, honeypot, 5 bookings / 10 min / IP, identical validation and estimate.
+import { fmtMin } from "@/server/availability";
 import { createBooking } from "@/server/booking/create";
+import { bookAssessment, claimSlot } from "@/server/booking/slots";
 import { recordReferral } from "@/server/ops/marketing";
 import { BookingError, validate } from "@/server/booking/validate";
 import { todayLocal } from "@/server/dates";
@@ -44,8 +46,13 @@ export async function POST(req: Request) {
     if (e instanceof BookingError) return json(req, 400, { error: e.message.charAt(0).toUpperCase() + e.message.slice(1) + "." });
     throw e;
   }
+  // A picked time books the on-site assessment for quote services (snow shovelling is "anytime" and needs none).
+  const bid = await businessId();
+  const quoted = booking.services.some((s) => s !== "Snow shovelling");
+  const slot = quoted && data.slot ? await claimSlot(bid, data.slot) : null;
+  if (quoted && data.slot && !slot) return json(req, 409, { error: "Sorry, that time was just taken. Please pick another.", slotTaken: true });
   const res = await createBooking(booking, {
-    businessId: await businessId(), source: "BOOKING_FORM", ip: clientIp(req), userAgent: req.headers.get("user-agent") ?? undefined, raw: data,
+    businessId: bid, source: "BOOKING_FORM", when: slot ? `Assessment visit ${new Date(`${slot.date}T12:00:00Z`).toLocaleDateString("en-CA", { weekday: "long", month: "long", day: "numeric", timeZone: "UTC" })} at ${fmtMin(slot.start)}` : undefined, ip: clientIp(req), userAgent: req.headers.get("user-agent") ?? undefined, raw: data,
   });
   if (data.smsOptIn === true && booking.phone) {
     const client = await db.client.update({ where: { id: res.clientId }, data: { smsOptIn: true } });
@@ -54,6 +61,7 @@ export async function POST(req: Request) {
   }
   if (data.offers === true) await db.client.updateMany({ where: { id: res.clientId, emailMarketingConsentAt: null }, data: { emailMarketingConsentAt: new Date(), emailMarketingConsentSource: "booking form" } });
   if (typeof data.ref === "string") await recordReferral(await businessId(), res.clientId, data.ref.slice(0, 20)).catch((e) => console.error("referral", e));
+  if (slot) await bookAssessment(bid, res.requestId, slot).catch((e) => console.error("assessment", e)); // booking is saved either way
   console.info(`booking ${res.number} saved`);
   return json(req, 201, { ok: true, id: res.number, estimate: booking.estimate, ...(res.uploadUrl ? { uploadUrl: res.uploadUrl } : {}) });
 }

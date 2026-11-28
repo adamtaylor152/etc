@@ -12,7 +12,7 @@ import { serviceLines, whenText, type Booking } from "./validate";
 
 export type BookingMeta = {
   businessId: string; source: ClientSource; ip?: string; userAgent?: string; raw?: unknown;
-  legacyBookingId?: number; createdAt?: Date; sendEmails?: boolean; number?: number;
+  legacyBookingId?: number; createdAt?: Date; sendEmails?: boolean; number?: number; when?: string;
 };
 
 const PAYMENT: Record<string, PaymentMethod> = { Cash: "CASH", "e-Transfer": "ETRANSFER" };
@@ -144,7 +144,7 @@ export async function createBooking(b: Booking, meta: BookingMeta) {
     if (meta.sendEmails !== false) {
       const props = {
         number, name: b.name, email: b.email, phone: b.phone, address: b.address, access: b.access, notes: b.notes,
-        plan: b.plan, payment: b.payment, services: b.services, serviceLines: serviceLines(b), when: whenText(b),
+        plan: b.plan, payment: b.payment, services: b.services, serviceLines: serviceLines(b), when: meta.when ?? whenText(b),
         estimate: b.estimate, site: env.siteUrl, phone_: env.phone, helpEmail: env.helpEmail, etransferEmail: env.etransferEmail,
       };
       const badge = shovel ? (b.plan === "Every snowfall" ? "Every snowfall" : "One-time") : "Quote job";

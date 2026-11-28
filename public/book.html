@@ -50,9 +50,9 @@
   .step-label { font-size: .85rem; font-weight: 700; color: var(--ink-soft); letter-spacing: .06em; text-transform: uppercase; }
 
   .card { background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius); padding: 30px; margin-top: 18px; box-shadow: 0 20px 50px -30px rgba(20,33,61,.35); }
-  fieldset { border: 0; padding: 0; margin: 0; }
+  fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
   fieldset[hidden] { display: none; }
-  label.field { display: block; font-weight: 600; margin-bottom: 18px; }
+  label.field, div.field { display: block; font-weight: 600; margin-bottom: 18px; }
   label.field small { font-weight: 400; color: var(--ink-soft); }
   input[type=text], input[type=email], input[type=tel], input[type=date], textarea {
     display: block; width: 100%; margin-top: 6px; padding: 13px 14px; font: inherit; color: inherit;
@@ -69,6 +69,11 @@
   .choice input { margin: 4px 0 0; accent-color: var(--brand); width: 18px; height: 18px; flex: none; }
   .choice b { display: block; }
   .choice span { font-size: .92rem; color: var(--ink-soft); }
+  .slots-days { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 6px; margin: 8px 0; }
+  .slots-days button, .slots-times label { flex: none; border: 1.5px solid var(--line); border-radius: 12px; background: #fff; padding: 8px 12px; font: inherit; cursor: pointer; }
+  .slots-days button[aria-pressed=true], .slots-times label:has(input:checked) { border-color: var(--brand); background: #eef5fe; font-weight: 700; }
+  .slots-times { display: flex; flex-wrap: wrap; gap: 8px; }
+  .slots-times input { position: absolute; opacity: 0; pointer-events: none; }
   .choice .price { margin-left: auto; font-weight: 700; white-space: nowrap; color: var(--ink); }
   .group-title { font-weight: 700; margin: 22px 0 10px; }
   .group-title:first-child { margin-top: 0; }
@@ -216,6 +221,11 @@
       <label class="field" id="date-field"><span id="date-label">When would you like us?</span> <small>(optional)</small>
         <input type="date" name="date" id="date">
       </label>
+      <div class="field" id="slot-field" hidden>
+        <span>Pick a time for us to come see the job and quote it <small>(optional, about an hour)</small></span>
+        <div class="slots-days" id="slot-days" role="group" aria-label="Day"></div>
+        <div class="slots-times" id="slot-times" role="radiogroup" aria-label="Time"></div>
+      </div>
       <label class="field">Notes <small>(optional)</small>
         <textarea name="notes" placeholder="Anything else? Tell us about extra jobs, pets in the yard, where to leave the bin…"></textarea>
       </label>
@@ -262,6 +272,7 @@
   const bars = [...document.querySelectorAll(".progress i")];
   const $ = id => document.getElementById(id);
   let i = 0;
+  let slotDays = [], pickedSlot = null, slotDay = null; // assessment time picker state
 
   // Pre-select from homepage buttons: book.html?plan=once|every
   const params = new URLSearchParams(location.search);
@@ -292,7 +303,44 @@
     $("date-field").hidden = every && !others;
     $("date-label").textContent = every && others ? "When should we do the other jobs?" : "When would you like us?";
     if (every && !others) form.date.value = "";
+    // Quote jobs: real open times from the CRM. A one-time shovel still uses the date box.
+    const onceShovel = $("svc-shovel").checked && form.plan.value !== "Every snowfall";
+    $("slot-field").hidden = !(others && slotDays.length);
+    if (others && slotDays.length && !onceShovel) $("date-field").hidden = true;
+    if (!others) pickedSlot = null;
   }
+
+  // ---- assessment time picker (only when the CRM takes bookings) ----
+  const slotsUrl = window.ETC_BOOKING_URL ? window.ETC_BOOKING_URL.replace(/\/bookings\/?$/, "/slots") : null;
+  const dayName = d => new Date(d + "T12:00").toLocaleDateString("en-CA", { weekday: "short", month: "short", day: "numeric" });
+  function renderSlots() {
+    $("slot-days").replaceChildren(...slotDays.map(d => {
+      const b = document.createElement("button");
+      b.type = "button"; b.textContent = dayName(d.date); b.setAttribute("aria-pressed", String(d.date === slotDay));
+      b.onclick = () => { slotDay = d.date; renderSlots(); };
+      return b;
+    }));
+    const day = slotDays.find(d => d.date === slotDay);
+    $("slot-times").replaceChildren(...(day ? day.times : []).map(t => {
+      const l = document.createElement("label"), r = document.createElement("input");
+      r.type = "radio"; r.name = "slot"; r.checked = !!pickedSlot && pickedSlot.date === day.date && pickedSlot.start === t.start;
+      r.onchange = () => { pickedSlot = { date: day.date, start: t.start, label: `${dayName(day.date)} at ${t.label}` }; };
+      l.append(r, document.createTextNode(t.label));
+      return l;
+    }));
+  }
+  async function loadSlots() {
+    if (!slotsUrl) return;
+    try {
+      const r = await fetch(slotsUrl, { cache: "no-store" });
+      slotDays = r.ok ? (await r.json()).days || [] : [];
+    } catch { slotDays = []; }
+    if (pickedSlot && !slotDays.some(d => d.date === pickedSlot.date && d.times.some(t => t.start === pickedSlot.start))) pickedSlot = null;
+    slotDay = slotDay && slotDays.some(d => d.date === slotDay) ? slotDay : slotDays[0]?.date ?? null;
+    renderSlots();
+    if (steps[i] && steps[i].dataset.title === "Details") syncDate();
+  }
+  loadSlots();
 
   function show(n) {
     i = n;
@@ -346,6 +394,7 @@
       ["Name", d.name], ["Email", d.email], ["Phone", d.phone], ["Address", d.address], ["Access", d.access],
       ["Services", d.services.join("\n")],
       ["When", d.date ? new Date(d.date + "T12:00").toLocaleDateString("en-CA", { weekday: "short", month: "short", day: "numeric" }) : (d.every ? "After every snowfall" : "As soon as you can")],
+      ["Visit to quote", pickedSlot && d.quoted.length ? pickedSlot.label : ""],
       ["Notes", d.notes], ["Payment", d.payment + " (after the job)"],
     ];
     const ul = $("review");
@@ -373,6 +422,7 @@
       name: d.name, email: d.email, phone: d.phone, address: d.address, access: d.access,
       services: d.raw, plan: form.plan.value, icemelt: form.icemelt.checked,
       date: d.date, notes: d.notes, payment: d.payment, website: form.website.value, smsOptIn: !!d.phone && form.smsOptIn.checked, offers: form.offers.checked, ...(geo || {}),
+      slot: pickedSlot && d.quoted.length ? { date: pickedSlot.date, start: pickedSlot.start } : undefined,
       ref: new URLSearchParams(location.search).get("ref") || localStorage.getItem("etcRef") || undefined, // referral code from a friend's link
     });
     const post = url => fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: payload });
@@ -388,6 +438,7 @@
       }
       res = res || await post("/api/bookings");
       const body = await res.json().catch(() => ({}));
+      if (body.slotTaken) { pickedSlot = null; await loadSlots(); show(steps.findIndex(s => s.dataset.title === "Details")); }
       if (!res.ok) throw new Error(body.error || "Something went wrong.");
       steps.forEach(s => s.hidden = true);
       $("nav").hidden = true;

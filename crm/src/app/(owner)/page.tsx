@@ -7,6 +7,7 @@ import { addDays, dateOnly, localDayStart, prettyDate, todayLocal, toDbDate } fr
 import { businessId, db } from "@/server/db";
 import { money } from "@/server/money";
 import { clientName, jobsWithStatus } from "@/server/queries";
+import { dayProgress } from "@/server/runner";
 import { personName, team } from "@/server/schedule";
 
 export const metadata = { title: "Home" };
@@ -29,6 +30,7 @@ export default async function Home({ searchParams }: PageProps<"/">) {
   const today = todayLocal();
   const monthStart = localDayStart(`${today.slice(0, 7)}-01`);
   const weekEnd = addDays(today, 7);
+  const progress = await dayProgress(bid, today);
   const [requests, quotes, jobs, invoices, unbilled, visitsToday, tasksToday, tasksOpen, toMatch, unread, paidThisMonth, weekVisits, people] = await Promise.all([
     db.request.findMany({ where: { businessId: bid, status: { in: ["NEW", "ASSESSMENT_SCHEDULED"] } }, select: { status: true, createdAt: true, assessmentAt: true } }),
     db.quote.findMany({ where: { businessId: bid, status: { in: ["DRAFT", "AWAITING_RESPONSE", "CHANGES_REQUESTED", "APPROVED"] } }, select: { status: true, totalCents: true } }),
@@ -137,6 +139,18 @@ export default async function Home({ searchParams }: PageProps<"/">) {
               <Link href="/?view=people" className={`rounded-md px-2.5 py-1 ${byPerson ? "bg-white shadow-sm" : "text-ink-soft"}`}>People</Link>
             </div>
           </div>
+          {progress.length > 0 && (
+            <div className="mb-3 space-y-1.5 rounded-lg bg-tint p-3">
+              {progress.map((p) => (
+                <div key={p.id} className="flex items-center gap-2 text-xs">
+                  <span className="w-24 truncate font-semibold">{p.name}</span>
+                  <span className="h-2 flex-1 overflow-hidden rounded-full bg-white"><span className="block h-full rounded-full" style={{ width: `${(p.done / p.total) * 100}%`, background: p.color ?? "#0f766e" }} /></span>
+                  <span className="w-10 text-right tabular-nums text-ink-soft">{p.done}/{p.total}</span>
+                </div>
+              ))}
+              <Link href="/run" className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-blue">Open my route <ArrowRight className="size-3" /></Link>
+            </div>
+          )}
           {groups.length ? groups.map((g) => (
             <div key={g.label} className="mb-3 last:mb-0">
               <h3 className="mb-1 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-ink-soft">{g.color && <span className="size-2 rounded-full" style={{ background: g.color }} />}{g.label} ({g.list.length})</h3>

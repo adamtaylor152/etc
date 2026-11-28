@@ -1,6 +1,7 @@
 // In-process 60s tick. No queue library: state lives in Postgres, so restarts lose nothing.
 // The outbox is already safe across containers (SKIP LOCKED). Automations added later (reminders, snow alerts)
 // run inside `exclusive()`, a transaction-scoped advisory lock, plus per-message dedupe keys.
+import { createStorm } from "./ops/storms";
 import { retryTextMedia } from "./ops/texts";
 import { sendReviewRequests } from "./ops/marketing";
 import { syncTelnyxCalls } from "./ops/calls";
@@ -135,6 +136,10 @@ async function snowAlert() {
   const hit = plansTriggered(plans, Math.floor(peak), season.defaultTriggerCm).length;
   if (!hit) return;
   const first = days.find((d) => d.cm >= 1)!.day;
+  // Storm prep: a FORECAST storm is waiting on the Snow page, so storm morning is one tap ("Start").
+  const open = await db.snowEvent.findFirst({ where: { businessId: biz.id, OR: [{ status: { in: ["FORECAST", "ACTIVE"] } }, { snowStartedAt: toDbDate(first) }] } });
+  const owner = open ? null : await db.user.findFirst({ where: { businessId: biz.id, active: true }, orderBy: { createdAt: "asc" } });
+  if (owner) await createStorm(owner, { forecastCm: Math.round(peak), day: first, notes: "Created automatically from the forecast." });
   for (const to of env.ownerEmails) {
     await enqueue(db, {
       businessId: biz.id, template: "owner.snow_alert", to, priority: 3, dedupeKey: `snow-alert:${first}:${to}`,
