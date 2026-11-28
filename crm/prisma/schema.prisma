@@ -352,6 +352,7 @@ model Client {
   smsOptIn         Boolean        @default(false) // client agreed to automatic text updates
   smsOptOutAt      DateTime? // client texted STOP: no texts at all until they text START
   emailBouncedAt   DateTime?
+  doNotService     Boolean        @default(false) // flagged: shows a warning wherever work is booked for them
   archivedAt       DateTime?
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
@@ -384,6 +385,9 @@ model Property {
   city          String        @default("Calgary")
   province      String        @default("AB")
   placeId       String?
+  steps         Int? // site facts the crew and quotes care about
+  sidewalkM     Int? // metres of sidewalk to clear
+  lawnSqM       Int? // lawn area, square metres
   lat           Float?
   lng           Float?
   geocodeSource GeocodeSource @default(NONE)

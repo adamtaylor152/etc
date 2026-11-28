@@ -38,6 +38,7 @@ export default async function RequestPage({ params, searchParams }: PageProps<"/
           </form>
         }
       />
+      {r.client.doNotService && <p role="alert" className="mb-5 rounded-lg border border-red-300 bg-red-50 p-3 text-sm font-semibold text-red-800">This client is marked “do not service”. Check their notes before quoting or booking.</p>}
       <div className="grid gap-5 lg:grid-cols-3">
         <div className="space-y-5 lg:col-span-2">
           <Card title="What they asked for">

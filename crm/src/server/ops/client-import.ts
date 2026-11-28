@@ -37,7 +37,7 @@ const toInput = (r: ReturnType<typeof mapClientRows>[number]): ClientInput => ({
   firstName: r["First name"] ?? "", lastName: r["Last name"] ?? "", companyName: r.Company,
   emails: r.Email ? [{ address: r.Email.toLowerCase(), label: "Main" }] : [], phones: r.Phone ? [{ number: r.Phone, label: "Mobile", sms: true }] : [],
   leadSource: r["Lead source"], tags: (r.Tags ?? "").split(/[,;]/).map((t) => t.trim().toLowerCase()).filter(Boolean).slice(0, 20), notes: r.Notes,
-  followUpQuotes: true, followUpInvoices: true, visitReminders: true, marketingOptOut: false, smsOptIn: false, contacts: [],
+  followUpQuotes: true, followUpInvoices: true, visitReminders: true, marketingOptOut: false, smsOptIn: false, doNotService: false, contacts: [],
   property: r.Address && r.Address.length >= 3 ? { formatted: r.Address } : undefined,
 });
 

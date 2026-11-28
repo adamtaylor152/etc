@@ -21,7 +21,7 @@ export default async function EditClient({ params, searchParams }: PageProps<"/c
   const initial: ClientFormValues = {
     title: c.title ?? "", firstName: c.firstName, lastName: c.lastName, companyName: c.companyName ?? "", phones, emails,
     leadSource: c.leadSource ?? "", tags: c.tags.join(", "), notes: c.notes ?? "", followUpQuotes: c.followUpQuotes, followUpInvoices: c.followUpInvoices,
-    visitReminders: c.visitReminders, marketingOptOut: c.marketingOptOut, smsOptIn: c.smsOptIn,
+    visitReminders: c.visitReminders, marketingOptOut: c.marketingOptOut, smsOptIn: c.smsOptIn, doNotService: c.doNotService,
     contacts: c.contacts.map((x) => ({ id: x.id, role: x.role ?? "", firstName: x.firstName, lastName: x.lastName, phone: x.phone ?? "", email: x.email ?? "", isBilling: x.isBilling, receivesTexts: x.receivesTexts })),
   };
   return (
