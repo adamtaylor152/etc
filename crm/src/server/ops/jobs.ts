@@ -2,12 +2,14 @@
 import { defaultChecklistFor } from "./checklists";
 import { addDays, todayLocal, toDbDate } from "../dates";
 import { recurrenceDates, toRRule, type Repeat } from "../recurrence";
-import { db } from "../db";
+import { db, type Tx } from "../db";
 import { logActivity, nextNumber } from "../records";
 import { seasonFor } from "../booking/create";
+import { jobEditLocks } from "../status/job";
+import { TransitionError } from "../status/visit";
 
 type Actor = { id: string; businessId: string };
-export type LineInput = { name: string; unitPriceCents: number; quantity: number };
+export type LineInput = { name: string; description?: string; unitPriceCents: number; quantity: number };
 
 export async function createOneOffJob(user: Actor, input: {
   clientId: string; propertyId: string; title: string; instructions?: string; lines: LineInput[]; date: string | null;
@@ -89,6 +91,68 @@ export async function setJobClosed(user: Actor, jobId: string, closed: boolean, 
     }
     await tx.job.update({ where: { id: jobId }, data: closed ? { closedAt: new Date(), closeReason: reason || null } : { closedAt: null, closeReason: null } });
     await logActivity(tx, { businessId: user.businessId, type: closed ? "job.closed" : "job.reopened", entityType: "Job", entityId: jobId, actorType: "USER", actorUserId: user.id, clientId: job.clientId, jobId });
+  });
+}
+
+/** Facts for `jobEditLocks`. Voiding an invoice unlinks its charges, so only live invoices count. */
+export async function jobEditFacts(tx: Tx | typeof db, job: { id: string; businessId: string }) {
+  const [invoices, charges] = await Promise.all([
+    tx.invoice.count({ where: { businessId: job.businessId, status: { not: "VOID" }, OR: [{ jobId: job.id }, { lineItems: { some: { OR: [{ jobId: job.id }, { visit: { jobId: job.id } }] } } }] } }),
+    tx.visitCharge.count({ where: { visit: { jobId: job.id } } }),
+  ]);
+  return { invoiced: invoices > 0, hasCharges: charges > 0 };
+}
+
+/** Edit a job after creation. Title and instructions always; property, line items and billing type only where
+ *  `jobEditLocks` allows. Existing charges and invoices are never touched: new prices apply to visits done from now on. */
+export async function updateJob(user: Actor, jobId: string, input: {
+  title: string; instructions?: string; propertyId?: string; lines?: LineInput[]; billingType?: "PER_VISIT" | "FIXED_PRICE";
+}) {
+  await db.$transaction(async (tx) => {
+    const job = await tx.job.findFirstOrThrow({ where: { id: jobId, businessId: user.businessId }, include: { lineItems: { orderBy: { sortOrder: "asc" } } } });
+    const locks = jobEditLocks({ ...job, ...(await jobEditFacts(tx, job)) });
+    const changed: string[] = [];
+    const data: Parameters<typeof tx.job.update>[0]["data"] = {};
+    if (input.title !== job.title) { data.title = input.title; changed.push("title"); }
+    if ((input.instructions || null) !== job.instructions) { data.instructions = input.instructions || null; changed.push("instructions"); }
+
+    if (input.propertyId && input.propertyId !== job.propertyId) {
+      if (locks.property) throw new TransitionError(locks.property);
+      const prop = await tx.property.findFirst({ where: { id: input.propertyId, clientId: job.clientId, businessId: user.businessId } });
+      if (!prop) throw new TransitionError("Pick one of this client's properties");
+      data.property = { connect: { id: prop.id } };
+      // Visits still to do follow the job; done, skipped, cancelled or already-arrived ones stay where they happened.
+      await tx.visit.updateMany({ where: { jobId, state: { in: ["SCHEDULED", "EN_ROUTE"] } }, data: { propertyId: prop.id, routeSort: prop.routeSort } });
+      changed.push("property");
+    }
+
+    const billingType = input.billingType ?? job.billingType;
+    if (billingType !== job.billingType) {
+      if (locks.billing) throw new TransitionError(locks.billing);
+      Object.assign(data, { billingType, invoiceSchedule: billingType === "PER_VISIT" ? "AFTER_EACH_VISIT" : "ON_COMPLETION" });
+      changed.push("billing");
+    }
+    const current: LineInput[] = job.lineItems.map((l) => ({ name: l.name, description: l.description ?? undefined, quantity: Number(l.quantity), unitPriceCents: l.unitPriceCents }));
+    const key = (ls: LineInput[]) => JSON.stringify(ls.map((l) => [l.name, l.description || "", l.quantity, l.unitPriceCents]));
+    const linesChanged = !!input.lines && key(input.lines) !== key(current);
+    if (linesChanged) {
+      if (locks.lines) throw new TransitionError(locks.lines);
+      if (!input.lines!.length) throw new TransitionError("Add at least one line item");
+      changed.push("lines");
+    }
+    if (linesChanged || billingType !== job.billingType) {
+      // Same shape as createOneOffJob: every line follows the billing type, and a fixed price is the sum of its lines.
+      const rows = (linesChanged ? input.lines! : current).map((l, i) => ({
+        jobId, name: l.name, description: l.description || null, quantity: l.quantity, unitPriceCents: l.unitPriceCents,
+        totalCents: Math.round(l.quantity * l.unitPriceCents), sortOrder: i, perVisit: billingType === "PER_VISIT",
+      }));
+      await tx.jobLineItem.deleteMany({ where: { jobId } });
+      await tx.jobLineItem.createMany({ data: rows });
+      data.totalCents = billingType === "FIXED_PRICE" ? rows.reduce((a, l) => a + l.totalCents, 0) : null;
+    }
+    if (!changed.length) return;
+    await tx.job.update({ where: { id: jobId }, data });
+    await logActivity(tx, { businessId: user.businessId, type: "job.updated", entityType: "Job", entityId: jobId, actorType: "USER", actorUserId: user.id, clientId: job.clientId, jobId, data: { changed } });
   });
 }
 

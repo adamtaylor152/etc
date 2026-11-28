@@ -4,8 +4,9 @@ import { hm, jobProfit } from "@/server/ops/costing";
 import { team } from "@/server/schedule";
 // Reports: money in by month, what sells, where the work is, storms, quotes, tuition.
 // Single-series horizontal bars (one hue), every row labelled with its value; hover shows the exact figure.
-import { Card, PageHeader } from "@/components/ui";
-import { TZ, todayLocal, toDbDate } from "@/server/dates";
+import { Button, Card, Input, PageHeader } from "@/components/ui";
+import { instants, parseRange, PRESETS, REPORTS } from "@/server/reports";
+import { prettyDate, TZ, todayLocal, toDbDate } from "@/server/dates";
 import { businessId, db } from "@/server/db";
 import { money } from "@/server/money";
 
@@ -33,11 +34,12 @@ function daysAgo(n: number) { return new Date(Date.now() - n * 86_400_000); }
 const monthKey = (d: Date) => d.toLocaleDateString("en-CA", { timeZone: TZ, year: "numeric", month: "2-digit" }).slice(0, 7);
 const monthLabel = (k: string) => new Date(`${k}-15T12:00:00Z`).toLocaleDateString("en-CA", { month: "short", year: "2-digit", timeZone: "UTC" });
 
-export default async function Reports() {
+export default async function Reports({ searchParams }: PageProps<"/reports">) {
   await requireOwner();
+  const r = parseRange(await searchParams, todayLocal(), "12m");
+  const when = instants(r);
   const bid = await businessId();
   const today = todayLocal();
-  const yearAgo = daysAgo(365);
   const since30 = daysAgo(30), since90 = daysAgo(90);
   const [timeRows, people, costedJobs] = await Promise.all([
     db.timeEntry.groupBy({ by: ["userId"], where: { businessId: bid, startedAt: { gte: since30 }, endedAt: { not: null } }, _sum: { minutes: true } }),
@@ -50,16 +52,17 @@ export default async function Reports() {
   const hours = people.map((p) => ({ ...p, minutes: timeRows.find((r) => r.userId === p.id)?._sum.minutes ?? 0 })).filter((h) => h.minutes > 0);
   const profits = (await Promise.all(costedJobs.map(async (j) => ({ ...j, ...(await jobProfit(bid, j.id)) })))).sort((a, b) => b.profitCents - a.profitCents);
   const [payments, lines, season, quotes, visitsDone] = await Promise.all([
-    db.payment.findMany({ where: { businessId: bid, receivedAt: { gte: yearAgo } }, include: { invoice: { select: { propertyId: true } } } }),
-    db.invoiceLineItem.findMany({ where: { invoice: { businessId: bid, status: { in: ["PAID", "AWAITING_PAYMENT"] }, issuedOn: { gte: yearAgo } } }, select: { name: true, totalCents: true } }),
+    db.payment.findMany({ where: { businessId: bid, receivedAt: when }, include: { invoice: { select: { propertyId: true } } } }),
+    db.invoiceLineItem.findMany({ where: { invoice: { businessId: bid, status: { in: ["PAID", "AWAITING_PAYMENT"] }, issuedOn: { gte: toDbDate(r.from), lte: toDbDate(r.to) } } }, select: { name: true, totalCents: true } }),
     db.season.findFirst({ where: { businessId: bid, startsOn: { lte: toDbDate(today) }, endsOn: { gte: toDbDate(today) } }, include: { events: { include: { visits: { select: { state: true } }, invoices: { select: { totalCents: true, status: true } } } } } }),
-    db.quote.groupBy({ by: ["status"], where: { businessId: bid, sentAt: { not: null } }, _count: true }),
-    db.visit.count({ where: { businessId: bid, state: "COMPLETED", completedAt: { gte: yearAgo } } }),
+    db.quote.groupBy({ by: ["status"], where: { businessId: bid, sentAt: when }, _count: true }),
+    db.visit.count({ where: { businessId: bid, state: "COMPLETED", completedAt: when } }),
   ]);
 
   // Money in by month (last 12).
   const byMonth = new Map<string, number>();
-  for (let i = 11; i >= 0; i--) { const d = new Date(); d.setUTCDate(15); d.setUTCMonth(d.getUTCMonth() - i); byMonth.set(monthKey(d), 0); }
+  // Every month the range touches (at most 36), so empty months still show.
+  for (let k = r.from.slice(0, 7), n = 0; k <= r.to.slice(0, 7) && n < 36; n++) { byMonth.set(k, 0); const [y, m] = k.split("-").map(Number); k = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, "0")}`; }
   for (const p of payments) { const k = monthKey(p.receivedAt); if (byMonth.has(k)) byMonth.set(k, byMonth.get(k)! + p.amountCents - p.refundedCents); }
   const total = [...byMonth.values()].reduce((a, b) => a + b, 0);
 
@@ -80,9 +83,18 @@ export default async function Reports() {
 
   return (
     <>
-      <PageHeader title="Reports" sub="Last 12 months unless noted. Card fees aren't subtracted." />
+      <PageHeader title="Reports" sub={`${prettyDate(r.from)} to ${prettyDate(r.to)} unless noted. Card fees aren't subtracted.`} />
+      <form className="no-print mb-4 flex flex-wrap items-end gap-2 text-sm">
+        {Object.entries(PRESETS).map(([k, label]) => <Link key={k} href={`/reports?range=${k}`} className={`rounded-full border px-3 py-1.5 font-semibold ${r.preset === k ? "border-navy bg-navy text-white" : "border-line bg-white"}`}>{label}</Link>)}
+        <label className="ml-2">From<Input type="date" name="from" defaultValue={r.from} /></label>
+        <label>To<Input type="date" name="to" defaultValue={r.to} /></label>
+        <Button variant="secondary">Show</Button>
+      </form>
+      <div className="no-print mb-5 flex flex-wrap gap-2">
+        {Object.entries(REPORTS).map(([k, d]) => <Link key={k} href={`/reports/${k}${d.ranged ? `?from=${r.from}&to=${r.to}` : ""}`} title={d.sub} className="rounded-lg border border-line bg-white px-3 py-2 text-sm font-semibold text-blue hover:bg-tint">{d.title}</Link>)}
+      </div>
       <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {[["Money in (12 mo)", money(total)], ["Visits done (12 mo)", String(visitsDone)], ["Quotes approved", sent ? `${Math.round((100 * won) / sent)}%` : "–"], ["Storms this season", String(storms.length)]].map(([l, v]) => (
+        {[["Money in", money(total)], ["Visits done", String(visitsDone)], ["Quotes approved", sent ? `${Math.round((100 * won) / sent)}%` : "–"], ["Storms this season", String(storms.length)]].map(([l, v]) => (
           <div key={l} className="rounded-2xl border border-line bg-white p-4"><div className="font-display text-3xl font-bold">{v}</div><div className="text-sm text-ink-soft">{l}</div></div>
         ))}
       </div>

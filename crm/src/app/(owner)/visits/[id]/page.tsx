@@ -13,7 +13,9 @@ import { Gallery } from "@/components/gallery";
 import { GeoFields } from "@/components/geo-fields";
 import { PhotoUploader } from "@/components/photo-uploader";
 import { VisitBadge } from "@/components/status";
-import { Button, Card, Dl, inputCls } from "@/components/ui";
+import { Button, Card, Dl, btn, inputCls } from "@/components/ui";
+import { ConfirmButton } from "@/components/confirm-button";
+import { canTransition } from "@/server/status/visit";
 import { dateOnly, prettyDate, prettyDateTime, todayLocal } from "@/server/dates";
 import { businessId, db } from "@/server/db";
 import { money } from "@/server/money";
@@ -145,6 +147,11 @@ export default async function VisitPage({ params, searchParams }: PageProps<"/vi
               <Button variant="danger" className="w-full">Skip this visit</Button>
             </form>
           </details>
+          {canTransition(v.state, "CANCELLED") && (
+            <form action={visitTransition}>{hidden("CANCELLED")}
+              <ConfirmButton message="Cancel this visit? It comes off the schedule and nothing is sent to the client. You can un-cancel it later." className={btn("secondary", "w-full text-red-700")}>Cancel visit</ConfirmButton>
+            </form>
+          )}
         </div>
       ) : (
         <Card title={v.state === "COMPLETED" ? "Done" : v.state === "SKIPPED" ? "Skipped" : "Cancelled"}>
@@ -170,7 +177,7 @@ export default async function VisitPage({ params, searchParams }: PageProps<"/vi
           )}
           {invoice && owing <= 0 && <p className="mt-3 text-sm font-semibold text-emerald-700">Invoice #{invoice.number} paid ✓</p>}
           {!invoice?.id && v.charges.some((c) => c.invoiceLineItemId) && <p className="mt-3 text-sm text-ink-soft">Invoiced.</p>}
-          {!v.charges.some((c) => c.invoiceLineItemId) && <form action={visitTransition} className="mt-3">{hidden("SCHEDULED")}<Button variant="secondary">Reopen</Button></form>}
+          {!v.charges.some((c) => c.invoiceLineItemId) && <form action={visitTransition} className="mt-3">{hidden("SCHEDULED")}<Button variant="secondary">{v.state === "CANCELLED" ? "Un-cancel" : "Reopen"}</Button></form>}
         </Card>
       )}
 

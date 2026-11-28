@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeJobStatus, visitStatus, type JobLike, type VisitLike } from "@/server/status/job";
+import { computeJobStatus, jobEditLocks, visitStatus, type JobEditFacts, type JobLike, type VisitLike } from "@/server/status/job";
 
 const T = "2026-12-04";
 const job = (p: Partial<JobLike> = {}): JobLike => ({
@@ -37,4 +37,20 @@ describe("computeJobStatus", () => {
     ["as-needed with nothing pending", job({ asNeeded: true, kind: "RECURRING" }), [], "ACTION_REQUIRED"],
     ["all done, nothing to bill", job(), [v("COMPLETED", "2026-12-01")], "ACTION_REQUIRED"],
   ])("%s", (_, j, visits, want) => expect(computeJobStatus(j, visits, T)).toBe(want));
+});
+
+describe("jobEditLocks", () => {
+  const facts = (p: Partial<JobEditFacts> = {}): JobEditFacts => ({ kind: "ONE_OFF", closedAt: null, sizeHoldAt: null, billingType: "PER_VISIT", invoiced: false, hasCharges: false, ...p });
+  const locked = (p: Partial<JobEditFacts>) => Object.entries(jobEditLocks(facts(p))).filter(([, why]) => why).map(([k]) => k);
+  it.each<[string, Partial<JobEditFacts>, string[]]>([
+    ["fresh one-off: everything editable", {}, []],
+    ["per-visit with done visits: prices still editable (charges are copies), billing type is not", { hasCharges: true }, ["billing"]],
+    ["per-visit already invoiced: same", { hasCharges: true, invoiced: true }, ["billing"]],
+    ["fixed price, not invoiced", { billingType: "FIXED_PRICE" }, []],
+    ["fixed price invoiced: the money is locked", { billingType: "FIXED_PRICE", invoiced: true }, ["lines", "billing"]],
+    ["recurring: lines yes, billing never", { kind: "RECURRING" }, ["billing"]],
+    ["snow plan: only title and instructions", { kind: "SNOW_PLAN" }, ["lines", "billing", "property"]],
+    ["closed job", { closedAt: new Date() }, ["lines", "billing", "property"]],
+    ["driveway price waiting on the client", { sizeHoldAt: new Date() }, ["lines", "billing"]],
+  ])("%s", (_, p, want) => expect(locked(p)).toEqual(want));
 });

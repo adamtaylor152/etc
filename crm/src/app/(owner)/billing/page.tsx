@@ -1,4 +1,4 @@
-// Billing run: everything done but not yet invoiced -> drafts -> review -> send all.
+// Billing run: everything done but not yet invoiced -> drafts -> review -> send the ticked ones.
 import { requireOwner } from "@/server/auth";
 import Link from "next/link";
 import { Flash } from "@/components/flash";
@@ -7,7 +7,7 @@ import { dateOnly, prettyDate } from "@/server/dates";
 import { businessId, db } from "@/server/db";
 import { money } from "@/server/money";
 import { clientName } from "@/server/queries";
-import { invoiceCreate, runBilling, sendAllDrafts } from "../billing-actions";
+import { invoiceCreate, runBilling, sendDrafts } from "../billing-actions";
 
 export const metadata = { title: "Billing" };
 
@@ -68,13 +68,20 @@ export default async function Billing({ searchParams }: PageProps<"/billing">) {
             </div>
           )}
         </Card>
-        <Card title={`Drafts (${drafts.length})`} actions={drafts.length > 0 && <form action={sendAllDrafts}><Button>Send all</Button></form>}>
+        <Card title={`Drafts (${drafts.length})`} actions={drafts.length > 0 && <Button form="send-drafts">Send ticked</Button>}>
           {drafts.length ? (
-            <ul className="divide-y divide-line">
-              {drafts.map((d) => (
-                <li key={d.id}><Link href={`/invoices/${d.id}`} className="flex justify-between gap-2 py-2.5"><span><span className="font-semibold">#{d.number} {clientName(d.client)}</span><span className="block text-sm text-ink-soft">{d.subject}</span></span><span className="font-semibold">{money(d.totalCents)}</span></Link></li>
-              ))}
-            </ul>
+            <form id="send-drafts" action={sendDrafts}>
+              <input type="hidden" name="back" value="/billing" />
+              <ul className="divide-y divide-line">
+                {drafts.map((d) => (
+                  <li key={d.id} className="flex items-center gap-3">
+                    <input type="checkbox" name="id" value={d.id} defaultChecked aria-label={`Send invoice #${d.number}`} className="size-5 shrink-0 accent-blue" />
+                    <Link href={`/invoices/${d.id}`} className="flex flex-1 justify-between gap-2 py-2.5"><span><span className="font-semibold">#{d.number} {clientName(d.client)}</span><span className="block text-sm text-ink-soft">{d.subject}</span></span><span className="font-semibold">{money(d.totalCents)}</span></Link>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-2 text-xs text-ink-soft">Untick any you want to hold back. Open a draft to edit it first.</p>
+            </form>
           ) : <Empty>No drafts.</Empty>}
         </Card>
       </div>
