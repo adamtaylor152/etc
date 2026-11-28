@@ -8,7 +8,7 @@ import { addDays, prettyDate, todayLocal, toDbDate } from "@/server/dates";
 import { business, businessId, db } from "@/server/db";
 import { clientName } from "@/server/queries";
 import { mapsLink, routeVisits } from "@/server/routing";
-import { routeAutoOrder, routeMove } from "../route-actions";
+import { routeAutoOrder, routeMove, routeSplit } from "../route-actions";
 
 export const metadata = { title: "Route" };
 
@@ -30,6 +30,7 @@ export default async function Routes({ searchParams }: PageProps<"/routes">) {
     id: v.id, n: stopNo.get(v.id)!, lat: v.property.lat!, lng: v.property.lng!, label: v.property.formatted, done: v.state === "COMPLETED",
   }));
   // One tap opens Google Maps with the next stops in order (phones handle ~3 waypoints reliably).
+  const team = await db.user.findMany({ where: { businessId: bid, active: true }, select: { id: true, name: true, email: true }, orderBy: { createdAt: "asc" } });
   const next = visits.filter((v) => v.state !== "COMPLETED").slice(0, 4).map((v) => v.property.formatted);
   const multi = next.length > 1
     ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(next.at(-1)!)}&waypoints=${encodeURIComponent(next.slice(0, -1).join("|"))}`
@@ -50,6 +51,17 @@ export default async function Routes({ searchParams }: PageProps<"/routes">) {
           <a href="javascript:print()" className="rounded-full bg-navy px-4 py-2 text-sm font-semibold text-white">Print</a>
         </div>}
       />
+      {visits.length > 1 && team.length > 1 && (
+        <details className="no-print mb-4 rounded-lg border border-line bg-white p-3 text-sm shadow-card">
+          <summary className="cursor-pointer font-semibold">Split this route between people</summary>
+          <form action={routeSplit} className="mt-2 flex flex-wrap items-center gap-3">
+            <input type="hidden" name="back" value={here} />{storm ? <input type="hidden" name="storm" value={storm.id} /> : <input type="hidden" name="date" value={day} />}
+            {team.map((u) => <label key={u.id} className="flex items-center gap-1.5"><input type="checkbox" name="userId" value={u.id} defaultChecked className="size-4" />{u.name || u.email.split("@")[0]}</label>)}
+            <Button variant="secondary">Split</Button>
+            <span className="text-xs text-ink-soft">Keeps each community together and evens out the stop counts. Replaces who&apos;s assigned to open stops.</span>
+          </form>
+        </details>
+      )}
       {stops.length > 0 && (
         <div className="no-print mb-4">
           <RouteMap stops={stops} areas={areas.map((a) => ({ code: a.code, name: a.name, geometry: a.geometry as unknown as GeoJsonObject }))} depot={{ lat: biz.depotLat ?? 50.913, lng: biz.depotLng ?? -114.117 }} />

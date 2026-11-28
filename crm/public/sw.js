@@ -2,8 +2,8 @@
 // mid-storm. Network first (always fresh when online); falls back to the last copy. Only GET pages are
 // cached; actions (marking done, uploads) still need a connection.
 // ponytail: no offline write queue; add one (IndexedDB + replay) if crews regularly work without signal.
-const CACHE = "etc-pages-v1";
-const OFFLINE_PATHS = [/^\/$/, /^\/routes/, /^\/visits\//, /^\/snow/, /^\/schedule/];
+const CACHE = "etc-pages-v2";
+const OFFLINE_PATHS = [/^\/$/, /^\/run/, /^\/routes/, /^\/visits\//, /^\/snow/, /^\/schedule/];
 
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (e) => e.waitUntil(self.clients.claim()));
