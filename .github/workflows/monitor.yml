@@ -1,0 +1,21 @@
+# Outside uptime monitor: runs the production smoke test every 10 minutes from GitHub's servers (off the Unraid box).
+# A failed run makes GitHub email (and push, if the GitHub app is installed) the repo owner: that's the alert.
+# Retries once after a minute so one blip doesn't page anyone. GitHub pauses schedules after 60 days without commits;
+# re-enable it in the Actions tab if that ever happens.
+name: Monitor
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+concurrency: { group: monitor, cancel-in-progress: false }
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with: { sparse-checkout: crm/scripts/smoke.sh, sparse-checkout-cone-mode: false }
+      - name: Smoke test production
+        run: crm/scripts/smoke.sh || { sleep 60; crm/scripts/smoke.sh; }
