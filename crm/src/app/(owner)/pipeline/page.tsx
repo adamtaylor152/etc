@@ -18,6 +18,12 @@ type Card = { key: string; href: string; kind: string; title: string; client: st
 /** Server-side "now" maths kept out of the component body. */
 function daysAgo(n: number) { return new Date(Date.now() - n * 86_400_000); }
 
+/** A request's estimate is free text ("$35", "$35 / snowfall", "Quote"). A bare amount is shown like every other amount here ("$35.00"); anything else is left as written. Pure. */
+function estimate(text: string | null) {
+  const m = text && /^\$\s?(\d[\d,]*)(?:\.(\d{1,2}))?$/.exec(text.trim());
+  return m ? cad(Number(m[1].replace(/,/g, "")) * 100 + Number((m[2] ?? "").padEnd(2, "0"))) : text;
+}
+
 export default async function Pipeline() {
   const user = await requireOwner();
   const recent = daysAgo(30); // closed cards (won / lost) drop off after 30 days
@@ -34,7 +40,7 @@ export default async function Pipeline() {
   const cols = new Map<Stage, Card[]>(STAGES.map(([k]) => [k, []]));
   for (const r of requests) {
     const stage = requestStage({ status: r.status, quotes: r._count.quotes, jobs: r._count.jobs });
-    if (stage) cols.get(stage)!.push({ key: r.id, href: `/requests/${r.id}`, kind: `Request #${r.number}`, title: r.title, client: clientName(r.client), cents: null, since: r.archivedAt ?? r.convertedAt ?? r.assessmentAt ?? r.createdAt, note: stage === "lost" ? r.lostReason : r.estimateText });
+    if (stage) cols.get(stage)!.push({ key: r.id, href: `/requests/${r.id}`, kind: `Request #${r.number}`, title: r.title, client: clientName(r.client), cents: null, since: r.archivedAt ?? r.convertedAt ?? r.assessmentAt ?? r.createdAt, note: stage === "lost" ? r.lostReason : estimate(r.estimateText) });
   }
   for (const q of quotes) {
     cols.get(quoteStage(q.status))!.push({ key: q.id, href: `/quotes/${q.id}`, kind: `Quote #${q.number}`, title: q.title ?? "Quote", client: clientName(q.client), cents: q.totalCents, since: q.declinedAt ?? q.archivedAt ?? q.approvedAt ?? q.changesRequestedAt ?? q.lastSentAt ?? q.sentAt ?? q.createdAt, note: q.status === "DECLINED" ? q.declineReason : null });

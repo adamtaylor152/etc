@@ -5,7 +5,8 @@ import { useState, type ReactNode } from "react";
 import { ArrowDown, ArrowUp, GripVertical } from "lucide-react";
 import { btn } from "./ui";
 
-const step = "grid size-8 place-items-center rounded-lg hover:bg-tint hover:text-navy disabled:opacity-25 disabled:hover:bg-transparent max-sm:size-11";
+// The same bordered arrow buttons as the price book's reorder controls; a full 44px on a phone.
+const step = "grid size-8 place-items-center rounded-md border border-line bg-white text-ink-soft hover:border-ink-faint/60 hover:bg-tint hover:text-navy disabled:border-line-soft disabled:bg-transparent disabled:text-ink-faint/50 max-sm:size-11";
 const ico = { className: "size-4", strokeWidth: 1.75, "aria-hidden": true } as const;
 
 export function ReorderList({ items, action, hidden = {}, saves }: {
@@ -27,9 +28,9 @@ export function ReorderList({ items, action, hidden = {}, saves }: {
     <>
       <ol className="divide-y divide-line">
         {order.map((id, i) => (
-          <li key={id} className={`flex items-start gap-1 ${drag === id ? "opacity-40" : ""}`}
+          <li key={id} className={`flex items-center gap-1 ${drag === id ? "opacity-40" : ""}`}
             onDragOver={(e) => { if (!drag) return; e.preventDefault(); if (drag !== id) move(drag, i); }} onDrop={(e) => e.preventDefault()}>
-            {items.length > 1 && <span className="no-print flex shrink-0 items-center pt-0.5 text-ink-soft">
+            {items.length > 1 && <span className="no-print flex shrink-0 items-center gap-1 py-1.5 pr-1 text-ink-soft">
               {/* Dragging is a mouse thing: on phones the two arrows are the whole control. */}
               <span draggable title="Drag to reorder" aria-hidden className="hidden h-8 cursor-grab select-none place-items-center px-1 text-ink-faint hover:text-navy active:cursor-grabbing sm:grid"
                 onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", id); const li = e.currentTarget.closest("li"); if (li) e.dataTransfer.setDragImage(li, 12, 12); setDrag(id); }}

@@ -35,7 +35,7 @@ function WorkCard({ title, icon, color, href, lead, rows }: { title: string; ico
       <ul className="mt-auto divide-y divide-line-soft border-t border-line-soft text-sm">
         {rows.map((r) => (
           <li key={r.label}>
-            <Link href={r.href} className="flex min-h-10 items-center justify-between gap-3 px-4 py-1.5 hover:bg-tint">
+            <Link href={r.href} className="flex min-h-10 items-center justify-between gap-3 px-4 py-1.5 hover:bg-tint max-sm:min-h-11">
               <span className="min-w-0 truncate text-ink-soft">{r.label}{n(r.count)}</span>
               <span className="shrink-0 text-right font-semibold tabular-nums">{r.value}</span>
             </Link>
@@ -124,7 +124,7 @@ export default async function Home({ searchParams }: PageProps<"/">) {
   const hour = Number(new Date().toLocaleString("en-CA", { timeZone: "America/Edmonton", hour: "numeric", hourCycle: "h23" }));
   const pct = appts.length ? Math.round((100 * done) / appts.length) : 0;
   const owingCents = owing.reduce((n, i) => n + i.totalCents - i.amountPaidCents, 0);
-  const seg = "inline-flex min-h-9 items-center rounded-md px-3 text-sm font-semibold";
+  const seg = "inline-flex min-h-9 items-center rounded-md px-3 text-sm font-semibold max-sm:min-h-11";
 
   return (
     <>
@@ -261,7 +261,7 @@ export default async function Home({ searchParams }: PageProps<"/">) {
                   <ul>
                     {topOwing.map((o) => (
                       <li key={o.id}>
-                        <Link href={`/clients/${o.id}`} className="-mx-2 flex min-h-9 items-center justify-between gap-3 rounded-lg px-2 hover:bg-tint">
+                        <Link href={`/clients/${o.id}`} className="-mx-2 flex min-h-9 items-center justify-between gap-3 rounded-lg px-2 hover:bg-tint max-sm:min-h-11">
                           <span className="flex min-w-0 items-baseline gap-1.5"><span className="truncate">{o.name}</span>{o.late && <span className="shrink-0 text-xs font-medium text-red-700">past due</span>}</span>
                           <span className="shrink-0 font-semibold tabular-nums">{cad(o.cents)}</span>
                         </Link>

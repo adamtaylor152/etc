@@ -2,7 +2,7 @@
 import { Paperclip, Trash2 } from "lucide-react";
 import { expenseAdd, expenseDelete, timeAdd, timeDelete } from "@/app/(owner)/costing-actions";
 import { dateOnly, prettyDate, todayLocal } from "@/server/dates";
-import { money } from "@/server/money";
+import { cad } from "@/server/money";
 import { EXPENSE_CATEGORIES, hm, jobProfit } from "@/server/ops/costing";
 import { personName, type Person } from "@/server/schedule";
 import { ConfirmButton } from "./confirm-button";
@@ -12,18 +12,18 @@ export async function JobCosting({ businessId, jobId, people, back }: { business
   const p = await jobProfit(businessId, jobId);
   const pct = (c: number) => (p.revenueCents > 0 ? Math.max(0, Math.min(100, (c / p.revenueCents) * 100)) : 0);
   const inp = `${inputCls} w-auto!`;
-  const del = "inline-flex size-9 shrink-0 items-center justify-center rounded-lg text-ink-soft hover:bg-red-50 hover:text-red-700";
+  const del = "inline-flex size-9 max-sm:size-11 shrink-0 items-center justify-center rounded-lg text-ink-soft hover:bg-red-50 hover:text-red-700";
   const legend = (dot: string, label: string) => <span className="flex items-center gap-1.5"><span className={`size-2 rounded-full ${dot}`} aria-hidden />{label}</span>;
   return (
-    <Card title="Profit" actions={<p className="text-sm tabular-nums"><span className={`font-display text-xl font-semibold ${p.profitCents < 0 ? "text-red-700" : "text-emerald-700"}`}>{money(p.profitCents)}</span>{p.marginPct != null && <span className="ml-1.5 text-ink-soft">{p.marginPct}% margin</span>}</p>}>
+    <Card title="Profit" actions={<p className="text-sm tabular-nums"><span className={`font-display text-xl font-semibold ${p.profitCents < 0 ? "text-red-700" : "text-emerald-700"}`}>{cad(p.profitCents)}</span>{p.marginPct != null && <span className="ml-1.5 text-ink-soft">{p.marginPct}% margin</span>}</p>}>
       <div className="mb-3 flex h-2 overflow-hidden rounded-full bg-tint" aria-hidden>
         <span className="bg-amber-500" style={{ width: `${pct(p.labourCents)}%` }} /><span className="bg-red-500" style={{ width: `${pct(p.expenseCents)}%` }} /><span className="bg-emerald-600" style={{ width: `${pct(Math.max(0, p.profitCents))}%` }} />
       </div>
       <dl className="mb-5 grid grid-cols-2 gap-x-3 gap-y-3 text-xs sm:grid-cols-4">
-        <div><dt className="font-medium text-ink-soft">Revenue</dt><dd className="mt-0.5 text-sm font-semibold tabular-nums">{money(p.revenueCents)}</dd></div>
-        <div><dt className="font-medium text-ink-soft">{legend("bg-amber-500", `Labour · ${hm(p.minutes)}`)}</dt><dd className="mt-0.5 text-sm font-semibold tabular-nums">{money(p.labourCents)}</dd></div>
-        <div><dt className="font-medium text-ink-soft">{legend("bg-red-500", "Expenses")}</dt><dd className="mt-0.5 text-sm font-semibold tabular-nums">{money(p.expenseCents)}</dd></div>
-        <div><dt className="font-medium text-ink-soft">{legend("bg-emerald-600", "Profit")}</dt><dd className="mt-0.5 text-sm font-semibold tabular-nums">{money(p.profitCents)}</dd></div>
+        <div><dt className="font-medium text-ink-soft">Revenue</dt><dd className="mt-0.5 text-sm font-semibold tabular-nums">{cad(p.revenueCents)}</dd></div>
+        <div><dt className="font-medium text-ink-soft">{legend("bg-amber-500", `Labour · ${hm(p.minutes)}`)}</dt><dd className="mt-0.5 text-sm font-semibold tabular-nums">{cad(p.labourCents)}</dd></div>
+        <div><dt className="font-medium text-ink-soft">{legend("bg-red-500", "Expenses")}</dt><dd className="mt-0.5 text-sm font-semibold tabular-nums">{cad(p.expenseCents)}</dd></div>
+        <div><dt className="font-medium text-ink-soft">{legend("bg-emerald-600", "Profit")}</dt><dd className="mt-0.5 text-sm font-semibold tabular-nums">{cad(p.profitCents)}</dd></div>
       </dl>
       <div className="grid gap-x-8 gap-y-6 border-t border-line-soft pt-4 md:grid-cols-2">
         <div>
@@ -53,7 +53,7 @@ export async function JobCosting({ businessId, jobId, people, back }: { business
               <li key={e.id} className="flex items-center gap-2 py-1.5">
                 <span className="min-w-0 flex-1"><span className="font-semibold">{e.description}</span> <span className="text-ink-soft">{e.category} · {prettyDate(dateOnly(e.date))}</span>
                   {e.attachmentId && <a href={`/api/media/${e.attachmentId}/lg`} target="_blank" rel="noreferrer" className="ml-1.5 inline-flex items-center gap-0.5 font-semibold text-blue hover:text-blue-deep"><Paperclip className="size-3.5" aria-hidden />Receipt</a>}</span>
-                <span className="tabular-nums">{money(e.amountCents)}</span>
+                <span className="tabular-nums">{cad(e.amountCents)}</span>
                 <form action={expenseDelete}><input type="hidden" name="id" value={e.id} /><input type="hidden" name="back" value={back} /><ConfirmButton message="Delete this expense?" aria-label="Delete expense" title="Delete expense" className={del}><Trash2 className="size-4" aria-hidden /></ConfirmButton></form>
               </li>
             ))}

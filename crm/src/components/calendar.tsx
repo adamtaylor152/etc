@@ -26,10 +26,16 @@ const KIND_LABEL: Record<Kind, string> = { visit: "Visits", task: "Tasks", event
 type Pop = { x: number; y: number } & ({ type: "slot"; date: string; time?: string } | { type: "item"; item: CalItem });
 
 const small = "min-h-9 px-3 text-[13px]";
-const selCls = "min-h-9 rounded-lg border border-line bg-white px-2.5 py-1 text-base outline-none hover:border-ink-faint/60 focus:border-blue focus:ring-2 focus:ring-blue/20 sm:text-[13px]";
+const selCls = "min-h-9 max-sm:min-h-11 rounded-lg border border-line bg-white px-2.5 py-1 text-base outline-none hover:border-ink-faint/60 focus:border-blue focus:ring-2 focus:ring-blue/20 sm:text-[13px]";
 const menuRow = "flex min-h-10 items-center gap-2.5 rounded-lg px-2 font-medium hover:bg-tint";
 const ico = { className: "size-4 shrink-0", strokeWidth: 1.75, "aria-hidden": true } as const;
 /** The icon drawn before an event's title (calendar.css), in the order one state outranks another. */
+/** How many rows a list view shows before "Show all": a storm day can hold hundreds of visits. */
+const LIST_CAP = 30;
+const ymd = (d: Date) => d.toLocaleDateString("en-CA");
+/** The calendar day an item sits on, in the viewer's zone (the one FullCalendar draws in). */
+const dayOf = (i: CalItem) => (i.allDay ? i.start.slice(0, 10) : ymd(new Date(i.start)));
+const orderKey = (i: CalItem) => `${dayOf(i)}${i.allDay ? "0" : `1${i.start}`}`;
 const stateOf = (i: CalItem) => (i.done ? "done" : i.warnings?.length ? "warn" : i.late ? "late" : i.rescheduleAsked ? "ask" : i.confirmed ? "ok" : "");
 
 export function ScheduleCalendar({ items, unscheduled, team, initialDate }: { items: CalItem[]; unscheduled: CalItem[]; team: Person[]; initialDate: string }) {
@@ -39,11 +45,17 @@ export function ScheduleCalendar({ items, unscheduled, team, initialDate }: { it
   const [person, setPerson] = useState<string>("");
   const [status, setStatus] = useState<"" | "open" | "done" | "late">("");
   const [pop, setPop] = useState<Pop | null>(null);
-  const [showDrawer, setShowDrawer] = useState(unscheduled.length > 0);
+  // null = not chosen yet: open beside the calendar on a wide screen, closed behind its button where it would stack below.
+  const [drawerChoice, setShowDrawer] = useState<boolean | null>(null);
+  // The view on screen (set by FullCalendar once it draws), and whether a long list has been opened up.
+  const [view, setView] = useState<{ list: boolean; from: string; to: string } | null>(null);
+  const [showAll, setShowAll] = useState(false);
   const [msg, setMsg] = useState("");
   // The calendar draws in the browser only: times are formatted in the viewer's zone and the first view depends on the
   // screen width, so a server-rendered copy would not match. Until then a skeleton holds its place.
   const mounted = useSyncExternalStore(() => () => {}, () => true, () => false);
+  const phone = mounted && window.innerWidth < 640;
+  const showDrawer = drawerChoice ?? (unscheduled.length > 0 && (!mounted || window.matchMedia("(min-width: 1024px)").matches));
 
   useEffect(() => {
     if (!drawer.current) return;
@@ -57,6 +69,13 @@ export function ScheduleCalendar({ items, unscheduled, team, initialDate }: { it
   const shown = items.filter((i) => kinds.includes(i.kind)
     && (!person || (person === "none" ? !i.people.length : i.people.some((p) => p.id === person)))
     && (!status || (status === "done" ? i.done : status === "late" ? i.late : !i.done)));
+  // A list view draws one row per item, so a storm day (hundreds of visits) made a page tens of thousands of pixels
+  // long. It shows the first LIST_CAP rows of the period until "Show all" is pressed; the grid views are not capped.
+  const range = view ?? (phone ? { list: true, from: initialDate, to: ymd(new Date(new Date(`${initialDate}T12:00`).getTime() + 864e5)) } : null);
+  const inList = range?.list ? shown.filter((i) => { const d = dayOf(i); return d >= range.from && d < range.to; }) : [];
+  const capped = inList.length > LIST_CAP && !showAll;
+  const drawn = capped ? [...inList].sort((a, b) => (orderKey(a) < orderKey(b) ? -1 : orderKey(a) > orderKey(b) ? 1 : 0)).slice(0, LIST_CAP) : shown;
+  const listCount = inList.length.toLocaleString("en-CA");
 
   async function move(key: string, start: string, end: string | null, allDay: boolean, revert?: () => void) {
     const [kind, id] = key.split(":") as [Kind, string];
@@ -77,7 +96,7 @@ export function ScheduleCalendar({ items, unscheduled, team, initialDate }: { it
             const on = kinds.includes(k);
             return (
               <button key={k} type="button" onClick={() => toggleKind(k)} aria-pressed={on}
-                className={`inline-flex min-h-9 items-center gap-1.5 rounded-full border px-3 text-[13px] font-semibold ${on ? "border-blue/30 bg-blue/8 text-blue-deep hover:bg-blue/12" : "border-line bg-white text-ink-soft hover:border-ink-faint/60 hover:text-navy"}`}>
+                className={`inline-flex min-h-9 items-center gap-1.5 rounded-full border px-3 text-[13px] font-semibold max-sm:min-h-11 ${on ? "border-blue/30 bg-blue/8 text-blue-deep hover:bg-blue/12" : "border-line bg-white text-ink-soft hover:border-ink-faint/60 hover:text-navy"}`}>
                 {on && <Check className="size-3.5" strokeWidth={2.25} aria-hidden />}{KIND_LABEL[k]}
               </button>
             );
@@ -101,7 +120,8 @@ export function ScheduleCalendar({ items, unscheduled, team, initialDate }: { it
         <Card className="etc-cal min-w-0 p-3! sm:p-4!">
           {!mounted ? <div className="skeleton h-[32rem]" role="status" aria-label="Loading the calendar" /> : <FullCalendar
             plugins={[classicThemePlugin, dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin]}
-            initialView={window.innerWidth < 640 ? "listDay" : "timeGridWeek"}
+            initialView={phone ? "listDay" : "timeGridWeek"}
+            datesSet={(d) => { setView({ list: d.view.type.startsWith("list"), from: ymd(d.start), to: ymd(d.end) }); setShowAll(false); }}
             initialDate={initialDate}
             headerToolbar={{ left: "today prev,next", center: "title", right: "dayGridMonth,timeGridWeek,timeGridDay,listWeek" }}
             firstDay={1} height="auto" slotMinTime="06:00:00" slotMaxTime="21:00:00" nowIndicator allDayText="Any time"
@@ -126,7 +146,7 @@ export function ScheduleCalendar({ items, unscheduled, team, initialDate }: { it
             columnMoreLinkClass="etc-fc-more" rowMoreLinkClass="etc-fc-more" popoverClass="etc-fc-popover"
             listDayHeaderClass="etc-fc-listday" listDayHeaderInnerClass="etc-fc-listday-inner"
             views={{ list: { listItemEventClass: "etc-fc-item etc-fc-list-item", noEventsClass: "etc-fc-empty" } }}
-            events={shown.map((i) => {
+            events={drawn.map((i) => {
               const state = stateOf(i);
               return {
                 id: `${i.kind}:${i.id}`, title: i.title, start: i.start, end: i.end, allDay: i.allDay,
@@ -145,6 +165,12 @@ export function ScheduleCalendar({ items, unscheduled, team, initialDate }: { it
             eventResize={(info) => { void move(info.event.id, info.event.startStr, info.event.endStr || null, info.event.allDay, info.revert); }}
             eventReceive={(info) => { const id = info.event.id, s = info.event.startStr, e = info.event.endStr || null, a = info.event.allDay; info.event.remove(); void move(id, s, e, a); }}
           />}
+          {inList.length > LIST_CAP && (
+            <p className="mt-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 text-sm tabular-nums text-ink-soft">
+              {capped ? `Showing the first ${LIST_CAP} of ${listCount}` : `Showing all ${listCount}`}
+              <button type="button" onClick={() => setShowAll(!showAll)} aria-expanded={showAll} className={btn("secondary", small)}>{capped ? `Show all ${listCount}` : `Show the first ${LIST_CAP}`}</button>
+            </p>
+          )}
           <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-line-soft pt-3 text-xs text-ink-soft">
             {team.map((p) => <span key={p.id} className="inline-flex items-center gap-1.5"><span className="h-3 w-1 rounded-full" style={{ background: p.color }} aria-hidden />{p.name}</span>)}
             <span className="inline-flex items-center gap-1"><Check className="size-3.5" strokeWidth={2} aria-hidden />Done</span>
@@ -156,8 +182,9 @@ export function ScheduleCalendar({ items, unscheduled, team, initialDate }: { it
           {msg && <p className={`mt-3 rounded-lg border px-3.5 py-2.5 text-sm font-medium ${msgCls}`} role="status" aria-live="polite">{msg}</p>}
         </Card>
         {showDrawer && (
-          <Card className="p-4!" title="Unscheduled" actions={<span className="text-xs font-medium tabular-nums text-ink-soft">{unscheduled.length}</span>}>
-            <div ref={drawer} id="unscheduled-drawer" className="space-y-2">
+          <Card className={`p-4! ${drawerChoice === null ? "max-lg:hidden" : ""}`} title="Unscheduled" actions={<span className="text-xs font-medium tabular-nums text-ink-soft">{unscheduled.length}</span>}>
+            {/* A long backlog scrolls inside the panel instead of stretching the page. */}
+            <div ref={drawer} id="unscheduled-drawer" className="-mr-2 max-h-[28rem] space-y-2 overflow-y-auto overscroll-contain pr-2 lg:max-h-[calc(100dvh-16rem)]">
               {unscheduled.length ? unscheduled.map((u) => (
                 <div key={u.kind + u.id} data-item={u.id} data-kind={u.kind} data-title={u.title}
                   className="flex cursor-grab items-start gap-1.5 rounded-md border-l-[3px] bg-tint py-2 pl-2 pr-2.5 text-sm hover:bg-line-soft active:cursor-grabbing" style={{ borderLeftColor: u.color }}>

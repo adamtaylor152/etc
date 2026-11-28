@@ -147,7 +147,9 @@ export function RouteRunner({ date, initial }: { date: string; initial: RunStop[
   const field = "h-14 w-full rounded-xl border border-white/25 bg-white px-3 text-xl text-night tabular-nums focus-visible:outline-sky";
   const stateWord = (s: string) => (s === "COMPLETED" ? "Done" : s === "SKIPPED" ? "Skipped" : s === "EN_ROUTE" ? "On the way" : s === "IN_PROGRESS" ? "On site" : "");
   return (
-    <div className="mx-auto max-w-lg space-y-3 text-white">
+    // Phones: one column. From `lg` up the current stop sits on the left and the list of stops, always open, on the right.
+    <div className="mx-auto max-w-lg text-white lg:grid lg:max-w-none lg:grid-cols-2 lg:items-start lg:gap-6">
+     <div className="min-w-0 space-y-3">
       <div>
         <div className="mb-1.5 flex items-center justify-between gap-3 text-sm tabular-nums text-white/70">
           <span>{cur ? `Stop ${done + 1} of ${stops.length}` : `All ${stops.length} done`}{cur && <span className="text-white/60"> · {done} finished</span>}</span>
@@ -239,13 +241,16 @@ export function RouteRunner({ date, initial }: { date: string; initial: RunStop[
           <p className="mt-1 text-base tabular-nums text-white/80">{stops.length} stop{stops.length === 1 ? "" : "s"} finished.</p>
         </section>
       )}
+     </div>
 
+     <div className="mt-3 min-w-0 space-y-3 lg:mt-0">
       <label className="flex min-h-14 items-center gap-3 rounded-xl border border-white/10 bg-navy px-4 py-3 text-sm text-white/90"><input type="checkbox" checked={autoText} onChange={(e) => { setAutoText(e.target.checked); localStorage.setItem(PKEY, e.target.checked ? "1" : "0"); }} className="size-6 shrink-0 accent-emerald-400" />When I finish a stop, text the next client “on my way”</label>
-      <button type="button" onClick={() => setShowList(!showList)} aria-expanded={showList} className="flex min-h-14 w-full items-center justify-between rounded-xl border border-white/10 bg-navy px-4 text-base font-semibold text-white hover:bg-white/10 focus-visible:outline-sky">
+      <button type="button" onClick={() => setShowList(!showList)} aria-expanded={showList} className="flex min-h-14 w-full lg:hidden items-center justify-between rounded-xl border border-white/10 bg-navy px-4 text-base font-semibold text-white hover:bg-white/10 focus-visible:outline-sky">
         <span>All stops <span className="font-normal tabular-nums text-white/60">({stops.length})</span></span><ChevronDown className={`size-5 transition ${showList ? "rotate-180" : ""}`} aria-hidden />
       </button>
-      {showList && (
-        <ol className="divide-y divide-white/10 rounded-xl border border-white/10 bg-navy text-sm">
+      <h2 className="hidden px-1 pt-1 font-display text-[0.95rem] font-semibold lg:block">All stops <span className="font-sans font-normal tabular-nums text-white/60">({stops.length})</span></h2>
+      {/* Behind its button on a phone; always there on a wide screen, scrolling inside itself when the day is long. */}
+        <ol className={`divide-y divide-white/10 rounded-xl border border-white/10 bg-navy text-sm lg:block lg:max-h-[calc(100dvh-18rem)] lg:overflow-y-auto ${showList ? "" : "hidden"}`}>
           {stops.map((s, i) => (
             <li key={s.visitId} className={`px-4 py-3 ${s.visitId === cur?.visitId ? "bg-white/10" : ""}`} aria-current={s.visitId === cur?.visitId ? "step" : undefined}>
               <div className="flex items-start justify-between gap-3">
@@ -266,7 +271,7 @@ export function RouteRunner({ date, initial }: { date: string; initial: RunStop[
             </li>
           ))}
         </ol>
-      )}
+     </div>
     </div>
   );
 }
