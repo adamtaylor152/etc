@@ -7,6 +7,8 @@ import { businessId, db } from "@/server/db";
 import { createCustomInvoice, markSent, recordPayment, voidInvoice } from "@/server/ops/invoices";
 import { approveQuote, convertQuote, createQuote, sendQuote, updateQuote } from "@/server/ops/quotes";
 import { syncStripeRefund } from "@/server/ops/refunds";
+import { removeVisitExtra } from "@/server/ops/visits";
+import { todayLocal, toDbDate } from "@/server/dates";
 import { invoiceFixedJob } from "@/server/ops/invoices";
 
 const tag = () => Math.random().toString(36).slice(2, 10);
@@ -70,5 +72,17 @@ describe("money review", () => {
     await syncStripeRefund(pi, 1000);
     expect(await db.payment.findFirstOrThrow({ where: { stripePaymentIntentId: pi } })).toMatchObject({ refundedCents: 0, tipRefundedCents: 1000 });
     expect(await db.invoice.findUniqueOrThrow({ where: { id: inv.id } })).toMatchObject({ status: "PAID", amountPaidCents: 10000 });
+  }, 30_000);
+  it("a client can take off only the extras they added", async () => {
+    const { bid, clientId } = await setup();
+    const property = await db.property.findFirstOrThrow({ where: { clientId } });
+    const number = ((await db.job.aggregate({ where: { businessId: bid }, _max: { number: true } }))._max.number ?? 0) + 1000;
+    const job = await db.job.create({ data: { businessId: bid, number, clientId, propertyId: property.id, kind: "ONE_OFF", title: "Extras" } });
+    const visit = await db.visit.create({ data: { businessId: bid, jobId: job.id, propertyId: property.id, scheduledDate: toDbDate(todayLocal()) } });
+    const extra = (addedByClientId: string | null) => db.visitExtra.create({ data: { businessId: bid, visitId: visit.id, serviceKey: addedByClientId ? "ice_melt" : "salt", name: "Extra", unitPriceCents: 500, addedByClientId } });
+    const [theirs, owners] = [await extra(clientId), await extra(null)];
+    await expect(removeVisitExtra({ id: clientId, businessId: bid }, owners.id)).rejects.toThrow();
+    await removeVisitExtra({ id: clientId, businessId: bid }, theirs.id);
+    expect((await db.visitExtra.findMany({ where: { visitId: visit.id } })).map((e) => e.id)).toEqual([owners.id]);
   }, 30_000);
 });
