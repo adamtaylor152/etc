@@ -41,7 +41,7 @@ export default async function Thread({ params, searchParams }: PageProps<"/messa
   await db.textMessage.updateMany({ where: { ...where, direction: "IN", readAt: null }, data: { readAt: new Date() } });
 
   const optedOut = !!client?.smsOptOutAt;
-  const disabled = !smsEnabled() ? "Texting turns on once the Telnyx key is set in Coolify."
+  const disabled = !smsEnabled() ? "Texting isn't set up yet. Ask whoever runs your hosting to turn it on."
     : !phone ? "No mobile number on file. Add one on the client page."
     : client?.smsOptOutAt ? `${client.firstName} texted STOP. They have to text START before you can text them.` : undefined;
   const name = client ? clientName(client) : pretty(number!);

@@ -5,7 +5,8 @@ import { Download, Paperclip, Trash2 } from "lucide-react";
 import { Amount } from "@/components/billing/money";
 import { ConfirmButton } from "@/components/confirm-button";
 import { Flash } from "@/components/flash";
-import { Button, Card, PageHeader, btn, inputCls } from "@/components/ui";
+import { FilePicker } from "@/components/file-picker";
+import { Button, Card, Field, PageHeader, btn, inputCls } from "@/components/ui";
 import { expenseAdd, expenseDelete, expenseUpdate } from "../costing-actions";
 import { dateOnly, prettyDate, todayLocal, toDbDate } from "@/server/dates";
 import { businessId, db } from "@/server/db";
@@ -16,7 +17,6 @@ export const metadata = { title: "Expenses" };
 
 // One grid for the add row and the inline edit form, so the same field sits in the same place in both.
 const GRID = "grid grid-cols-2 items-end gap-x-2 gap-y-3 lg:grid-cols-[minmax(11rem,1fr)_9rem_9.5rem_6.5rem_6rem_9.5rem]";
-const lbl = "mb-1 block text-xs font-medium text-ink-soft";
 
 export default async function Expenses({ searchParams }: PageProps<"/expenses">) {
   await requireOwner();
@@ -43,17 +43,15 @@ export default async function Expenses({ searchParams }: PageProps<"/expenses">)
         <form action={expenseAdd}>
           <input type="hidden" name="back" value={`/expenses?month=${month}`} />
           <div className={GRID}>
-            <label className="col-span-2 lg:col-span-1"><span className={lbl}>What it was</span><input name="description" required placeholder="General, not for one job" className={inputCls} /></label>
-            <label><span className={lbl}>Bought from</span><input name="vendor" placeholder="Optional" className={inputCls} /></label>
-            <label><span className={lbl}>Category</span><select name="category" className={inputCls}>{EXPENSE_CATEGORIES.map((c) => <option key={c}>{c}</option>)}</select></label>
-            <label><span className={lbl}>Paid ($)</span><input name="amount" required type="number" step="0.01" min="0.01" inputMode="decimal" placeholder="0.00" className={`${inputCls} text-right tabular-nums`} /></label>
-            <label title="The GST part of what you paid, if any"><span className={lbl}>GST in it ($)</span><input name="gst" type="number" step="0.01" min="0" inputMode="decimal" placeholder="0.00" className={`${inputCls} text-right tabular-nums`} /></label>
-            <label className="col-span-2 lg:col-span-1"><span className={lbl}>Date</span><input name="date" type="date" defaultValue={todayLocal()} className={inputCls} /></label>
+            <div className="col-span-2 lg:col-span-1"><Field label="What it was"><input name="description" required placeholder="General, not for one job" className={inputCls} /></Field></div>
+            <Field label="Bought from"><input name="vendor" placeholder="Optional" className={inputCls} /></Field>
+            <Field label="Category"><select name="category" className={inputCls}>{EXPENSE_CATEGORIES.map((c) => <option key={c}>{c}</option>)}</select></Field>
+            <Field label="Paid ($)"><input name="amount" required type="number" step="0.01" min="0.01" inputMode="decimal" placeholder="0.00" className={`${inputCls} text-right tabular-nums`} /></Field>
+            <div title="The GST part of what you paid, if any"><Field label="GST in it ($)"><input name="gst" type="number" step="0.01" min="0" inputMode="decimal" placeholder="0.00" className={`${inputCls} text-right tabular-nums`} /></Field></div>
+            <div className="col-span-2 lg:col-span-1"><Field label="Date"><input name="date" type="date" defaultValue={todayLocal()} className={inputCls} /></Field></div>
           </div>
           <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-            <label className="min-w-0 text-xs font-medium text-ink-soft"><span className="mr-2 inline-flex items-center gap-1"><Paperclip className="size-3.5" strokeWidth={1.75} aria-hidden />Receipt (optional)</span>
-              <input type="file" name="receipt" accept="image/*,application/pdf" className="max-w-full text-xs text-ink-soft file:mr-2 file:min-h-9 file:cursor-pointer file:rounded-lg file:border file:border-solid file:border-line file:bg-white file:px-3 file:text-xs file:font-semibold file:text-navy hover:file:bg-tint" />
-            </label>
+            <FilePicker name="receipt" accept="image/*,application/pdf" label="Attach receipt" hint="Optional. A photo or PDF." />
             <Button>Add expense</Button>
           </div>
         </form>
@@ -61,8 +59,8 @@ export default async function Expenses({ searchParams }: PageProps<"/expenses">)
 
       <Card className="overflow-hidden p-0!">
         <form className="flex flex-wrap items-end gap-2 border-b border-line p-3 sm:px-4">
-          <label><span className={lbl}>Month</span><input type="month" name="month" defaultValue={month} className={`${inputCls} w-auto!`} /></label>
-          <label><span className={lbl}>Category</span><select name="category" defaultValue={cat} className={`${inputCls} w-auto!`}><option value="">All categories</option>{EXPENSE_CATEGORIES.map((c) => <option key={c}>{c}</option>)}</select></label>
+          <Field label="Month"><input type="month" name="month" defaultValue={month} className={`${inputCls} w-auto!`} /></Field>
+          <Field label="Category"><select name="category" defaultValue={cat} className={`${inputCls} w-auto!`}><option value="">All categories</option>{EXPENSE_CATEGORIES.map((c) => <option key={c}>{c}</option>)}</select></Field>
           <Button variant="secondary">Show</Button>
           <div className="ml-auto text-right">
             <div className="text-xs font-medium text-ink-soft">Total{cat ? ` · ${cat}` : ""} · {monthName}</div>
@@ -95,12 +93,12 @@ export default async function Expenses({ searchParams }: PageProps<"/expenses">)
                     <form action={expenseUpdate} className="mt-2 rounded-lg bg-tint p-3">
                       <input type="hidden" name="id" value={r.id} /><input type="hidden" name="back" value={back} />
                       <div className={GRID}>
-                        <label className="col-span-2 lg:col-span-1"><span className={lbl}>What it was</span><input name="description" required defaultValue={r.description} className={inputCls} /></label>
-                        <label><span className={lbl}>Bought from</span><input name="vendor" defaultValue={r.vendor ?? ""} className={inputCls} /></label>
-                        <label><span className={lbl}>Category</span><select name="category" defaultValue={r.category} className={inputCls}>{EXPENSE_CATEGORIES.map((c) => <option key={c}>{c}</option>)}</select></label>
-                        <label><span className={lbl}>Paid ($)</span><input name="amount" required type="number" step="0.01" min="0.01" inputMode="decimal" defaultValue={(r.amountCents / 100).toFixed(2)} className={`${inputCls} text-right tabular-nums`} /></label>
-                        <label><span className={lbl}>GST in it ($)</span><input name="gst" type="number" step="0.01" min="0" inputMode="decimal" defaultValue={r.gstCents ? (r.gstCents / 100).toFixed(2) : ""} placeholder="0.00" className={`${inputCls} text-right tabular-nums`} /></label>
-                        <label className="col-span-2 lg:col-span-1"><span className={lbl}>Date</span><input name="date" type="date" required defaultValue={dateOnly(r.date) ?? ""} className={inputCls} /></label>
+                        <div className="col-span-2 lg:col-span-1"><Field label="What it was"><input name="description" required defaultValue={r.description} className={inputCls} /></Field></div>
+                        <Field label="Bought from"><input name="vendor" defaultValue={r.vendor ?? ""} className={inputCls} /></Field>
+                        <Field label="Category"><select name="category" defaultValue={r.category} className={inputCls}>{EXPENSE_CATEGORIES.map((c) => <option key={c}>{c}</option>)}</select></Field>
+                        <Field label="Paid ($)"><input name="amount" required type="number" step="0.01" min="0.01" inputMode="decimal" defaultValue={(r.amountCents / 100).toFixed(2)} className={`${inputCls} text-right tabular-nums`} /></Field>
+                        <Field label="GST in it ($)"><input name="gst" type="number" step="0.01" min="0" inputMode="decimal" defaultValue={r.gstCents ? (r.gstCents / 100).toFixed(2) : ""} placeholder="0.00" className={`${inputCls} text-right tabular-nums`} /></Field>
+                        <div className="col-span-2 lg:col-span-1"><Field label="Date"><input name="date" type="date" required defaultValue={dateOnly(r.date) ?? ""} className={inputCls} /></Field></div>
                       </div>
                       <div className="mt-3 flex justify-end"><Button variant="secondary">Save changes</Button></div>
                     </form>

@@ -38,6 +38,12 @@ const SKIP: [string, string][] = [
   ["CLIENT_CANCELLED", "Client cancelled"], ["WEATHER", "Weather"], ["OTHER", "Other"],
 ];
 
+export async function generateMetadata({ params }: PageProps<"/visits/[id]">) {
+  await requireOwner();
+  const v = await db.visit.findFirst({ where: { id: (await params).id, businessId: await businessId() }, select: { property: { select: { formatted: true } } } });
+  return { title: v ? `Visit · ${v.property.formatted.split(",")[0]}` : "Visit" };
+}
+
 export default async function VisitPage({ params, searchParams }: PageProps<"/visits/[id]">) {
   const user = await requireOwner();
   const { id } = await params;
@@ -93,24 +99,27 @@ export default async function VisitPage({ params, searchParams }: PageProps<"/vi
   );
   const hasNotes = v.property.accessNotes || v.property.gateCode || v.property.hazards || v.property.petNotes || v.job.instructions || v.instructions || siteFacts(v.property);
   return (
-    <div className="mx-auto max-w-xl">
+    <div className="mx-auto max-w-3xl lg:max-w-6xl">
       <Link href={`/jobs/${v.jobId}`} className="-ml-1 mb-2 inline-flex min-h-8 items-center gap-0.5 rounded-md pr-2 text-sm font-medium text-ink-soft hover:text-navy"><ChevronLeft className="size-4" aria-hidden />Job #{v.job.number}</Link>
       <Flash error={sp.error} />
-      <div className="flex flex-col gap-5">
-        <div className="rounded-2xl bg-navy p-5 text-white">
+      {/* One column in phone order up to tablet; from lg the site facts sit left and the work (do it, price, people) right. */}
+      <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
+        <div className="rounded-2xl bg-navy p-5 text-white lg:col-span-2 lg:p-6">
           <div className="flex items-start justify-between gap-3">
             <p className="text-sm font-medium text-sky">{v.snowEvent ? `${v.snowEvent.name}${v.pushNumber ? ` · push ${v.pushNumber}` : ""}` : v.job.title}{v.isReturn && " · Return visit"}</p>
-            <span className="shrink-0 rounded-full ring-1 ring-white/40"><VisitBadge s={status} /></span>
+            {/* Badges are tinted for white cards; a white pill behind keeps every tone readable on the navy header. */}
+            <span className="shrink-0 rounded-full bg-white"><VisitBadge s={status} /></span>
           </div>
-          <h1 className="mt-1.5 font-display text-[1.7rem] font-semibold leading-tight [overflow-wrap:anywhere]">{v.property.formatted}</h1>
+          <h1 className="mt-1.5 font-display text-[1.7rem] font-semibold leading-tight [overflow-wrap:anywhere] lg:text-[2.1rem]">{v.property.formatted}</h1>
           <p className="mt-1 text-white/75">{clientName(v.job.client)}{v.property.community && ` · ${v.property.community.name}`} · <span className="tabular-nums">{v.scheduledDate ? prettyDate(dateOnly(v.scheduledDate)) : "Not scheduled"}</span></p>
-          <div className="mt-4 grid grid-cols-2 gap-2">
+          <div className="mt-4 grid grid-cols-2 gap-2 lg:max-w-md">
             <a href={mapsLink(v.property.formatted)} className={`${heroBtn} bg-white text-navy hover:bg-tint`}><Navigation className="size-4" aria-hidden />Navigate</a>
             {tel ? <a href={tel} className={`${heroBtn} border border-white/35 text-white hover:bg-white/10`}><Phone className="size-4" aria-hidden />Call</a>
               : <Link href={`/clients/${v.job.clientId}`} className={`${heroBtn} border border-white/35 text-white hover:bg-white/10`}><User className="size-4" aria-hidden />Client</Link>}
           </div>
         </div>
 
+        <div className="flex min-w-0 flex-col gap-5">
         {hasNotes && (
           <section className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-950 sm:p-5">
             <h2 className="mb-1 flex items-center gap-2 font-display text-[0.95rem] font-semibold"><TriangleAlert className="size-4" aria-hidden />Before you start</h2>
@@ -150,7 +159,9 @@ export default async function VisitPage({ params, searchParams }: PageProps<"/vi
           {visitTime.length > 0 && <p className="mt-3 text-sm tabular-nums text-ink-soft">Logged: {visitTime.map((t) => `${personName(t.user)} ${hm(t.minutes ?? 0)}`).join(" · ")}</p>}
           {(took != null || usual != null) && <p className="mt-2 text-sm tabular-nums">{v.state === "COMPLETED" && took != null ? <>Took <span className="font-semibold">{took} min</span> on site{usual != null && ` (usually ${usual})`}.</> : usual != null ? `This address usually takes ${usual} min.` : null}</p>}
         </Card>
+        </div>
 
+        <div className="flex min-w-0 flex-col gap-5">
         {open ? (
           <>
             <Card title="Do the visit">
@@ -293,6 +304,7 @@ export default async function VisitPage({ params, searchParams }: PageProps<"/vi
           {nextStop && <ButtonLink href={`/visits/${nextStop}`} variant={open ? "secondary" : "primary"} className="min-h-12! flex-1 whitespace-nowrap">Next stop<ChevronRight className="size-4" aria-hidden /></ButtonLink>}
           <ButtonLink href={`/jobs/${v.jobId}`} className="min-h-12! flex-1 whitespace-nowrap">Job #{v.job.number}</ButtonLink>
           {v.snowEventId && <ButtonLink href={`/routes?storm=${v.snowEventId}`} className="min-h-12! flex-1 whitespace-nowrap">Route</ButtonLink>}
+        </div>
         </div>
       </div>
     </div>

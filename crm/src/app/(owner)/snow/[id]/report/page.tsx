@@ -29,7 +29,7 @@ export default async function StormReport({ params }: PageProps<"/snow/[id]/repo
       </div>
       <div className="rounded-xl border border-line bg-white p-4 text-sm shadow-card sm:p-6 print:rounded-none print:border-0 print:p-0 print:shadow-none">
         <h2 className="font-display text-xl font-semibold">Proof of service · {ev.name}</h2>
-        <p className="mt-1 tabular-nums text-ink-soft">{ev.season.name} · forecast {ev.forecastCm ?? "?"} cm · measured {ev.measuredCm ?? "?"} cm · {ev.pushCount} push{ev.pushCount > 1 ? "es" : ""} · status {ev.status.toLowerCase()}</p>
+        <p className="mt-1 tabular-nums text-ink-soft">{ev.season.name} · {ev.forecastCm != null ? `forecast ${ev.forecastCm} cm` : "no forecast depth"} · {ev.measuredCm != null ? `measured ${ev.measuredCm} cm` : "depth not measured"} · {ev.pushCount} push{ev.pushCount > 1 ? "es" : ""} · status {ev.status.toLowerCase()}</p>
         {rows.length ? (
           <div className="mt-4 overflow-x-auto print:overflow-visible">
             <table className="w-full min-w-[46rem] border-collapse print:min-w-0">

@@ -21,6 +21,12 @@ import { smsEnabled, toE164 } from "@/server/sms";
 import { optionTotals, quoteEditable, quoteExpired, quoteOptions, valuedOption } from "@/server/status/quote";
 import { quoteArchive, quoteConvert, quoteDecline, quoteMarkApproved, quoteReopen, quoteSaveTemplate, quoteSend, quoteUpdate, quoteViewAsClient } from "../../quote-actions";
 
+export async function generateMetadata({ params }: PageProps<"/quotes/[id]">) {
+  await requireOwner();
+  const q = await db.quote.findFirst({ where: { id: (await params).id, businessId: await businessId() }, select: { number: true } });
+  return { title: q ? `Quote #${q.number}` : "Quote" };
+}
+
 export default async function QuotePage({ params, searchParams }: PageProps<"/quotes/[id]">) {
   await requireOwner();
   const { id } = await params;
@@ -109,7 +115,7 @@ export default async function QuotePage({ params, searchParams }: PageProps<"/qu
         <div className="min-w-0 space-y-5 lg:col-span-2">
           {q.status === "APPROVED" && (
             <Card title="Approved: book it" className="border-emerald-200">
-              <p className="mb-3 max-w-[70ch] text-sm">Approved by <span className="font-semibold">{q.approvedByName}</span> {prettyDateTime(q.approvedAt)}{chosen && <> Chose <span className="font-semibold">{chosen.name}</span>.</>} Total <span className="tabular-nums">{cad(q.totalCents)}</span>.</p>
+              <p className="mb-3 max-w-[70ch] text-sm">Approved by <span className="font-semibold">{q.approvedByName}</span> · <span className="tabular-nums">{prettyDateTime(q.approvedAt)}</span>{chosen && <> · chose <span className="font-semibold">{chosen.name}</span></>} · total <span className="font-semibold tabular-nums">{cad(q.totalCents)}</span></p>
               <form action={quoteConvert} className="grid items-end gap-3 sm:grid-cols-3">
                 {hidden}
                 <Field label="First visit" hint="Blank = schedule later"><Input type="date" name="date" /></Field>

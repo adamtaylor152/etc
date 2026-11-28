@@ -15,6 +15,12 @@ import { cad } from "@/server/money";
 import { routeVisits } from "@/server/routing";
 import { stormCancel, stormDepth, stormSnowEnded, stormFinish, stormPush, stormStart } from "../../work-actions";
 
+export async function generateMetadata({ params }: PageProps<"/snow/[id]">) {
+  await requireOwner();
+  const ev = await db.snowEvent.findFirst({ where: { id: (await params).id, businessId: await businessId() }, select: { name: true } });
+  return { title: ev ? ev.name : "Storm" };
+}
+
 export default async function StormPage({ params, searchParams }: PageProps<"/snow/[id]">) {
   await requireOwner();
   const { id } = await params;
@@ -33,6 +39,8 @@ export default async function StormPage({ params, searchParams }: PageProps<"/sn
   const here = `/snow/${id}`;
   const bylaw = bylawStatus(ev.snowEndedAt, visits);
   const hrs = (h: number) => (Math.abs(h) < 1 ? `${Math.round(Math.abs(h) * 60)} min` : `${Math.round(Math.abs(h))} h`);
+  const cm = ev.measuredCm ?? ev.forecastCm;
+  const depth = cm == null ? "Depth not measured" : `${cm} cm`;
   const hidden = <><input type="hidden" name="id" value={ev.id} /><input type="hidden" name="back" value={here} /></>;
 
   const pct = visits.length ? Math.round((100 * done) / visits.length) : 0;
@@ -50,7 +58,7 @@ export default async function StormPage({ params, searchParams }: PageProps<"/sn
         kind="Storm"
         status={<Badge tone={STORM[ev.status][1]}>{STORM[ev.status][0]}</Badge>}
         title={ev.name}
-        sub={<span className="tabular-nums">{ev.season.name} · {ev.measuredCm ?? ev.forecastCm ?? "?"} cm{ev.pushCount > 1 ? ` · ${ev.pushCount} pushes` : ""}{ev.activatedAt ? ` · started ${prettyDateTime(ev.activatedAt)}` : ""}</span>}
+        sub={<span className="tabular-nums">{ev.season.name} · {depth}{ev.pushCount > 1 ? ` · ${ev.pushCount} pushes` : ""}{ev.activatedAt ? ` · started ${prettyDateTime(ev.activatedAt)}` : ""}</span>}
         actions={visits.length > 0 && <>
           <ButtonLink href={`/snow/${ev.id}/report`}><FileText className="size-4" aria-hidden />Proof-of-service report</ButtonLink>
           {/* While stops are open the route is the next thing to do; once they are all in, finishing the storm is. */}
@@ -135,7 +143,7 @@ export default async function StormPage({ params, searchParams }: PageProps<"/sn
                     <li key={v.id}>
                       <Link href={`/visits/${v.id}`} className="-mx-2 flex min-h-11 items-center justify-between gap-3 rounded-lg px-2 py-2 text-sm hover:bg-tint">
                         <span className="min-w-0"><span className="font-semibold">{v.property.formatted}</span>{v.pushNumber && v.pushNumber > 1 && <span className="tabular-nums text-ink-soft"> · push {v.pushNumber}</span>}{v.isReturn && <span className="text-ink-soft"> · return visit</span>}</span>
-                        <Badge tone={v.state === "COMPLETED" ? "green" : v.state === "SKIPPED" || v.state === "CANCELLED" ? "gray" : v.state === "SCHEDULED" ? "blue" : "navy"}>{v.state === "COMPLETED" ? "Done" : v.state === "SKIPPED" ? (v.skipReason === "BELOW_TRIGGER" ? "Below trigger" : "Skipped") : v.state === "CANCELLED" ? "Cancelled" : v.state === "EN_ROUTE" ? "On the way" : v.state === "IN_PROGRESS" ? "On site" : "To do"}</Badge>
+                        <Badge tone={v.state === "COMPLETED" ? "green" : v.state === "SKIPPED" || v.state === "CANCELLED" ? "gray" : "blue"}>{v.state === "COMPLETED" ? "Done" : v.state === "SKIPPED" ? (v.skipReason === "BELOW_TRIGGER" ? "Below trigger" : "Skipped") : v.state === "CANCELLED" ? "Cancelled" : v.state === "EN_ROUTE" ? "On the way" : v.state === "IN_PROGRESS" ? "On site" : "To do"}</Badge>
                       </Link>
                     </li>
                   ))}

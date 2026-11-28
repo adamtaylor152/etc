@@ -37,6 +37,12 @@ export default async function Snow({ searchParams }: PageProps<"/snow">) {
   ]);
   const active = plans.filter((p) => !p.planPausedAt);
   const toCheck = await db.property.count({ where: { businessId: bid, sizeCheckedAt: null, archivedAt: null, jobs: { some: { closedAt: null, OR: [{ kind: "SNOW_PLAN" }, { kind: "ONE_OFF", title: { startsWith: "Snow" } }] } } } });
+  // Long lists are cut to the newest few; ?all=1 (storms) and ?plans=1 (plans) show the rest.
+  const CAP = 10;
+  const allStorms = sp.all === "1", allPlans = sp.plans === "1";
+  const shownStorms = allStorms ? storms : storms.slice(0, CAP), shownPlans = allPlans ? plans : plans.slice(0, CAP);
+  const listHref = (o: { all?: boolean; plans?: boolean }) => { const q = [o.all ?? allStorms ? "all=1" : "", o.plans ?? allPlans ? "plans=1" : ""].filter(Boolean).join("&"); return q ? `/snow?${q}` : "/snow"; };
+  const moreCls = "mt-2 inline-flex min-h-11 items-center text-sm font-semibold text-blue hover:text-blue-deep";
   const row = "group -mx-2 flex min-h-11 items-center justify-between gap-3 rounded-lg px-2 py-2.5 hover:bg-tint";
   return (
     <>
@@ -46,27 +52,40 @@ export default async function Snow({ searchParams }: PageProps<"/snow">) {
           <span><span className="tabular-nums">{toCheck}</span> driveway{toCheck === 1 ? "" : "s"} need{toCheck === 1 ? "s" : ""} a size check before the next storm</span><ChevronRight className="size-4 shrink-0" aria-hidden />
         </Link>
       )}
-      <div className="grid items-start gap-5 lg:grid-cols-3">
-        <div className="space-y-5 lg:col-span-2">
+      <div className="grid items-start gap-5 lg:grid-cols-3 lg:grid-rows-[auto_1fr]">
+        {/* Starting a storm is the thing done most here: first on a phone, top of the side column on a desk. */}
+        <div className="lg:col-start-3 lg:row-start-1">
+          <Card title="It's snowing">
+            <form action={stormCreate} className="space-y-3">
+              <Field label="How much snow (cm)?"><Input name="forecastCm" type="number" inputMode="numeric" min={0} max={300} required /></Field>
+              <Field label="Notes"><Input name="notes" placeholder="e.g. heavy and wet overnight" /></Field>
+              <input type="hidden" name="start" value="1" />
+              <Button className="w-full">Start storm</Button>
+              <p className="text-xs text-ink-soft">Creates today&apos;s visits for every plan whose trigger this meets, plus one-time bookings waiting for snow.</p>
+            </form>
+          </Card>
+        </div>
+        <div className="space-y-5 lg:col-span-2 lg:col-start-1 lg:row-span-2 lg:row-start-1">
           <Card title="Storms" actions={storms.length > 0 && <span className="text-xs font-medium tabular-nums text-ink-soft">{storms.length} storm{storms.length === 1 ? "" : "s"}</span>}>
             {storms.length ? (
               <ul className="-my-1 divide-y divide-line-soft">
-                {storms.map((s) => (
+                {shownStorms.map((s) => (
                   <li key={s.id}>
                     <Link href={`/snow/${s.id}`} className={row}>
                       <span className="min-w-0"><span className="font-semibold group-hover:text-blue-deep">{s.name}</span>
-                        <span className="block text-sm tabular-nums text-ink-soft">{s.measuredCm ?? s.forecastCm ?? "?"} cm · {s.visits.length} of {s._count.visits} done{s.pushCount > 1 ? ` · ${s.pushCount} pushes` : ""}</span></span>
+                        <span className="block text-sm tabular-nums text-ink-soft">{(s.measuredCm ?? s.forecastCm) != null ? `${s.measuredCm ?? s.forecastCm} cm` : "Depth not measured"} · {s.visits.length} of {s._count.visits} done{s.pushCount > 1 ? ` · ${s.pushCount} pushes` : ""}</span></span>
                       <Badge tone={STORM[s.status][1]}>{STORM[s.status][0]}</Badge>
                     </Link>
                   </li>
                 ))}
               </ul>
             ) : <Empty>No storms yet this season. When it snows, enter the depth under “It&apos;s snowing” to start one.</Empty>}
+            {storms.length > CAP && <Link href={listHref({ all: !allStorms })} scroll={false} className={moreCls}>{allStorms ? "Show the latest 10" : <span className="tabular-nums">Show all {storms.length} storms</span>}</Link>}
           </Card>
           <Card title="Every-snowfall plans" actions={plans.length > 0 && <span className="text-xs font-medium tabular-nums text-ink-soft">{active.length} active{plans.length > active.length ? ` · ${plans.length - active.length} paused` : ""}</span>}>
             {plans.length ? (
               <ul className="-my-1 divide-y divide-line-soft">
-                {plans.map((p) => (
+                {shownPlans.map((p) => (
                   <li key={p.id}>
                     <Link href={`/jobs/${p.id}`} className={`${row} text-sm`}>
                       <span className="min-w-0"><span className="font-semibold group-hover:text-blue-deep">{clientName(p.client)}</span><span className="block text-ink-soft">{p.property.formatted}</span></span>
@@ -81,18 +100,10 @@ export default async function Snow({ searchParams }: PageProps<"/snow">) {
                 ))}
               </ul>
             ) : <Empty>No plans yet. Every-snowfall bookings land here.</Empty>}
+            {plans.length > CAP && <Link href={listHref({ plans: !allPlans })} scroll={false} className={moreCls}>{allPlans ? "Show the first 10" : <span className="tabular-nums">Show all {plans.length} plans</span>}</Link>}
           </Card>
         </div>
-        <div className="space-y-5">
-          <Card title="It's snowing">
-            <form action={stormCreate} className="space-y-3">
-              <Field label="How much snow (cm)?"><Input name="forecastCm" type="number" inputMode="numeric" min={0} max={300} required /></Field>
-              <Field label="Notes"><Input name="notes" placeholder="e.g. heavy and wet overnight" /></Field>
-              <input type="hidden" name="start" value="1" />
-              <Button className="w-full">Start storm</Button>
-              <p className="text-xs text-ink-soft">Creates today&apos;s visits for every plan whose trigger this meets, plus one-time bookings waiting for snow.</p>
-            </form>
-          </Card>
+        <div className="space-y-5 lg:col-start-3 lg:row-start-2">
           <Card title="Snow pricing">
             {sp.saved === "pricing" && <Notice tone="good">Saved.</Notice>}
             {sp.error && <Notice tone="bad">{String(sp.error)}</Notice>}

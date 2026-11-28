@@ -23,7 +23,7 @@ import { paymentRefund } from "../../billing-extras-actions";
 import { invoiceBadDebt, invoiceMarkSent, invoiceSend, invoiceVoid, paymentDelete, paymentRecord, viewAsClient } from "../../billing-actions";
 
 const METHOD: Record<string, string> = { CASH: "Cash", ETRANSFER: "e-Transfer", CARD: "Card", CHEQUE: "Cheque", OTHER: "Other" };
-const ATTEMPT: Record<string, [string, Tone]> = { PENDING: ["Waiting for Stripe", "gray"], SUCCEEDED: ["Paid", "green"], FAILED: ["Failed", "red"], REQUIRES_ACTION: ["Bank wants the client to approve", "amber"] };
+const ATTEMPT: Record<string, [string, Tone]> = { PENDING: ["Processing", "gray"], SUCCEEDED: ["Paid", "green"], FAILED: ["Failed", "red"], REQUIRES_ACTION: ["Bank wants the client to approve", "amber"] };
 const AUTOPAY_STATE: Record<string, [string, Tone]> = {
   SCHEDULED: ["Scheduled", "blue"], RETRYING: ["Retrying", "amber"], NEEDS_ACTION: ["Needs the client", "amber"], FAILED: ["Failed", "red"], PAID: ["Paid", "green"], STOPPED: ["Stopped", "gray"],
 };
@@ -35,6 +35,12 @@ const AUTOPAY_NOTE: Record<string, string> = {
   PAID: "Paid automatically from the client's saved card.",
   STOPPED: "Auto-pay was turned off or the card removed before the charge, so the client pays this one the usual way.",
 };
+
+export async function generateMetadata({ params }: PageProps<"/invoices/[id]">) {
+  await requireOwner();
+  const inv = await db.invoice.findFirst({ where: { id: (await params).id, businessId: await businessId() }, select: { number: true } });
+  return { title: inv ? `Invoice #${inv.number}` : "Invoice" };
+}
 
 export default async function InvoicePage({ params, searchParams }: PageProps<"/invoices/[id]">) {
   await requireOwner();
@@ -192,7 +198,7 @@ export default async function InvoicePage({ params, searchParams }: PageProps<"/
                     </select>
                   </Field>
                   <div className="col-span-2 sm:col-span-1"><Field label="Reference"><Input name="reference" placeholder={inv.etransferRef} /></Field></div>
-                  <Button variant="secondary" className="col-span-2 sm:col-span-1">Record payment</Button>
+                  <Button variant="secondary" className="col-span-2 sm:col-span-1">Save payment</Button>
                 </div>
                 <label className="flex items-start gap-2 text-sm"><input type="checkbox" name="keepExtra" className="mt-0.5 size-4 shrink-0" /> If this is more than the balance, keep the extra as account credit for their next invoice</label>
               </form>
@@ -231,11 +237,11 @@ export default async function InvoicePage({ params, searchParams }: PageProps<"/
                                   <div className="grid items-end gap-3 sm:grid-cols-[9rem_1fr_auto]">
                                     <Field label="Refund ($)"><Input name="amount" type="number" step="0.01" min="0.01" max={left / 100} inputMode="decimal" defaultValue={(left / 100).toFixed(2)} required className="text-right tabular-nums" /></Field>
                                     <Field label="Reason (for your records)"><Input name="reason" maxLength={200} /></Field>
-                                    <ConfirmButton message={route.via === "stripe" ? "Refund this to the client's card through Stripe? This can't be undone." : "Record this refund? Remember to send the money back yourself."} className={btn("danger")}>Refund payment</ConfirmButton>
+                                    <ConfirmButton message={route.via === "stripe" ? "Refund this to the client's card? This can't be undone." : "Record this refund? Remember to send the money back yourself."} className={btn("danger")}>Refund payment</ConfirmButton>
                                   </div>
                                   <p className="max-w-[70ch] text-xs text-ink-soft">
                                     {route.via === "stripe"
-                                      ? `Goes back to the client's card through Stripe (5 to 10 business days). Stripe keeps its fee.${p.tipCents ? " The tip is not included: refund a tip in Stripe." : ""}`
+                                      ? `Goes back to the client's card (5 to 10 business days). The card processing fee is not returned to you.${p.tipCents ? " The tip is not included: refund a tip from your card payments account." : ""}`
                                       : `This only records the refund. Send the ${METHOD[p.method].toLowerCase()} back to the client yourself.`}
                                     {" "}The client is emailed a refund receipt, and the invoice shows the refunded amount as owing again.
                                   </p>

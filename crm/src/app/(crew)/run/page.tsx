@@ -1,5 +1,6 @@
 // Route runner: my stops today, one at a time. Add it to the home screen for storm days.
-// Night presentation: this page is used before dawn, so it (and only it) sits on the dark frame colour.
+// Night presentation: this page is used before dawn, so it (and only it) sits on the dark frame colour. Crew phones get
+// the whole page dark; an owner at a desk, under the light top bar, gets the same thing as one contained dark panel.
 import Link from "next/link";
 import { Clock } from "lucide-react";
 import { DatePick } from "@/components/auto-submit";
@@ -19,9 +20,9 @@ export default async function Run({ searchParams }: PageProps<"/run">) {
   const stops = await runStops(user.businessId, date, who);
   const seg = (on: boolean) => `inline-flex min-h-9 items-center rounded-md px-3 text-sm font-semibold focus-visible:outline-sky ${on ? "bg-white text-night" : "text-white/75 hover:text-white"}`;
   return (
-    <div data-night className="text-white">
+    <div data-night className={`text-white ${owner ? "lg:mx-auto lg:max-w-2xl lg:rounded-2xl lg:bg-night lg:p-8 lg:shadow-lift" : ""}`}>
       {/* The dark backdrop covers the whole page behind the frame's content, whichever frame (crew or owner) is around it. */}
-      <div aria-hidden className="pointer-events-none fixed inset-0 -z-10 bg-night" />
+      <div aria-hidden className={`pointer-events-none fixed inset-0 -z-10 bg-night ${owner ? "lg:hidden" : ""}`} />
       <div className="mx-auto mb-4 max-w-lg">
         <div className="flex items-center justify-between gap-3">
           <h1 className="font-display text-[1.7rem] font-semibold leading-tight">My route</h1>

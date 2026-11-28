@@ -34,7 +34,7 @@ export default async function PublicLayout({ children }: { children: React.React
       <footer className="no-print border-t border-line bg-white">
         <div className="mx-auto max-w-[40rem] px-4 py-6 text-sm text-ink-soft sm:px-6">
           <p className="font-display text-base font-semibold text-navy">{biz.name}</p>
-          <p className="mt-0.5">Snow shovelling &amp; odd jobs in Calgary</p>
+          <p className="mt-0.5">Snow shovelling &amp; odd jobs in Evergreen and SW Calgary</p>
           <p className="mt-3 flex flex-wrap gap-x-5 gap-y-1">
             <a href={tel} className="inline-flex min-h-11 items-center gap-2 font-semibold text-navy hover:text-blue"><Phone className="size-4" strokeWidth={1.75} aria-hidden />{env.phone}</a>
             <a href={`mailto:${env.helpEmail}`} className="inline-flex min-h-11 items-center gap-2 font-semibold text-navy hover:text-blue"><Mail className="size-4" strokeWidth={1.75} aria-hidden />{env.helpEmail}</a>
