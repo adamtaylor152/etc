@@ -9,6 +9,7 @@ import { LiveThread } from "@/components/messages/live";
 import { Input } from "@/components/ui";
 import { businessId, db } from "@/server/db";
 import { clientName } from "@/server/queries";
+import { getSettings } from "@/server/settings";
 import { rcsEnabled, smsEnabled, toE164 } from "@/server/sms";
 import { textLinkClient, textNewClient, textPhotosLink } from "../../text-actions";
 
@@ -17,7 +18,6 @@ const day = (d: Date) => d.toLocaleDateString("en-CA", { timeZone: TZ, weekday: 
 const time = (d: Date) => d.toLocaleTimeString("en-CA", { timeZone: TZ, hour: "numeric", minute: "2-digit" });
 const pretty = (n: string) => n.replace(/^\+1(\d{3})(\d{3})(\d{4})$/, "($1) $2-$3");
 const STATUS: Record<string, string> = { queued: "Sending…", sent: "Sent", delivered: "Delivered", read: "Read", failed: "Not sent", delivery_failed: "Not delivered", sending_failed: "Not sent", delivery_unconfirmed: "Sent" };
-const QUICK = ["On our way!", "All done, thanks! Photos are on your invoice email.", "Thanks! Can you text us a photo of the area?", "Got it, we'll send you a quote shortly."];
 
 export default async function Thread({ params, searchParams }: PageProps<"/messages/[key]">) {
   await requireOwner();
@@ -127,7 +127,7 @@ export default async function Thread({ params, searchParams }: PageProps<"/messa
         </ol>
       </LiveThread>
 
-      <Composer convoKey={key} disabled={disabled} quick={QUICK} rcs={rcsEnabled()} />
+      <Composer convoKey={key} disabled={disabled} quick={(await getSettings(db, bid)).quickReplies} rcs={rcsEnabled()} />
     </section>
   );
 }

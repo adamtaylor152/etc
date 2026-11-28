@@ -1,7 +1,11 @@
 // Business.settings JSON, typed with defaults. Every automation switch lives here (Settings → Automations).
 import { z } from "zod";
+import { brandColorError } from "./brand";
 import type { Db } from "./db";
 import { WINDOWS } from "./windows";
+
+/** The texting screen's one-tap replies until the owner writes their own (Settings › Messages). */
+export const QUICK_REPLIES = ["On our way!", "All done, thanks! Photos are on your invoice email.", "Thanks! Can you text us a photo of the area?", "Got it, we'll send you a quote shortly."];
 
 export const SettingsSchema = z.object({
   visitDoneEmail: z.boolean().default(true),        // "all done" email with before/after photos
@@ -34,6 +38,10 @@ export const SettingsSchema = z.object({
   smsUpdates: z.boolean().default(true),            // texts (on my way, all done, storm day) to clients who opted in; needs Telnyx keys
   autoPay: z.boolean().default(false),              // clients may save a card and opt in to automatic charges; needs Stripe keys
   autoPayGraceDays: z.coerce.number().int().min(0).max(14).default(2), // days between the invoice email and the charge (0 = same day)
+  // Branding (Settings › Messages): null = etc. blue and the "etc." wordmark, on emails, client pages and PDFs.
+  brandColor: z.string().superRefine((c, ctx) => { const e = brandColorError(c); if (e) ctx.addIssue({ code: "custom", message: e }); }).nullable().default(null),
+  logoId: z.string().max(40).nullable().default(null), // Attachment id (see saveLogo)
+  quickReplies: z.array(z.string().trim().min(1).max(300)).max(8).default(QUICK_REPLIES),
 });
 export type Settings = z.infer<typeof SettingsSchema>;
 

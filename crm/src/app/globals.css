@@ -2,7 +2,7 @@
 
 @theme inline {
   --color-navy: #14213d;
-  --color-blue: #1d6fd8;
+  --color-blue: var(--brand, #1d6fd8); /* client pages set --brand to the owner's colour (Settings › Messages) */
   --color-sky: #7cb8ff;
   --color-ink-soft: #4a5672;
   --color-line: #dfe5ef;

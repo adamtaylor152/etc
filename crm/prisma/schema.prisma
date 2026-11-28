@@ -1063,11 +1063,15 @@ model EmailMessage {
   @@index([status, nextAttemptAt])
 }
 
+// The owner's own wording for a message (Settings › Messages). `template` is an email ("invoice.sent": subject, intro,
+// closing) or a text ("sms.quote": body). A missing row or null field means the built-in wording.
 model EmailTemplateOverride {
   businessId String
   template   String
   subject    String?
   intro      String?
+  closing    String?
+  body       String?
   enabled    Boolean @default(true)
 
   @@id([businessId, template])

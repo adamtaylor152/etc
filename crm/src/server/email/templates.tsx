@@ -24,6 +24,8 @@ import { mintToken } from "../tokens";
 import { currentCharge, dollars, SIZES, type Pending } from "../ops/drive-size";
 import { invoicePdf, quotePdf, statementPdf, type PdfFile } from "../pdf/documents";
 import { loadStatement, type StatementRange } from "../statement";
+import { samples } from "./samples";
+import type { EmailKey, Wording } from "./wording";
 
 type Ctx = { businessId: string; to: string };
 // attachments: PDFs made at send time, like the body (the outbox row only stores {template, props}).
@@ -344,6 +346,13 @@ const planRenewal: Template<{ clientId: string; seasonId: string }> = {
   },
 };
 
+// Preview and "Send me a test" (Settings › Messages): the made-up version of a client email. renderMessage puts
+// `wording` on it (what is in the editor), or the saved wording when there is none.
+const templateTest: Template<{ template: EmailKey; wording?: Wording }> = {
+  subject: (p) => `Test: ${(templates[p.template].subject as (x: object) => string)(samples()[p.template].props)}`,
+  render: async (p) => samples()[p.template].el,
+};
+
 export const templates = {
   "owner.login": ownerLogin,
   "owner.new_booking": ownerNewBooking,
@@ -374,6 +383,7 @@ export const templates = {
   "review.request": reviewRequest,
   "owner.daily_digest": ownerDailyDigest,
   "plan.renewal": planRenewal,
+  "owner.template_test": templateTest,
 } as const;
 
 export type TemplateName = keyof typeof templates;

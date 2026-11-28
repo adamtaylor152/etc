@@ -2,6 +2,7 @@
 // PDF standard fonts, which every reader ships: nothing is read from disk, so it works in the slim Docker image.
 // Standard fonts only know Windows-1252, so text is cleaned first (a character they lack becomes "?", never a crash).
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
+import { hexRgb } from "../brand";
 
 export type PdfTable = { columns: { label: string; width?: number; align?: "right" }[]; rows: { cells: string[]; sub?: string }[] }; // a column with no width takes the rest
 export type PdfDoc = {
@@ -14,6 +15,7 @@ export type PdfDoc = {
   totals: { label: string; value: string; bold?: boolean }[];
   notes: { heading: string; body: string }[];
   footer: string;
+  brand?: { color?: string | null; logo?: Uint8Array | null }; // the owner's colour and logo (PNG); neither = the standard look
 };
 
 const W = 612, H = 792, M = 54, INNER = W - 2 * M; // US Letter
@@ -71,9 +73,18 @@ export async function renderPdf(d: PdfDoc): Promise<Uint8Array> {
   };
   const rule = (color = LINE, thickness = 0.75) => { page.drawLine({ start: { x: M, y }, end: { x: W - M, y }, thickness, color }); y -= 8; };
 
-  // Who it's from, and what it is.
+  // Who it's from, and what it is. With a logo, it takes the name's place and the name moves to the small print.
   const half = INNER / 2 - 10, right = M + INNER / 2 + 10;
-  row([{ text: d.business[0] ?? "", size: 20, font: bold, w: half + 60 }, { text: d.title.toUpperCase(), size: 18, font: bold, color: BLUE, x: right + 60, w: half - 60, align: "right" }], 2);
+  const accent = d.brand?.color ? rgb(...hexRgb(d.brand.color)) : BLUE;
+  const logo = d.brand?.logo ? await pdf.embedPng(d.brand.logo).catch(() => null) : null; // a logo we can't read never stops an invoice
+  const title = { text: d.title.toUpperCase(), size: 18, font: bold, color: accent, x: right + 60, w: half - 60, align: "right" as const };
+  if (logo) {
+    const s = logo.scaleToFit(200, 48);
+    page.drawImage(logo, { x: M, y: y - s.height, width: s.width, height: s.height });
+    drawLines(fit(title.text, title), y, title);
+    y -= s.height + 8;
+    row([{ text: d.business[0] ?? "", size: 10, font: bold, w: half + 60 }], 1);
+  } else row([{ text: d.business[0] ?? "", size: 20, font: bold, w: half + 60 }, title], 2);
   row([
     { text: d.business.slice(1).join("\n"), size: 9, color: SOFT, w: half + 60 },
     { text: [d.number, d.badge].filter(Boolean).join("\n"), size: 11, font: bold, x: right + 60, w: half - 60, align: "right" },
