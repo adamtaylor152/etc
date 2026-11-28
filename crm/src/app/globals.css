@@ -91,6 +91,8 @@ table, .tabular-nums, [data-money], time { font-variant-numeric: tabular-nums; }
     :where(button:not([role="switch"]), summary, select, textarea, [role="button"], [role="menuitem"], [role="tab"],
       input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"], [type="hidden"], [type="color"])) { min-height: 2.75rem; }
     :where(summary) { align-content: center; }
+    /* A tick or radio row: the label is the target, so it gets the floor too (and centres its box and words). */
+    :where(label:has(> input[type="checkbox"]:not(.sr-only, [role="switch"]), > input[type="radio"]:not(.sr-only))):not([class*="size-"], .sr-only) { min-height: 2.75rem; align-items: center; }
     :where(a, button, summary, select, input, textarea, label, [role="button"], [role="menuitem"]):where(.min-h-7, .min-h-8, .min-h-9, .min-h-10, .min-h-7\!, .min-h-8\!, .min-h-9\!, .min-h-10\!):not([class*="max-sm:min-h-12"], [class*="max-sm:min-h-14"], [class*="max-sm:min-h-16"], [class*="max-sm:min-h-2"]) { min-height: 2.75rem !important; }
     /* The extra eighth of an em covers an inline link, whose box is the height of its letters, not of its line. A
        stretched link (after:inset-0 makes the whole row the target) gets the same box, so it measures as it behaves. */
