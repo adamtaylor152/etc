@@ -23,14 +23,14 @@ export default async function TeamSchedule({ searchParams }: PageProps<"/schedul
   const bid = await businessId();
   const [av, biz] = await Promise.all([loadAvailability(bid, dates[0], dates.at(-1)!), db.business.findUniqueOrThrow({ where: { id: bid } })]);
   const visitState = new Map(av.visits.map((v) => [v.id, v]));
-  const cards: BoardCard[] = av.busy.map((b) => {
+  const cards: BoardCard[] = [...av.busy].sort((a, b) => (a.start ?? 1e9) - (b.start ?? 1e9)).map((b) => { // by start time; no time last
     const v = visitState.get(b.id);
     return {
       key: b.id, kind: (v ? "visit" : "task") as BoardCard["kind"], id: b.id, title: b.label, sub: v ? v.property.formatted.split(",")[0] : "Task", time: b.start != null ? prettyMinutes(b.start) : "",
       userIds: b.userIds, date: b.date, done: v ? v.state === "COMPLETED" : false, warnings: v?.state === "COMPLETED" ? [] : conflicts(b, av.busy, av.people, av.timeOff),
       confirmed: !!v?.confirmedAt, href: v ? `/visits/${b.id}` : `/tasks/${b.id}`, movable: v ? v.state === "SCHEDULED" && !v.snowEventId : true,
     };
-  }).sort((a, b) => (a.time || "99").localeCompare(b.time || "99"));
+  });
   const lanes: Lane[] = [
     ...av.people.map((p) => ({ id: p.id, name: p.name, color: p.color, offByDate: Object.fromEntries(dates.map((d) => { const why = unavailable(p.hours, av.timeOff, p.id, d, null, null); return [d, why ? why.replace(/^their /, "") : null]; })) })),
     { id: null, name: "Unassigned", color: "#94a3b8", offByDate: Object.fromEntries(dates.map((d) => [d, onTimeOff(av.timeOff, null, d) ? "closed" : null])) },

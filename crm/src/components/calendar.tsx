@@ -101,7 +101,7 @@ export function ScheduleCalendar({ items, unscheduled, team, initialDate }: { it
         <Card className="etc-cal min-w-0 p-3! sm:p-4!">
           {!mounted ? <div className="skeleton h-[32rem]" role="status" aria-label="Loading the calendar" /> : <FullCalendar
             plugins={[classicThemePlugin, dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin]}
-            initialView={window.innerWidth < 640 ? "listWeek" : "timeGridWeek"}
+            initialView={window.innerWidth < 640 ? "listDay" : "timeGridWeek"}
             initialDate={initialDate}
             headerToolbar={{ left: "today prev,next", center: "title", right: "dayGridMonth,timeGridWeek,timeGridDay,listWeek" }}
             firstDay={1} height="auto" slotMinTime="06:00:00" slotMaxTime="21:00:00" nowIndicator allDayText="Any time"
