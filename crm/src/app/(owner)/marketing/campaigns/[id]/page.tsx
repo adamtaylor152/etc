@@ -110,7 +110,7 @@ export default async function CampaignPage({ params, searchParams }: PageProps<"
                 <Button variant="secondary" name="next" value="save" className="w-full">Save &amp; update count</Button>
                 {email && <Button variant="secondary" name="next" value="test" className="w-full">Send a test to the owners</Button>}
                 <Field label="Send at (optional)" hint="Leave blank to send now."><Input type="datetime-local" name="at" className="tabular-nums" /></Field>
-                <Button name="next" value="send" className="min-h-11 w-full">Send to {audience.length}</Button>
+                <ConfirmButton name="next" value="send" message={`Send this campaign to ${audience.length} ${audience.length === 1 ? "person" : "people"}? This can't be undone.`} className={btn("primary", "min-h-11 w-full")}>Send to {audience.length}</ConfirmButton>
               </div>
             )}
           </div>

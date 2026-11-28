@@ -14,7 +14,7 @@ export type FeedItem = {
 
 const EVENT_TITLE: Record<string, string> = {
   "booking.received": "Booked online", "request.created": "Request created", "booking.imported": "Imported booking", "client.created": "Client added",
-  "request.archived": "Request archived", "request.unarchived": "Request reopened",
+  "request.archived": "Request archived", "request.assessment_booked": "Assessment booked", "request.unarchived": "Request reopened",
   "quote.created": "Quote created", "quote.sent": "Quote sent", "quote.approved": "Quote approved", "quote.changes_requested": "Client asked for changes to a quote", "quote.declined": "Quote declined", "quote.reopened": "Quote reopened",
   "quote.converted": "Quote converted to a job", "quote.signed": "Quote signed", "review.rated": "Rated us", "referral.rewarded": "Earned a referral credit", "invoice.signed": "Invoice signed", "visit.signed": "Client signed off the visit", "visit.confirmed": "Client confirmed the visit", "visit.reschedule_requested": "Client asked to reschedule",
   "job.created": "Job created", "job.closed": "Job closed", "job.reopened": "Job reopened", "job.updated": "Job edited", "job.schedule_changed": "Repeat schedule changed", "job.paused": "Recurring job paused", "job.resumed": "Recurring job resumed", "job.invoicing_changed": "Invoice schedule changed", "visit.lines_changed": "Visit price changed",

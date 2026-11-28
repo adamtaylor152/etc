@@ -5,6 +5,7 @@ const nextConfig: NextConfig = {
   // rather than Cache Components.
   output: "standalone",
   poweredByHeader: false,
+  allowedDevOrigins: ["127.0.0.1"], // dev only: the preview pane uses 127.0.0.1, and without this client code never hydrates there
   // Stamped into the client bundle at build time: the service worker's cache version (src/components/sw-register.tsx).
   env: { NEXT_PUBLIC_BUILD_ID: Date.now().toString(36) },
   // Server actions that carry a file: note attachments, expense receipts, the logo (each up to the 25 MB file limit in

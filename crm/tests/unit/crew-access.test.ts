@@ -116,9 +116,7 @@ describe("owner guard coverage", () => {
     const pages = owner.filter((f) => /(page|layout)\.tsx$/.test(f));
     expect(pages.length).toBeGreaterThan(40);
     const bad: string[] = [];
-    // KNOWN GAP, found when this check was tightened: this page's generateMetadata reads the client's name with no
-    // guard. The page belongs to the UI redesign in flight; delete this entry when it calls requireOwner() first.
-    const KNOWN = ["src/app/(owner)/clients/[id]/page.tsx: generateMetadata"];
+    const KNOWN: string[] = [];
     for (const f of pages) {
       // Every exported function that can run on a request: the page itself and generateMetadata.
       const fns = pageFunctions(f);
