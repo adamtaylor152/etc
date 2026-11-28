@@ -19,12 +19,36 @@ export function listHref(base: string, current: Record<string, string | undefine
   return s ? `${base}?${s}` : base;
 }
 
-export function ListPage({ title, base, params, newHref, newLabel, actions, overview, metrics = [], filters = [], searchPlaceholder, columns, rows, empty, footer, bulk }: {
+export const PAGE_SIZE = 50;
+/** Which rows a page shows. Pure: clamps to the last page so a stale ?page= never lands on nothing. */
+export function pageOf(page: string | undefined, total: number, size = PAGE_SIZE) {
+  const pages = Math.max(1, Math.ceil(total / size));
+  const n = Math.min(pages, Math.max(1, Math.floor(Number(page)) || 1));
+  return { page: n, pages, skip: (n - 1) * size, take: size, from: total ? (n - 1) * size + 1 : 0, to: Math.min(total, n * size), total };
+}
+
+/** "Showing 51–100 of 734" with previous/next. Renders nothing when everything fits on one page. */
+export function Pager({ base, params, at }: { base: string; params: Record<string, string | undefined>; at: ReturnType<typeof pageOf> }) {
+  if (at.pages <= 1) return null;
+  const link = (n: number, label: string) => n < 1 || n > at.pages
+    ? <span className="rounded-lg border border-line px-3 py-1.5 text-ink-soft/50">{label}</span>
+    : <Link href={listHref(base, params, { page: n > 1 ? String(n) : undefined })} className="rounded-lg border border-line px-3 py-1.5 font-semibold hover:bg-tint">{label}</Link>;
+  return (
+    <nav aria-label="Pages" className="flex flex-wrap items-center justify-between gap-2 border-t border-line p-3 text-sm">
+      <span className="text-ink-soft">Showing {at.from}–{at.to} of {at.total}</span>
+      <span className="flex gap-2">{link(at.page - 1, "Previous")}{link(at.page + 1, "Next")}</span>
+    </nav>
+  );
+}
+
+export function ListPage({ title, base, params, newHref, newLabel, actions, overview, metrics = [], filters = [], searchPlaceholder, columns, rows, empty, footer, bulk, at }: {
   title: string; base: string; params: Record<string, string | undefined>; newHref?: string; newLabel?: string; actions?: ReactNode;
   overview?: OverviewRow[]; metrics?: Metric[]; filters?: Filter[]; searchPlaceholder?: string;
   columns: Column[]; rows: Row[]; empty?: ReactNode; footer?: ReactNode;
   /** Bulk actions: rows get checkboxes tied to this form (by id, so forms don't nest). */
   bulk?: { action: (f: FormData) => Promise<void>; controls: ReactNode };
+  /** Paging: `rows` is one page of `at.total` matches (search, filter and sort links go back to page 1). */
+  at?: ReturnType<typeof pageOf>;
 }) {
   const sort = params.sort, dir = params.dir === "asc" ? "asc" : "desc";
   const filtered = filters.some((f) => f.value) || !!params.q;
@@ -65,7 +89,7 @@ export function ListPage({ title, base, params, newHref, newLabel, actions, over
 
       <section className="rounded-lg border border-line bg-white shadow-card">
         <form action={base} className="flex flex-wrap items-center gap-2 border-b border-line p-3">
-          <h2 className="mr-auto text-sm font-bold">{filtered ? "Filtered" : "All"} {title.toLowerCase()} <span className="font-normal text-ink-soft">({rows.length})</span></h2>
+          <h2 className="mr-auto text-sm font-bold">{filtered ? "Filtered" : "All"} {title.toLowerCase()} <span className="font-normal text-ink-soft">({at?.total ?? rows.length})</span></h2>
           {sort && <input type="hidden" name="sort" value={sort} />}
           {sort && <input type="hidden" name="dir" value={dir} />}
           {filters.map((f) => (
@@ -91,7 +115,7 @@ export function ListPage({ title, base, params, newHref, newLabel, actions, over
                     return (
                       <th key={c.key} scope="col" className={`px-4 py-2.5 font-semibold ${c.align === "right" ? "text-right" : ""} ${c.className ?? ""}`}>
                         {c.sortable ? (
-                          <Link href={listHref(base, params, { sort: c.key, dir: next })} className="inline-flex items-center gap-1 hover:text-navy">
+                          <Link href={listHref(base, params, { sort: c.key, dir: next, page: undefined })} className="inline-flex items-center gap-1 hover:text-navy">
                             {c.label}{on && (dir === "asc" ? <ArrowUp className="size-3" /> : <ArrowDown className="size-3" />)}
                           </Link>
                         ) : c.label}
@@ -120,6 +144,7 @@ export function ListPage({ title, base, params, newHref, newLabel, actions, over
             <span className="font-semibold text-ink-soft">With selected:</span>{bulk.controls}
           </form>
         )}
+        {at && <Pager base={base} params={params} at={at} />}
         {footer}
       </section>
     </>

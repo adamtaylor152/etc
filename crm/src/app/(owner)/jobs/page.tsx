@@ -1,10 +1,10 @@
 import { requireOwner } from "@/server/auth";
 import type { JobKind } from "@/generated/prisma/client";
-import { ListPage, listHref, sortRows } from "@/components/list-page";
+import { ListPage, listHref, pageOf, sortRows } from "@/components/list-page";
 import { JobBadge } from "@/components/status";
 import { addDays, dateOnly, prettyDate, todayLocal } from "@/server/dates";
-import { businessId } from "@/server/db";
-import { clientName, jobsWithStatus } from "@/server/queries";
+import { businessId, db } from "@/server/db";
+import { clientName, inOrder, jobStatuses, jobsWithStatus, nameHas, numberIs, textHas, words } from "@/server/queries";
 import { JOB_STATUS_LABEL, type JobStatus } from "@/server/status/job";
 
 export const metadata = { title: "Jobs" };
@@ -23,26 +23,37 @@ export default async function Jobs({ searchParams }: PageProps<"/jobs">) {
   const status = STATUSES.includes(params.status as JobStatus) || params.status === "all" ? params.status! : "open";
   const kind = params.kind && params.kind in KIND ? (params.kind as JobKind) : undefined;
   const today = todayLocal();
-  const all = await jobsWithStatus({ businessId: await businessId(), ...(kind ? { kind } : {}) }, today);
-  const nextVisit = (j: (typeof all)[number]) => j.visits.filter((v) => v.scheduledDate && ["SCHEDULED", "EN_ROUTE", "IN_PROGRESS"].includes(v.state))
-    .map((v) => dateOnly(v.scheduledDate)!).sort()[0] ?? null;
-  const q = params.q?.trim().toLowerCase();
-  const matches = all.filter((j) => (status === "all" || (status === "open" ? j.status !== "ARCHIVED" : j.status === status))
-    && (!q || `${j.number} ${j.title} ${clientName(j.client)} ${j.property.formatted}`.toLowerCase().includes(q)));
-  const rows = sortRows(matches, params.sort, params.dir, {
+  const bid = await businessId();
+  // Status is computed, not stored: read just what status and sorting need for every job of this type (jobStatuses),
+  // let the database do the search, then load the full rows for the one page shown.
+  const ws = words(params.q);
+  const [all, found] = await Promise.all([
+    jobStatuses({ businessId: bid, ...(kind ? { kind } : {}) }, today),
+    ws.length ? db.job.findMany({
+      where: { businessId: bid, AND: ws.map((w) => ({ OR: [...numberIs(w), { title: textHas(w) }, { client: nameHas(w) }, { property: { formatted: textHas(w) } }] })) }, select: { id: true },
+    }) : null,
+  ]);
+  const hit = found && new Set(found.map((j) => j.id));
+  const nextVisit = (j: { visits: (typeof all)[number]["visits"] }) => j.visits.filter((v) => v.scheduledDate && ["SCHEDULED", "EN_ROUTE", "IN_PROGRESS"].includes(v.state))
+    .map((v) => v.scheduledDate!).sort()[0] ?? null;
+  const matches = all.filter((j) => (status === "all" || (status === "open" ? j.status !== "ARCHIVED" : j.status === status)) && (!hit || hit.has(j.id)));
+  const sorted = sortRows(matches, params.sort, params.dir, {
     client: (j) => clientName(j.client).toLowerCase(), number: (j) => j.number, next: nextVisit, status: (j) => STATUSES.indexOf(j.status),
   });
+  const at = pageOf(one("page"), sorted.length);
+  const ids = sorted.slice(at.skip, at.skip + at.take).map((j) => j.id);
+  const rows = inOrder(ids, await jobsWithStatus({ id: { in: ids } }, today));
   const in30 = addDays(today, 30);
   const count = (s: JobStatus) => all.filter((j) => j.status === s).length;
   return (
     <ListPage
-      title="Jobs" base="/jobs" params={params} newHref="/jobs/new" newLabel="New job" searchPlaceholder="Search jobs, clients, addresses"
+      title="Jobs" base="/jobs" params={params} at={at} newHref="/jobs/new" newLabel="New job" searchPlaceholder="Search jobs, clients, addresses"
       overview={["LATE", "TODAY", "UNSCHEDULED", "REQUIRES_INVOICING", "ACTION_REQUIRED", "UPCOMING", "ON_PLAN"].map((s) => ({
         label: JOB_STATUS_LABEL[s as JobStatus], count: count(s as JobStatus), dot: DOT[s as JobStatus], active: status === s,
         href: listHref("/jobs", params, { status: s, q: undefined }),
       }))}
       metrics={[
-        { label: "Visits in the next 30 days", value: all.reduce((n, j) => n + j.visits.filter((v) => { const d = dateOnly(v.scheduledDate); return d && d >= today && d <= in30 && v.state === "SCHEDULED"; }).length, 0), sub: `through ${prettyDate(in30)}` },
+        { label: "Visits in the next 30 days", value: all.reduce((n, j) => n + j.visits.filter((v) => { const d = v.scheduledDate; return d && d >= today && d <= in30 && v.state === "SCHEDULED"; }).length, 0), sub: `through ${prettyDate(in30)}` },
         { label: "Requires invoicing", value: count("REQUIRES_INVOICING"), sub: "jobs with unbilled work", href: "/billing" },
         { label: "Snow plans", value: all.filter((j) => j.kind === "SNOW_PLAN" && j.status !== "ARCHIVED").length, sub: `${count("PAUSED")} paused`, href: listHref("/jobs", {}, { kind: "SNOW_PLAN" }) },
       ]}
@@ -58,7 +69,7 @@ export default async function Jobs({ searchParams }: PageProps<"/jobs">) {
         { key: "status", label: "Status", sortable: true },
       ]}
       rows={rows.map((j) => {
-        const nv = nextVisit(j);
+        const nv = nextVisit({ visits: j.visits.map((v) => ({ state: v.state, scheduledDate: dateOnly(v.scheduledDate) })) });
         return {
           id: j.id, href: `/jobs/${j.id}`,
           cells: {

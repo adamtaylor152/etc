@@ -58,7 +58,7 @@ export async function hubOrder(token: string, raw: unknown): Promise<HubOrderRes
   const t = await peekToken(db, String(token), ["CLIENT_HUB"]);
   if (!t.ok || !t.token.clientId) return { ok: false, error: "This link has expired. Get a fresh one from the email we sent you." };
   const client = await db.client.findUniqueOrThrow({ where: { id: t.token.clientId } });
-  if (limited(`hub-order:${client.id}`)) return { ok: false, error: "That's a lot of orders in a few minutes. Try again in ten." };
+  if (await limited(`hub-order:${client.id}`)) return { ok: false, error: "That's a lot of orders in a few minutes. Try again in ten." };
   const parsed = z.looseObject({ propertyId: z.string().max(40).optional() }).safeParse(raw);
   if (!parsed.success || JSON.stringify(raw).length > 16_384) return { ok: false, error: "That order didn't come through right. Refresh and try again." };
   const d = parsed.data;
@@ -90,7 +90,7 @@ export async function hubOrder(token: string, raw: unknown): Promise<HubOrderRes
 /** Client turns ice melt or extra sidewalk on or off for their plan. Charged with each clearing from the next visit on. */
 export async function hubPlanAddOn(f: FormData) {
   const { token, client } = await hubClient(f);
-  if (tooFast(client.id)) redirect(back(token, "Too many changes at once. Try again in a few minutes."));
+  if (await tooFast(client.id)) redirect(back(token, "Too many changes at once. Try again in a few minutes."));
   const p = z.object({ jobId: z.string().max(40), addon: z.enum(["iceMelt", "extraWalk"]), on: z.enum(["0", "1"]) }).safeParse(Object.fromEntries(f));
   if (!p.success) redirect(`/hub/${token}`);
   const on = p.data.on === "1", what = p.data.addon === "iceMelt" ? "ice melt" : "extra sidewalk";
@@ -105,7 +105,7 @@ export async function hubPlanAddOn(f: FormData) {
 /** Client adds a fixed-price add-on to one of their visits that hasn't started (or takes it back). */
 export async function hubVisitExtra(f: FormData) {
   const { token, client } = await hubClient(f);
-  if (tooFast(client.id)) redirect(back(token, "Too many changes at once. Try again in a few minutes."));
+  if (await tooFast(client.id)) redirect(back(token, "Too many changes at once. Try again in a few minutes."));
   const p = z.union([z.object({ visitId: z.string().max(40), serviceId: z.string().max(40) }), z.object({ removeId: z.string().max(40) })]).safeParse(Object.fromEntries(f));
   if (!p.success) redirect(`/hub/${token}`);
   let done: { title: string; body: string; visitId: string; flash: string };
@@ -128,7 +128,7 @@ export async function hubVisitExtra(f: FormData) {
 /** "Can you also…?" from the client page: becomes a request in the CRM. */
 export async function hubRequestWork(f: FormData) {
   const { token, client } = await hubClient(f);
-  if (limited(`hub-order:${client.id}`)) redirect(back(token, "That's a lot of requests in a few minutes. Try again in ten."));
+  if (await limited(`hub-order:${client.id}`)) redirect(back(token, "That's a lot of requests in a few minutes. Try again in ten."));
   const notes = String(f.get("notes") ?? "").trim().slice(0, 2000);
   if (!notes) redirect(`/hub/${token}?error=${encodeURIComponent("Tell us what you need")}`);
   const property = await db.property.findFirst({ where: { clientId: client.id, archivedAt: null }, orderBy: { isDefault: "desc" } });

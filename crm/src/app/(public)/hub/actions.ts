@@ -11,7 +11,7 @@ export async function emailHubLink(f: FormData) {
   const email = String(f.get("email") ?? "").trim().toLowerCase().slice(0, 200);
   const h = await headers();
   const ip = h.get("cf-connecting-ip") ?? h.get("x-forwarded-for")?.split(",").pop()?.trim() ?? "?";
-  if (email && !limited(`hub:${email}`, 3, 3_600_000) && !limited(`hub-ip:${ip}`, 10, 3_600_000)) {
+  if (email && !(await limited(`hub:${email}`, 3, 3_600_000)) && !(await limited(`hub-ip:${ip}`, 10, 3_600_000))) {
     const bid = await businessId();
     const c = await db.client.findFirst({ where: { businessId: bid, email, archivedAt: null } });
     if (c) {

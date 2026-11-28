@@ -4,6 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Attachment } from "@/generated/prisma/client";
 import { Flash } from "@/components/flash";
+import { ClientSelect } from "@/components/client-select";
 import { Composer } from "@/components/messages/composer";
 import { LiveThread } from "@/components/messages/live";
 import { Input } from "@/components/ui";
@@ -31,11 +32,10 @@ export default async function Thread({ params, searchParams }: PageProps<"/messa
   if (!unknown && !client) notFound();
   const phone = client ? toE164(client.phone) : number;
   const where = client ? { businessId: bid, clientId: client.id } : { businessId: bid, clientId: null, OR: [{ from: number! }, { to: number! }] };
-  const [texts, jobs, quotes, clients] = await Promise.all([
+  const [texts, jobs, quotes] = await Promise.all([
     db.textMessage.findMany({ where, orderBy: { createdAt: "desc" }, take: 400, include: { media: { where: { deletedAt: null }, include: { job: true, quote: true }, orderBy: { createdAt: "asc" } } } }).then((t) => t.reverse()),
     client ? db.job.findMany({ where: { businessId: bid, clientId: client.id }, orderBy: [{ closedAt: { sort: "asc", nulls: "first" } }, { number: "desc" }], take: 25 }) : [],
     client ? db.quote.findMany({ where: { businessId: bid, clientId: client.id }, orderBy: { number: "desc" }, take: 25 }) : [],
-    unknown ? db.client.findMany({ where: { businessId: bid, archivedAt: null }, orderBy: [{ firstName: "asc" }, { lastName: "asc" }], take: 2000 }) : [],
   ]);
   await db.textMessage.updateMany({ where: { ...where, direction: "IN", readAt: null }, data: { readAt: new Date() } });
 
@@ -64,10 +64,7 @@ export default async function Thread({ params, searchParams }: PageProps<"/messa
             <form action={textLinkClient} className="space-y-2">
               <input type="hidden" name="key" value={key} />
               <p className="font-semibold">Existing client</p>
-              <select name="clientId" required className="min-h-11 w-full rounded-xl border border-line bg-white px-3">
-                <option value="">Choose…</option>
-                {clients.map((c) => <option key={c.id} value={c.id}>{clientName(c)}{c.phone ? ` · ${c.phone}` : ""}</option>)}
-              </select>
+              <ClientSelect required none="Choose" />
               <button className="inline-flex min-h-10 items-center rounded-full bg-navy px-4 font-semibold text-white">Link</button>
             </form>
             <form action={textNewClient} className="space-y-2">

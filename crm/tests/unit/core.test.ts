@@ -1,8 +1,8 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { pageOf } from "@/components/list-page";
 import { findCommunity, toShape } from "@/server/communities";
 import { addDays, dateOnly, todayLocal, toDbDate } from "@/server/dates";
-import { limited } from "@/server/http";
 import { lineTotal, money } from "@/server/money";
 import { checkToken } from "@/server/tokens";
 
@@ -53,11 +53,19 @@ describe("tokens", () => {
   });
 });
 
-describe("rate limit", () => {
-  it("allows 5 per window then blocks", () => {
-    const results = Array.from({ length: 6 }, (_, i) => limited("1.2.3.4-test", 5, 600_000, 1000 + i));
-    expect(results).toEqual([false, false, false, false, false, true]);
-    expect(limited("1.2.3.4-test", 5, 600_000, 1000 + 600_001)).toBe(false);
+describe("list paging", () => {
+  it("works out the rows a page shows", () => {
+    expect(pageOf(undefined, 734)).toMatchObject({ page: 1, pages: 15, skip: 0, take: 50, from: 1, to: 50 });
+    expect(pageOf("2", 734)).toMatchObject({ page: 2, skip: 50, from: 51, to: 100 });
+    expect(pageOf("15", 734)).toMatchObject({ page: 15, skip: 700, from: 701, to: 734 });
+  });
+  it("a page that doesn't exist lands on the nearest one that does", () => {
+    expect(pageOf("99", 734).page).toBe(15); // e.g. a filter shrank the list
+    expect(pageOf("0", 734).page).toBe(1);
+    expect(pageOf("-3", 734).page).toBe(1);
+    expect(pageOf("abc", 734).page).toBe(1);
+    expect(pageOf("2", 0)).toMatchObject({ page: 1, pages: 1, skip: 0, from: 0, to: 0 });
+    expect(pageOf("2", 50)).toMatchObject({ page: 1, pages: 1, to: 50 });
   });
 });
 

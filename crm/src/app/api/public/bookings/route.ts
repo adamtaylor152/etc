@@ -36,7 +36,7 @@ export async function POST(req: Request) {
     return json(req, 400, { error: "bad request" });
   }
   if (data.website) return json(req, 201, { ok: true }); // honeypot humans never see; pretend it worked
-  if (limited(clientIp(req))) return json(req, 429, { error: `Too many bookings from here. Please call ${env.phone}.` });
+  if (await limited(clientIp(req))) return json(req, 429, { error: `Too many bookings from here. Please call ${env.phone}.` });
 
   const bid = await businessId();
   let booking;

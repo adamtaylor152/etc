@@ -18,20 +18,34 @@ export function verdict(i: { dbOk: boolean; cronEnabled: boolean; lastTickMs: nu
   return { up: i.dbOk && scheduler, checks: { db: i.dbOk, scheduler, emails, texts } };
 }
 
+/**
+ * Pure: each hourly automation's last good run as an age in minutes (null = never yet), and whether its latest run
+ * failed. Some only run in daytime hours or once a day, so an age is for a person to read, not an alarm by itself.
+ */
+export function automationReport(rows: { name: string; lastOkAt: Date | null; lastFailAt: Date | null }[], now: number) {
+  const automations = Object.fromEntries(rows.map((r) => [r.name, {
+    lastGoodMinutesAgo: r.lastOkAt ? Math.max(0, Math.round((now - r.lastOkAt.getTime()) / 60_000)) : null,
+    failing: !!r.lastFailAt && (!r.lastOkAt || r.lastFailAt > r.lastOkAt),
+  }]));
+  return { automations, allGood: Object.values(automations).every((a) => !a.failing) };
+}
+
 export async function health() {
   const now = Date.now();
   let dbOk = true, emailStuck = 0, emailFailed = 0, smsFailed = 0;
+  let runs: Parameters<typeof automationReport>[0] = [];
   try {
     const since = new Date(now - 2 * 3_600_000);
-    [emailStuck, emailFailed, smsFailed] = await Promise.all([
+    [emailStuck, emailFailed, smsFailed, runs] = await Promise.all([
       // Must-send mail (priority <= 3 is never held back by the daily cap) waiting well past its retry time = sender is down.
       db.emailMessage.count({ where: { status: { in: ["QUEUED", "SENDING"] }, nextAttemptAt: { lt: new Date(now - 30 * 60_000) }, priority: { lte: 3 } } }),
       db.emailMessage.count({ where: { status: "FAILED", createdAt: { gte: since } } }),
       db.textMessage.count({ where: { direction: "OUT", status: "failed", createdAt: { gte: since } } }),
+      db.automationRun.findMany({ orderBy: { name: "asc" } }),
     ]);
   } catch { dbOk = false; }
-  return {
-    ...verdict({ dbOk, cronEnabled: !env.cronDisabled, lastTickMs: g.etcLastTick ? now - g.etcLastTick : null, upMs: now - g.etcBootAt!, emailStuck, emailFailed, smsFailed }),
-    counts: { emailStuck, emailFailed, smsFailed },
-  };
+  const v = verdict({ dbOk, cronEnabled: !env.cronDisabled, lastTickMs: g.etcLastTick ? now - g.etcLastTick : null, upMs: now - g.etcBootAt!, emailStuck, emailFailed, smsFailed });
+  const { automations, allGood } = automationReport(runs, now);
+  // An automation whose latest run failed is reported like mail trouble: flagged, but the site isn't "down".
+  return { up: v.up, checks: { ...v.checks, automations: allGood }, counts: { emailStuck, emailFailed, smsFailed }, automations };
 }
