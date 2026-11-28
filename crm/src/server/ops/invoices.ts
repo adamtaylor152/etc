@@ -1,6 +1,6 @@
 // Invoices and payments: unbilled charges -> draft invoice -> send -> payment (cash / e-Transfer / card) -> receipt.
 import type { PaymentMethod, Prisma } from "@/generated/prisma/client";
-import { depositCents, depositCredit, dueDate, etransferRef, invoiceTotals, statusAfterPayments } from "../billing/invoice";
+import { billingEmail, depositCents, depositCredit, dueDate, etransferRef, invoiceTotals, statusAfterPayments } from "../billing/invoice";
 import { todayLocal, toDbDate } from "../dates";
 import { db, type Tx } from "../db";
 import { enqueue, kickOutbox } from "../email/outbox";
@@ -9,6 +9,10 @@ import { logActivity, nextNumber } from "../records";
 import { TransitionError } from "../status/visit";
 import { parseSettings } from "../settings";
 import { qualifyReferral } from "./marketing";
+
+/** Address for invoices, receipts and reminders (see billingEmail). */
+export const billingEmailFor = async (tx: Tx, client: { id: string; email: string }) =>
+  billingEmail(client.email, await tx.clientContact.findMany({ where: { clientId: client.id }, orderBy: { id: "asc" } }));
 
 type Actor = { id: string; businessId: string } | { id: null; businessId: string }; // id null = system (Stripe webhook)
 type LineIn = { name: string; quantity: number; unitPriceCents: number; totalCents: number; serviceDate?: Date | null; jobId?: string | null; visitId?: string | null; chargeId?: string };
@@ -133,7 +137,7 @@ export async function sendInvoice(user: Actor, invoiceId: string, tx?: Tx) {
       await t.invoice.update({ where: { id: inv.id }, data: { status: "AWAITING_PAYMENT", issuedOn: toDbDate(today), dueOn: toDbDate(dueDate(today, inv.paymentTerms)), sentAt: new Date() } });
     }
     await enqueue(t, {
-      businessId: user.businessId, template: "invoice.sent", to: inv.client.email, replyTo: env.helpEmail, priority: 3, props: { invoiceId: inv.id },
+      businessId: user.businessId, template: "invoice.sent", to: await billingEmailFor(t, inv.client), replyTo: env.helpEmail, priority: 3, props: { invoiceId: inv.id },
       dedupeKey: `invoice:${inv.id}:sent:${Date.now()}`, clientId: inv.clientId, entityType: "Invoice", entityId: inv.id,
     });
     await logActivity(t, { businessId: user.businessId, type: "invoice.sent", entityType: "Invoice", entityId: inv.id, actorType: user.id ? "USER" : "SYSTEM", actorUserId: user.id ?? undefined, clientId: inv.clientId, jobId: inv.jobId ?? undefined });
@@ -191,7 +195,7 @@ export async function recordPayment(user: Actor, input: {
     await qualifyReferral(tx, inv.clientId);
     const client = await tx.client.findUniqueOrThrow({ where: { id: inv.clientId } });
     await enqueue(tx, {
-      businessId: user.businessId, template: "payment.receipt", to: client.email, replyTo: env.helpEmail, priority: 2, props: { paymentId: p.id },
+      businessId: user.businessId, template: "payment.receipt", to: await billingEmailFor(tx, client), replyTo: env.helpEmail, priority: 2, props: { paymentId: p.id },
       dedupeKey: `payment:${p.id}:receipt`, clientId: client.id, entityType: "Payment", entityId: p.id,
     });
     if (input.method === "CARD") {

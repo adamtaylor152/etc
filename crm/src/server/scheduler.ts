@@ -12,7 +12,7 @@ import { reminderDue } from "./billing/invoice";
 import { addDays, dateOnly, todayLocal, toDbDate, TZ } from "./dates";
 import { forecast, snowByDay } from "./forecast";
 import { generateRecurringVisits } from "./ops/jobs";
-import { invoiceUnbilled } from "./ops/invoices";
+import { billingEmailFor, invoiceUnbilled } from "./ops/invoices";
 import { parseSettings } from "./settings";
 import { plansTriggered } from "./snow/select";
 import { enqueue, enqueueSms, processOutbox } from "./email/outbox";
@@ -175,7 +175,7 @@ async function invoiceReminders() {
     if (!n || inv.client.emailBouncedAt) continue;
     await db.$transaction(async (tx) => {
       await enqueue(tx, {
-        businessId: inv.businessId, template: "invoice.reminder", to: inv.client.email, replyTo: env.helpEmail, priority: 6,
+        businessId: inv.businessId, template: "invoice.reminder", to: await billingEmailFor(tx, inv.client), replyTo: env.helpEmail, priority: 6,
         props: { invoiceId: inv.id, n }, dedupeKey: `invoice:${inv.id}:reminder:${n}`, clientId: inv.clientId, entityType: "Invoice", entityId: inv.id,
       });
       await tx.invoice.update({ where: { id: inv.id }, data: { remindersSent: n, lastReminderAt: new Date() } });

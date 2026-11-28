@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dueDate, etransferRef, invoiceTotals, invoiceView, reminderDue, statusAfterPayments } from "@/server/billing/invoice";
+import { billingEmail, dueDate, etransferRef, invoiceTotals, invoiceView, reminderDue, statusAfterPayments } from "@/server/billing/invoice";
 
 const NOT_REG = { taxRegistered: false, taxRateBps: 500, pricesIncludeTax: true };
 describe("invoiceTotals", () => {
@@ -48,5 +48,13 @@ describe("invoiceView / reminders / terms", () => {
     expect(dueDate("2026-11-27", "DUE_ON_RECEIPT")).toBe("2026-11-27");
     expect(dueDate("2026-11-27", "NET_15")).toBe("2026-12-12");
     expect(etransferRef(1042)).toBe("ETC-1042");
+  });
+});
+
+describe("billingEmail", () => {
+  it("prefers a billing contact with an email, else the client", () => {
+    expect(billingEmail("a@x.ca", [])).toBe("a@x.ca");
+    expect(billingEmail("a@x.ca", [{ isBilling: true, email: null }, { isBilling: false, email: "c@x.ca" }])).toBe("a@x.ca");
+    expect(billingEmail("a@x.ca", [{ isBilling: true, email: "pay@x.ca" }])).toBe("pay@x.ca");
   });
 });
