@@ -8,7 +8,7 @@ export function DetailHeader({ back, kind, status, title, sub, actions }: {
 }) {
   return (
     <div className="mb-6">
-      {back && <Link href={back.href} className="-ml-1 mb-2 inline-flex min-h-8 items-center gap-0.5 rounded-md pr-2 text-sm font-medium text-ink-soft hover:text-navy"><ChevronLeft className="size-4" aria-hidden />{back.label}</Link>}
+      {back && <Link href={back.href} className="-ml-1 mb-2 inline-flex min-h-8 max-sm:min-h-11 items-center gap-0.5 rounded-md pr-2 text-sm font-medium text-ink-soft hover:text-navy"><ChevronLeft className="size-4" aria-hidden />{back.label}</Link>}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           {(kind || status) && <div className="mb-1 flex flex-wrap items-center gap-2 text-sm font-semibold text-ink-soft">{kind}{status}</div>}

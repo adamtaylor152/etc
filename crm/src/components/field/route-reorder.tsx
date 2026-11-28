@@ -56,7 +56,7 @@ export function RouteReorder({ items, action, hidden = {}, saves }: {
               </form>
             ))}
           </div>
-          <button type="button" onClick={() => setLocal({ key, order: saved })} className="mt-2 inline-flex min-h-9 items-center rounded-lg px-1 text-sm font-medium text-ink-soft hover:text-navy">Put it back (don&apos;t save)</button>
+          <button type="button" onClick={() => setLocal({ key, order: saved })} className="mt-2 inline-flex min-h-9 max-sm:min-h-11 items-center rounded-lg px-1 text-sm font-medium text-ink-soft hover:text-navy">Put it back (don&apos;t save)</button>
         </div>
       )}
     </>

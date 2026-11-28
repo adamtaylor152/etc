@@ -189,7 +189,7 @@ export default async function ClientPage({ params, searchParams }: PageProps<"/c
                     <div className="flex flex-wrap gap-1.5" role="group" aria-label="Show">
                       {WORK.map((w) => (
                         <Link key={w} href={`/clients/${id}?work=${w}`} aria-current={work === w ? "true" : undefined}
-                          className={`inline-flex min-h-8 items-center gap-1.5 rounded-full border px-3 text-[13px] font-medium capitalize ${work === w ? "border-blue/30 bg-blue/8 font-semibold text-blue-deep" : "border-line bg-white text-ink-soft hover:border-ink-faint/60 hover:text-navy"}`}>
+                          className={`inline-flex min-h-8 items-center gap-1.5 rounded-full border px-3 text-[13px] font-medium capitalize max-sm:min-h-11 ${work === w ? "border-blue/30 bg-blue/8 font-semibold text-blue-deep" : "border-line bg-white text-ink-soft hover:border-ink-faint/60 hover:text-navy"}`}>
                           {w}<span className="tabular-nums opacity-80">{counts[w]}</span>
                         </Link>
                       ))}

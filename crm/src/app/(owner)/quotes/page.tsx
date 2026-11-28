@@ -7,6 +7,7 @@ import { dateOnly, localDayStart, addDays, prettyDate, todayLocal } from "@/serv
 import { businessId, db } from "@/server/db";
 import { cad } from "@/server/money";
 import { byClient, clientName, nameHas, numberIs, textHas, words } from "@/server/queries";
+import { quoteExpired } from "@/server/status/quote";
 
 export const metadata = { title: "Quotes" };
 const STATUSES: QuoteStatus[] = ["DRAFT", "AWAITING_RESPONSE", "CHANGES_REQUESTED", "APPROVED", "CONVERTED", "DECLINED", "ARCHIVED"]; // the overview shows the first five
@@ -37,6 +38,7 @@ export default async function Quotes({ searchParams }: PageProps<"/quotes">) {
     db.quote.aggregate({ where: { businessId: bid, sentAt: { gte: since }, status: { in: ["APPROVED", "CONVERTED"] } }, ...sum }),
   ]);
   const at = pageOf(one("page"), total);
+  const today = todayLocal();
   const rows = await db.quote.findMany({ where, include: { client: true, property: true }, orderBy, skip: at.skip, take: at.take });
   return (
     <ListPage
@@ -54,7 +56,8 @@ export default async function Quotes({ searchParams }: PageProps<"/quotes">) {
         cells: {
           client: clientName(x.client), number: <><span className="font-medium tabular-nums">#{x.number}</span> <span className="text-ink-soft">{x.title}</span></>,
           property: x.property?.formatted.split(",")[0] ?? <span className="text-ink-faint">—</span>, created: <span className="text-ink-soft">{prettyDate(dateOnly(x.createdAt))}</span>,
-          status: <Badge tone={QUOTE[x.status][1]}>{QUOTE[x.status][0]}</Badge>, total: <span className="font-medium">{cad(x.totalCents)}</span>,
+          // Display only (same rule as the client's page and the quote itself): still awaiting, but past its good-until date.
+          status: quoteExpired({ status: x.status, validUntil: dateOnly(x.validUntil) }, today) ? <Badge tone="red">Expired</Badge> : <Badge tone={QUOTE[x.status][1]}>{QUOTE[x.status][0]}</Badge>, total: <span className="font-medium">{cad(x.totalCents)}</span>,
         },
       }))}
       empty="No quotes match."

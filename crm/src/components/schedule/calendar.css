@@ -97,11 +97,12 @@
 .etc-cal .etc-fc-list-item .etc-fc-ev-title { font-size: .875rem; font-weight: 600; white-space: normal; }
 .etc-cal .etc-fc-empty { background: var(--color-tint); color: var(--color-ink-soft); font-size: .875rem; }
 
-/* Phones: title on its own line, controls underneath, each a full 40px. */
+/* Phones: title on its own line, controls underneath, each a full 44px. */
 @media (max-width: 639px) {
   .etc-cal .etc-fc-section:has(.etc-fc-title) { order: -1; width: 100%; }
   .etc-cal .etc-fc-title { font-size: 1.05rem; }
-  .etc-cal .etc-fc-btn { min-height: 2.5rem; }
-  .etc-cal .etc-fc-group[role="tablist"] .etc-fc-btn { min-height: 2rem; padding: 0 .6rem; }
+  .etc-cal .etc-fc-btn { min-height: 2.75rem; }
+  .etc-cal .etc-fc-group[role="tablist"] { padding: 0; }
+  .etc-cal .etc-fc-group[role="tablist"] .etc-fc-btn { min-height: 2.75rem; padding: 0 .6rem; }
   .etc-cal .etc-fc-list-item .etc-fc-ev-time { width: 6.75rem; white-space: normal; } /* room for "6:30 – 7:30 a.m."; a longer range wraps */
 }

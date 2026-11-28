@@ -90,8 +90,8 @@ export default async function JobPage({ params, searchParams }: PageProps<"/jobs
   // One primary action per view: invoice what is owed; otherwise open the next visit; otherwise book one.
   const nextVisit = job.visits.filter((v) => v.scheduledDate && ["SCHEDULED", "EN_ROUTE", "IN_PROGRESS"].includes(v.state)).sort((a, b) => +a.scheduledDate! - +b.scheduledDate!)[0];
   const primary = canInvoice ? "invoice" : nextVisit ? "visit" : !closed && !plan ? "add" : null;
-  const small = "min-h-9! px-3!";
-  const check = "flex min-h-10 items-center gap-2 text-sm font-semibold";
+  const small = "sm:min-h-9! px-3!"; // compact on a desktop row, the full 44px on a phone
+  const check = "flex min-h-10 items-center gap-2 text-sm font-semibold max-sm:min-h-11";
 
   return (
     <>
@@ -157,7 +157,7 @@ export default async function JobPage({ params, searchParams }: PageProps<"/jobs
                           {open && (
                             <form action={visitDelete}>
                               <input type="hidden" name="id" value={v.id} /><input type="hidden" name="back" value={here} />
-                              <ConfirmButton message="Delete this visit? It comes off the schedule for good." className="-my-1.5 inline-flex size-9 items-center justify-center rounded-lg text-ink-soft hover:bg-red-50 hover:text-red-700" aria-label="Delete visit" title="Delete visit"><Trash2 className="size-4" aria-hidden /></ConfirmButton>
+                              <ConfirmButton message="Delete this visit? It comes off the schedule for good." className="-my-1.5 inline-flex size-9 max-sm:size-11 items-center justify-center rounded-lg text-ink-soft hover:bg-red-50 hover:text-red-700" aria-label="Delete visit" title="Delete visit"><Trash2 className="size-4" aria-hidden /></ConfirmButton>
                             </form>
                           )}
                         </span>
@@ -165,9 +165,11 @@ export default async function JobPage({ params, searchParams }: PageProps<"/jobs
                       {open && (!v.snowEventId || !plan) && (
                         <div className="relative mt-2 flex flex-wrap items-center gap-2">
                           {!v.snowEventId && (
-                            <form action={visitSchedule} className="flex items-center gap-1">
+                            <form action={visitSchedule} className="flex items-center gap-2">
                               <input type="hidden" name="id" value={v.id} /><input type="hidden" name="back" value={here} />
-                              <input type="date" name="date" defaultValue={dateOnly(v.scheduledDate) ?? ""} className={`${inputCls} min-h-9! w-36! py-1!`} aria-label="Move this visit to" />
+                              <label className="flex items-center gap-2 text-xs font-medium text-ink-soft">Move to
+                                <input type="date" name="date" defaultValue={dateOnly(v.scheduledDate) ?? ""} className={`${inputCls} w-auto! text-navy tabular-nums sm:min-h-9! sm:py-1!`} />
+                              </label>
                               <button className={btn("secondary", small)}>Move</button>
                             </form>
                           )}
