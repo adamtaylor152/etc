@@ -1,15 +1,16 @@
 "use client";
 // The route planner's reorderable stop list. Same behaviour as components/reorder-list.tsx (drag the handle or tap the
 // arrows, nothing is written until a save button is pressed, each save posts the ids in their new order plus its own
-// `scope`); this copy only changes how it looks: deliberate move buttons, a real grip, and a save bar that spells out
-// what each choice does at the moment of saving.
+// `scope`) and the same bordered arrow buttons; this copy adds a save bar that spells out what each choice does at the
+// moment of saving, and shows a long community's first stops with the rest one tap away.
 import { useState, type ReactNode } from "react";
-import { ChevronDown, ChevronUp, GripVertical } from "lucide-react";
+import { ArrowDown, ArrowUp, GripVertical } from "lucide-react";
+import { ico, step } from "@/components/reorder-list";
 import { btn } from "@/components/ui";
 
-export function RouteReorder({ items, action, hidden = {}, saves }: {
+export function RouteReorder({ items, action, hidden = {}, saves, cap = 10 }: {
   items: { id: string; node: ReactNode }[]; action: (f: FormData) => void | Promise<void>;
-  hidden?: Record<string, string>; saves: { label: string; scope: string; hint: string; primary?: boolean }[];
+  hidden?: Record<string, string>; saves: { label: string; scope: string; hint: string; primary?: boolean }[]; cap?: number;
 }) {
   const saved = items.map((i) => i.id), key = saved.join(",");
   // Keyed on the server's order, so a save (or a stop getting done) drops any half-made local order.
@@ -22,27 +23,36 @@ export function RouteReorder({ items, action, hidden = {}, saves }: {
     next.splice(to, 0, id);
     setLocal({ key, order: next });
   };
-  const arrow = "flex h-7 w-9 items-center justify-center text-ink-soft hover:bg-tint hover:text-navy disabled:text-ink-faint/50 disabled:hover:bg-transparent";
   const changed = order.join(",") !== key;
+  // Stops past the cap are hidden, not left out: the save forms post every id from `order`, and the printed sheet
+  // lists them all. A half-made order opens the list, so a stop moved past the cap never vanishes.
+  const [all, setAll] = useState(false);
+  const open = all || changed || order.length <= cap;
   return (
     <>
       <ol className="divide-y divide-line-soft">
         {order.map((id, i) => (
-          <li key={id} className={`flex items-start gap-2 ${drag === id ? "opacity-40" : ""}`}
+          <li key={id} className={`items-start gap-2 ${open || i < cap ? "flex" : "hidden print:flex"} ${drag === id ? "opacity-40" : ""}`}
             onDragOver={(e) => { if (!drag) return; e.preventDefault(); if (drag !== id) move(drag, i); }} onDrop={(e) => e.preventDefault()}>
             {items.length > 1 && (
-              <span className="no-print mt-3 flex shrink-0 flex-col overflow-hidden rounded-lg border border-line bg-white">
-                <button type="button" disabled={i === 0} onClick={() => move(id, i - 1)} aria-label="Move up" title={i === 0 ? "Already first" : "Move up"} className={arrow}><ChevronUp className="size-4" aria-hidden /></button>
-                <span draggable title="Drag to reorder" aria-hidden className="flex h-6 w-9 cursor-grab select-none items-center justify-center border-y border-line-soft text-ink-faint hover:bg-tint hover:text-navy active:cursor-grabbing"
+              // Stacked on a phone (two full 44px targets beside a narrow row), side by side with a drag handle from `sm`.
+              <span className="no-print mt-3 flex shrink-0 items-center gap-1 max-sm:flex-col">
+                <span draggable title="Drag to reorder" aria-hidden className="hidden h-8 cursor-grab select-none place-items-center px-1 text-ink-faint hover:text-navy active:cursor-grabbing sm:grid"
                   onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", id); const li = e.currentTarget.closest("li"); if (li) e.dataTransfer.setDragImage(li, 12, 12); setDrag(id); }}
-                  onDragEnd={() => setDrag(null)}><GripVertical className="size-4" /></span>
-                <button type="button" disabled={i === order.length - 1} onClick={() => move(id, i + 1)} aria-label="Move down" title={i === order.length - 1 ? "Already last" : "Move down"} className={arrow}><ChevronDown className="size-4" aria-hidden /></button>
+                  onDragEnd={() => setDrag(null)}><GripVertical {...ico} /></span>
+                <button type="button" disabled={i === 0} onClick={() => move(id, i - 1)} aria-label="Move up" title={i === 0 ? "Already first" : "Move up"} className={step}><ArrowUp {...ico} /></button>
+                <button type="button" disabled={i === order.length - 1} onClick={() => move(id, i + 1)} aria-label="Move down" title={i === order.length - 1 ? "Already last" : "Move down"} className={step}><ArrowDown {...ico} /></button>
               </span>
             )}
             <div className="min-w-0 flex-1">{node.get(id)}</div>
           </li>
         ))}
       </ol>
+      {order.length > cap && !changed && (
+        <button type="button" onClick={() => setAll(!all)} aria-expanded={all} className="no-print inline-flex min-h-9 w-full items-center border-t border-line-soft text-sm font-semibold text-blue hover:text-blue-deep max-sm:min-h-11">
+          {all ? `Show the first ${cap}` : `Show all ${order.length.toLocaleString("en-CA")} stops`}
+        </button>
+      )}
       {changed && (
         <div className="no-print sticky bottom-16 z-10 mt-3 rounded-xl border border-blue/30 bg-white p-3 shadow-lift sm:bottom-3" role="group" aria-label="Save the new order">
           <p className="text-sm font-semibold">You changed the order. Save it for:</p>

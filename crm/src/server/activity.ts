@@ -3,6 +3,12 @@
 import { db } from "./db";
 import { cad } from "./money";
 import { clientName } from "./queries";
+import { SKIP_LABEL } from "./status/visit";
+
+/** A stored reason as words: a skip reason gets its shared label, any other code is lowercased, free text is kept. Unit-tested. */
+export function reasonLabel(reason: string): string {
+  return (SKIP_LABEL as Record<string, string>)[reason] ?? (/^[A-Z_]+$/.test(reason) ? reason.toLowerCase().replaceAll("_", " ") : reason);
+}
 
 export const FEED_TYPES = ["work", "money", "text", "call", "note", "email"] as const;
 export type FeedType = (typeof FEED_TYPES)[number];
@@ -106,7 +112,7 @@ export async function activityFeed(scope: FeedScope, opts: { types?: readonly Fe
       const amount = typeof d.amountCents === "number" ? cad(d.amountCents) : typeof d.totalCents === "number" ? cad(d.totalCents) : "";
       return {
         id: e.id, type: isMoney ? "money" : "work", object, at: e.at, title: `${eventTitle(e.type)}${num}`,
-        detail: [amount, typeof d.method === "string" ? d.method.toLowerCase().replace("etransfer", "e-Transfer") : "", typeof d.reason === "string" ? (/^[A-Z_]+$/.test(d.reason) ? d.reason.toLowerCase().replaceAll("_", " ") : d.reason) : ""].filter(Boolean).join(" · ") || undefined,
+        detail: [amount, typeof d.method === "string" ? d.method.toLowerCase().replace("etransfer", "e-Transfer") : "", typeof d.reason === "string" ? reasonLabel(d.reason) : ""].filter(Boolean).join(" · ") || undefined,
         href: object === "payment" && typeof d.invoiceId === "string" ? `/invoices/${d.invoiceId}` : HREF[object]?.(e.entityId),
         client: who(e.clientId), tone: e.type === "payment.received" ? "green" : e.type === "visit.skipped" || e.type === "invoice.voided" ? "red" : undefined,
       };

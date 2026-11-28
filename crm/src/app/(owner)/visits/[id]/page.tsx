@@ -31,12 +31,11 @@ import { paymentRecord } from "../../billing-actions";
 import { visitIceMeltBags, visitReturn, visitTransition } from "../../work-actions";
 import { isSnowVisit, onSiteMinutes, usualByProperty, usualKey } from "@/server/ops/visit-times";
 import { getSettings } from "@/server/settings";
+import { SKIP_LABEL, skipLabel } from "@/server/status/visit";
 import { returnVisitPrice } from "@/server/snow/tiers";
 
-const SKIP: [string, string][] = [
-  ["ALREADY_CLEARED", "Already cleared"], ["BLOCKED_BY_CAR", "Blocked by a car"], ["NO_ACCESS", "Couldn't get in"],
-  ["CLIENT_CANCELLED", "Client cancelled"], ["WEATHER", "Weather"], ["OTHER", "Other"],
-];
+// The reasons the office can pick here ("below the trigger depth" is set by the storm tools, not by hand).
+const SKIP = (["ALREADY_CLEARED", "BLOCKED_BY_CAR", "NO_ACCESS", "CLIENT_CANCELLED", "WEATHER", "OTHER"] as const).map((k) => [k, SKIP_LABEL[k]] as const);
 
 export async function generateMetadata({ params }: PageProps<"/visits/[id]">) {
   await requireOwner();
@@ -100,7 +99,7 @@ export default async function VisitPage({ params, searchParams }: PageProps<"/vi
   const hasNotes = v.property.accessNotes || v.property.gateCode || v.property.hazards || v.property.petNotes || v.job.instructions || v.instructions || siteFacts(v.property);
   return (
     <div className="mx-auto max-w-3xl lg:max-w-6xl">
-      <Link href={`/jobs/${v.jobId}`} className="-ml-1 mb-2 inline-flex min-h-8 items-center gap-0.5 rounded-md pr-2 text-sm font-medium text-ink-soft hover:text-navy"><ChevronLeft className="size-4" aria-hidden />Job #{v.job.number}</Link>
+      <Link href={`/jobs/${v.jobId}`} className="-ml-1 mb-2 inline-flex min-h-8 max-sm:min-h-11 items-center gap-0.5 rounded-md pr-2 text-sm font-medium text-ink-soft hover:text-navy"><ChevronLeft className="size-4" aria-hidden />Job #{v.job.number}</Link>
       <Flash error={sp.error} />
       {/* One column in phone order up to tablet; from lg the site facts sit left and the work (do it, price, people) right. */}
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
@@ -203,7 +202,7 @@ export default async function VisitPage({ params, searchParams }: PageProps<"/vi
             </Card>
             <section className="divide-y divide-line-soft rounded-xl border border-line bg-white shadow-card" aria-label="Skip or cancel">
               <details className="p-4 sm:px-5">
-                <summary className="flex min-h-8 items-center text-sm font-semibold">Couldn&apos;t do it</summary>
+                <summary className="flex min-h-8 max-sm:min-h-11 items-center text-sm font-semibold">Couldn&apos;t do it</summary>
                 <form action={visitTransition} className="mt-3 space-y-3">
                   {hidden("SKIPPED")}
                   <Field label="Reason"><select name="skipReason" className={inputCls} defaultValue="ALREADY_CLEARED">{SKIP.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></Field>
@@ -226,7 +225,7 @@ export default async function VisitPage({ params, searchParams }: PageProps<"/vi
               ["Depth", v.depthCm != null ? `${v.depthCm} cm` : null],
               ["Ice melt", v.state === "COMPLETED" && v.iceMeltApplied ? `Yes${v.iceMeltBags != null ? ` · ${Number(v.iceMeltBags)} bag${Number(v.iceMeltBags) === 1 ? "" : "s"}` : ""}` : null],
               ["Time on site", v.state === "COMPLETED" && took != null ? `${took} min${usual != null ? ` (usually ${usual})` : ""}` : null],
-              ["Reason", v.skipReason ? SKIP.find(([k]) => k === v.skipReason)?.[1] ?? v.skipReason : null],
+              ["Reason", v.skipReason ? skipLabel(v.skipReason) : null],
               ["Note", v.skipNote],
               ["Location", v.completedLat != null ? <a className="font-semibold text-blue hover:text-blue-deep" href={`https://www.google.com/maps/search/?api=1&query=${v.completedLat},${v.completedLng}`}>Recorded</a> : null],
               ["Charges", v.charges.length ? v.charges.map((c) => `${c.name}: ${cad(c.totalCents)}`).join("\n") : null],

@@ -8,7 +8,7 @@ import { Card } from "./ui";
 export async function SignatureCard({ where, signHref, title = "Signatures" }: { where: { quoteId?: string; invoiceId?: string; visitId?: string }; signHref: string; title?: string }) {
   const sigs = await db.signature.findMany({ where, orderBy: { signedAt: "desc" } });
   return (
-    <Card title={title} actions={<Link href={signHref} className="inline-flex min-h-8 items-center gap-1.5 text-sm font-semibold text-blue hover:text-blue-deep"><PenLine className="size-4" aria-hidden />Collect signature</Link>}>
+    <Card title={title} actions={<Link href={signHref} className="inline-flex min-h-8 max-sm:min-h-11 items-center gap-1.5 text-sm font-semibold text-blue hover:text-blue-deep"><PenLine className="size-4" aria-hidden />Collect signature</Link>}>
       {sigs.length ? (
         <ul className="divide-y divide-line-soft">
           {sigs.map((s) => (

@@ -6,8 +6,8 @@ import { ArrowDown, ArrowUp, GripVertical } from "lucide-react";
 import { btn } from "./ui";
 
 // The same bordered arrow buttons as the price book's reorder controls; a full 44px on a phone.
-const step = "grid size-8 place-items-center rounded-md border border-line bg-white text-ink-soft hover:border-ink-faint/60 hover:bg-tint hover:text-navy disabled:border-line-soft disabled:bg-transparent disabled:text-ink-faint/50 max-sm:size-11";
-const ico = { className: "size-4", strokeWidth: 1.75, "aria-hidden": true } as const;
+export const step = "grid size-8 place-items-center rounded-md border border-line bg-white text-ink-soft hover:border-ink-faint/60 hover:bg-tint hover:text-navy disabled:border-line-soft disabled:bg-transparent disabled:text-ink-faint/50 max-sm:size-11";
+export const ico = { className: "size-4", strokeWidth: 1.75, "aria-hidden": true } as const;
 
 export function ReorderList({ items, action, hidden = {}, saves }: {
   items: { id: string; node: ReactNode }[]; action: (f: FormData) => void | Promise<void>;

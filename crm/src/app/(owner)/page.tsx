@@ -126,6 +126,22 @@ export default async function Home({ searchParams }: PageProps<"/">) {
   const owingCents = owing.reduce((n, i) => n + i.totalCents - i.amountPaidCents, 0);
   const seg = "inline-flex min-h-9 items-center rounded-md px-3 text-sm font-semibold max-sm:min-h-11";
 
+  // A long day shows the first rows of each group; the rest sit in a closed <details>, as on the schedule.
+  const CAP = 10;
+  const apptRow = (a: Appt) => (
+    <li key={a.key}>
+      <Link href={a.href} className="-mx-2 flex min-h-11 items-center gap-3 rounded-lg px-2 py-2 hover:bg-tint">
+        <span className={`grid size-5 shrink-0 place-items-center rounded-full ${a.done ? "bg-emerald-600 text-white" : "border-[1.5px] border-ink-faint/60"}`} aria-hidden>{a.done && <Check className="size-3" strokeWidth={2.5} />}</span>
+        <span className="w-16 shrink-0 text-right text-xs font-medium tabular-nums text-ink-soft">{a.time}</span>
+        <span className="min-w-0 flex-1">
+          <span className={`block truncate font-semibold ${a.done ? "text-ink-soft" : ""}`}>{a.title}{a.done && <span className="sr-only"> (done)</span>}</span>
+          <span className="block truncate text-xs text-ink-soft">{a.sub}</span>
+        </span>
+        <span className="flex shrink-0 -space-x-1">{a.people.map((p) => <span key={p.id} title={p.name} aria-label={p.name} role="img" className="grid size-6 place-items-center rounded-full border-2 border-white text-[10px] font-semibold text-white" style={{ background: p.color }}>{p.name.slice(0, 1).toUpperCase()}</span>)}</span>
+      </Link>
+    </li>
+  );
+
   return (
     <>
       {/* The one hero on this page: right now. A storm (or snow on the way) sits beside today's route. */}
@@ -140,7 +156,7 @@ export default async function Home({ searchParams }: PageProps<"/">) {
                 <p className="text-sm font-medium text-sky">Today&apos;s route</p>
                 {appts.length ? (
                   <>
-                    <p className="mt-2 font-display text-[1.7rem] font-semibold leading-none tabular-nums">{done} of {appts.length} <span className="text-base font-medium text-white/70">done · {appts.length - done} to go</span></p>
+                    <p className="mt-2 font-display text-[1.7rem] font-semibold leading-none tabular-nums">{done.toLocaleString("en-CA")} of {appts.length.toLocaleString("en-CA")} <span className="text-base font-medium text-white/70">done · {(appts.length - done).toLocaleString("en-CA")} to go</span></p>
                     <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/15" role="progressbar" aria-label="Today's progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct}>
                       <div className="h-full rounded-full bg-emerald-400" style={{ width: `${pct}%` }} />
                     </div>
@@ -223,27 +239,19 @@ export default async function Home({ searchParams }: PageProps<"/">) {
         }>
           {groups.length ? (
             <>
-              <p className="-mt-1 mb-2 text-xs tabular-nums text-ink-soft">{appts.length} total · {done} done · {appts.length - done} remaining</p>
+              <p className="-mt-1 mb-2 text-xs tabular-nums text-ink-soft">{appts.length.toLocaleString("en-CA")} total · {done.toLocaleString("en-CA")} done · {(appts.length - done).toLocaleString("en-CA")} remaining</p>
               {groups.map((g) => (
                 <details key={g.label} open={g.label !== "Completed"} className="border-t border-line-soft">
                   <summary className="flex min-h-11 items-center gap-1.5 text-xs font-medium text-ink-soft hover:text-navy">
                     {g.color && <span className="size-2 rounded-full" style={{ background: g.color }} aria-hidden />}{g.label}<span className="tabular-nums">({g.list.length})</span>
                   </summary>
-                  <ul className="divide-y divide-line-soft pb-2">
-                    {g.list.map((a) => (
-                      <li key={a.key}>
-                        <Link href={a.href} className="-mx-2 flex min-h-11 items-center gap-3 rounded-lg px-2 py-2 hover:bg-tint">
-                          <span className={`grid size-5 shrink-0 place-items-center rounded-full ${a.done ? "bg-emerald-600 text-white" : "border-[1.5px] border-ink-faint/60"}`} aria-hidden>{a.done && <Check className="size-3" strokeWidth={2.5} />}</span>
-                          <span className="w-16 shrink-0 text-right text-xs font-medium tabular-nums text-ink-soft">{a.time}</span>
-                          <span className="min-w-0 flex-1">
-                            <span className={`block truncate font-semibold ${a.done ? "text-ink-soft" : ""}`}>{a.title}{a.done && <span className="sr-only"> (done)</span>}</span>
-                            <span className="block truncate text-xs text-ink-soft">{a.sub}</span>
-                          </span>
-                          <span className="flex shrink-0 -space-x-1">{a.people.map((p) => <span key={p.id} title={p.name} aria-label={p.name} role="img" className="grid size-6 place-items-center rounded-full border-2 border-white text-[10px] font-semibold text-white" style={{ background: p.color }}>{p.name.slice(0, 1).toUpperCase()}</span>)}</span>
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
+                  <ul className="divide-y divide-line-soft">{g.list.slice(0, CAP).map(apptRow)}</ul>
+                  {g.list.length > CAP ? (
+                    <details className="group/more border-t border-line-soft pb-1">
+                      <summary className="inline-flex min-h-11 items-center text-sm font-semibold text-blue hover:text-blue-deep"><span className="group-open/more:hidden">Show all {g.list.length.toLocaleString("en-CA")}</span><span className="hidden group-open/more:inline">Show fewer</span></summary>
+                      <ul className="divide-y divide-line-soft border-t border-line-soft pb-1">{g.list.slice(CAP).map(apptRow)}</ul>
+                    </details>
+                  ) : <div className="pb-2" />}
                 </details>
               ))}
             </>

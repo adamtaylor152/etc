@@ -47,7 +47,7 @@ export default async function Billing({ searchParams }: PageProps<"/billing">) {
   const CAP = 15;
   const rest = (n: number, label: string, children: ReactNode) => (
     <details className="group/more mt-3 border-t border-line-soft pt-1">
-      <summary className="inline-flex min-h-9 items-center text-sm font-semibold text-blue hover:text-blue-deep"><span className="group-open/more:hidden">Show all {n} {label}</span><span className="hidden group-open/more:inline">Show fewer</span></summary>
+      <summary className="inline-flex min-h-9 max-sm:min-h-11 items-center text-sm font-semibold text-blue hover:text-blue-deep"><span className="group-open/more:hidden">Show all {n} {label}</span><span className="hidden group-open/more:inline">Show fewer</span></summary>
       {children}
     </details>
   );
@@ -126,7 +126,7 @@ export default async function Billing({ searchParams }: PageProps<"/billing">) {
           <ul className="mt-2 divide-y divide-amber-200">{trouble.slice(0, 4).map(troubleRow)}</ul>
           {trouble.length > 4 && (
             <details className="border-t border-amber-200 pt-1">
-              <summary className="inline-flex min-h-9 items-center text-sm font-semibold text-amber-950">Show {trouble.length - 4} more</summary>
+              <summary className="inline-flex min-h-9 max-sm:min-h-11 items-center text-sm font-semibold text-amber-950">Show {trouble.length - 4} more</summary>
               <ul className="divide-y divide-amber-200">{trouble.slice(4).map(troubleRow)}</ul>
             </details>
           )}

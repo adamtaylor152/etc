@@ -108,7 +108,7 @@ export default async function Unmatched({ searchParams }: PageProps<"/payments/u
 
                 {open.length ? (
                   <details className="mt-3" open={sugg.length === 0}>
-                    <summary className="inline-flex min-h-9 items-center text-sm font-semibold text-blue hover:text-blue-deep">{sugg.length ? "Split it, or pick another invoice" : "Pick the invoice, or split it"}</summary>
+                    <summary className="inline-flex min-h-9 max-sm:min-h-11 items-center text-sm font-semibold text-blue hover:text-blue-deep">{sugg.length ? "Split it, or pick another invoice" : "Pick the invoice, or split it"}</summary>
                     <form action={unmatchedApply} className="mt-2 rounded-lg bg-tint p-3">
                       <input type="hidden" name="id" value={u.id} />
                       <div className="mb-1 grid grid-cols-[1fr_7rem] gap-2 text-xs font-medium text-ink-soft"><span>Invoice</span><span className="text-right">Amount ($)</span></div>
@@ -132,7 +132,7 @@ export default async function Unmatched({ searchParams }: PageProps<"/payments/u
                   </details>
                 ) : <p className="mt-3 text-sm text-ink-soft">No open invoices to apply it to. Create the invoice first, or dismiss this.</p>}
                 <details className="mt-1">
-                  <summary className="inline-flex min-h-9 items-center text-sm font-semibold text-ink-soft hover:text-navy">Not for an invoice?</summary>
+                  <summary className="inline-flex min-h-9 max-sm:min-h-11 items-center text-sm font-semibold text-ink-soft hover:text-navy">Not for an invoice?</summary>
                   <form action={unmatchedDismiss} className="mt-2 flex flex-wrap gap-2">
                     <input type="hidden" name="id" value={u.id} />
                     <input name="reason" placeholder="e.g. tip, refund back, personal" aria-label="Why it is not for an invoice" className={`${inputCls} min-w-0 flex-1 basis-56`} maxLength={200} />
