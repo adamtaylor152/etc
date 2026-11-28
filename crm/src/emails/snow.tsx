@@ -16,6 +16,23 @@ export function OnMyWay({ name, address, site, phone }: { name: string; address:
   );
 }
 
+export function VisitSkipped({ name, address, what, next, site, phone }: { name: string; address: string; what: string; next: string; site: string; phone: string }) {
+  return (
+    <EtcEmail title="We couldn't do your visit" preheader={`We came by ${address} but couldn't do the job`}>
+      <Header right="Visit update" />
+      <tr>
+        <td className="px" style={{ padding: "32px 40px 26px" }}>
+          <Eyebrow>Heads up</Eyebrow>
+          <H1>Hi {firstName(name)}, we couldn&apos;t do your visit today</H1>
+          <P>We came by {address}, but {what}. You won&apos;t be charged for this visit.</P>
+          <P>{next}</P>
+        </td>
+      </tr>
+      <Footer site={site} phone={phone} reason="You're getting this because you booked a job with etc." />
+    </EtcEmail>
+  );
+}
+
 export function StormHeadsUp({ name, address, cm, site, phone }: { name: string; address: string; cm: number | null; site: string; phone: string }) {
   return (
     <EtcEmail title="You're on our snow route" preheader={`We'll clear ${address} today`} vars={{ first_name: firstName(name), address }}>

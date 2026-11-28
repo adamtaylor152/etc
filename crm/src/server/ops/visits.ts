@@ -12,13 +12,14 @@ import { enqueue, enqueueSms, kickOutbox } from "../email/outbox";
 import { env } from "../env";
 import { logActivity } from "../records";
 import { getSettings } from "../settings";
-import { assertTransition, TransitionError } from "../status/visit";
-import { withAssignAlert, type Assigned } from "./assign-alerts";
+import { assertTransition, skipNotice, TransitionError } from "../status/visit";
+import { alertAssigned, withAssignAlert, type Assigned } from "./assign-alerts";
+import { returnVisitPrice } from "../snow/tiers";
 
 type Actor = { id: string; businessId: string };
 export type TransitionExtra = {
   skipReason?: SkipReason; skipNote?: string; depthCm?: number | null; iceMeltApplied?: boolean | null;
-  lat?: number | null; lng?: number | null;
+  lat?: number | null; lng?: number | null; iceMeltBags?: number | null;
 };
 
 async function iceMeltPrice(tx: Tx, businessId: string) {
@@ -36,7 +37,7 @@ function transitionTx(user: Actor, visitId: string, to: VisitState, extra: Trans
   return db.$transaction(async (tx) => {
     const v = await tx.visit.findFirstOrThrow({
       where: { id: visitId, businessId: user.businessId },
-      include: { job: { include: { lineItems: true } }, charges: true },
+      include: { job: { include: { lineItems: true } }, charges: true, snowEvent: { select: { measuredCm: true } } },
     });
     assertTransition(v.state, to);
     const now = new Date();
@@ -54,19 +55,25 @@ function transitionTx(user: Actor, visitId: string, to: VisitState, extra: Trans
     if (to === "COMPLETED") Object.assign(data, {
       completedAt: now, completedById: user.id, completedLat: extra.lat ?? null, completedLng: extra.lng ?? null,
       depthCm: extra.depthCm ?? v.depthCm, iceMeltApplied: extra.iceMeltApplied ?? v.iceMeltApplied,
+      // How much went down, when someone said. Never without ice melt; the charge is flat either way.
+      iceMeltBags: (extra.iceMeltApplied ?? v.iceMeltApplied) === false ? null : extra.iceMeltBags ?? v.iceMeltBags,
       ...(v.scheduledDate ? {} : { scheduledDate: toDbDate(now.toISOString().slice(0, 10)) }),
     });
     if (to === "SKIPPED") Object.assign(data, { skippedAt: now, skipReason: extra.skipReason ?? "OTHER", skipNote: extra.skipNote || null });
-    if (to === "SCHEDULED") Object.assign(data, { completedAt: null, skippedAt: null, skipReason: null, skipNote: null, enRouteAt: null, arrivedAt: null });
+    if (to === "SCHEDULED") Object.assign(data, { completedAt: null, skippedAt: null, skipReason: null, skipNote: null, enRouteAt: null, arrivedAt: null, iceMeltBags: null });
     const updated = await tx.visit.update({ where: { id: visitId }, data });
 
     if (to === "COMPLETED") {
       const job = { ...v.job, lineItems: v.job.lineItems.map((l) => ({ ...l, quantity: Number(l.quantity) })) };
-      const stormCharged = v.job.snowBillingMode === "PER_EVENT" && !!v.snowEventId
-        && (await tx.visitCharge.count({ where: { name: STORM_CHARGE, visit: { jobId: v.jobId, snowEventId: v.snowEventId, id: { not: visitId } } } })) > 0;
+      const stormCharged = v.job.snowBillingMode === "PER_EVENT" && !!v.snowEventId // startsWith: a depth tier adds to the name
+        && (await tx.visitCharge.count({ where: { name: { startsWith: STORM_CHARGE }, visit: { jobId: v.jobId, snowEventId: v.snowEventId, id: { not: visitId } } } })) > 0;
       // Read after the update above: it holds the visit's row lock, so an extra the client is adding right now is either in or refused.
       const extras = await tx.visitExtra.findMany({ where: { visitId }, orderBy: { createdAt: "asc" } });
-      const lines = chargesForVisit(job, { iceMeltApplied: updated.iceMeltApplied, stormCharged, overrides: parseOverrides(v.lineOverrides) }, await iceMeltPrice(tx, user.businessId), extras);
+      // Depth for the tier: what the crew measured here, else the storm's.
+      const lines = chargesForVisit(job, {
+        iceMeltApplied: updated.iceMeltApplied, stormCharged, overrides: parseOverrides(v.lineOverrides),
+        depthCm: updated.depthCm ?? v.snowEvent?.measuredCm ?? null, isReturn: v.isReturn, returnPriceCents: v.returnPriceCents,
+      }, await iceMeltPrice(tx, user.businessId), extras);
       if (lines.length) await tx.visitCharge.createMany({ data: lines.map((l) => ({ ...l, businessId: user.businessId, visitId })) });
       // Billed per visit (one-off jobs): invoice it now so the "all done" email can carry a pay link.
       if (lines.length && v.job.invoiceSchedule === "AFTER_EACH_VISIT") {
@@ -103,6 +110,20 @@ function transitionTx(user: Actor, visitId: string, to: VisitState, extra: Trans
           businessId: user.businessId, template: "visit.on_my_way", to: client.email, replyTo: env.helpEmail, priority: 3, props: { visitId },
           dedupeKey: `visit:${visitId}:omw`, clientId: client.id, entityType: "Visit", entityId: visitId,
         });
+      }
+    }
+    // Skipped for a reason the client can fix (their choice of reasons, off by default): tell them what happened and what to do,
+    // by the same channels and rules as "all done" (text if they opted in and text updates are on; email unless it bounced).
+    // Held 3 minutes so a mis-tap can be undone: reopening the visit removes whatever hasn't gone yet.
+    const skipKeys = [`visit:${visitId}:skipped`, `visit:${visitId}:sms-skipped`];
+    if (to === "SCHEDULED") await tx.emailMessage.deleteMany({ where: { businessId: user.businessId, dedupeKey: { in: skipKeys }, status: "QUEUED" } });
+    if (to === "SKIPPED") {
+      const settings = await getSettings(tx, user.businessId);
+      if (settings.skipNotice && skipNotice(updated.skipReason, settings.skipNoticeReasons)) {
+        const client = await tx.client.findUniqueOrThrow({ where: { id: v.job.clientId } });
+        const m = { businessId: user.businessId, props: { visitId }, sendAfter: new Date(Date.now() + 3 * 60_000), entityType: "Visit", entityId: visitId };
+        if (client.email && !client.emailBouncedAt) await enqueue(tx, { ...m, template: "visit.skipped", to: client.email, replyTo: env.helpEmail, priority: 4, dedupeKey: skipKeys[0], clientId: client.id });
+        if (settings.smsUpdates) await enqueueSms(tx, { ...m, template: "sms.visit_skipped", client, dedupeKey: skipKeys[1] });
       }
     }
     await logActivity(tx, {
@@ -178,6 +199,45 @@ export async function addVisit(user: Actor, jobId: string, date: string | null) 
   return db.visit.create({
     data: { businessId: user.businessId, jobId, propertyId: job.propertyId, scheduledDate: date ? toDbDate(date) : null, source: "MANUAL" },
   });
+}
+
+/**
+ * The city plough came back and buried the driveway end: one more visit to the same property on the same storm, on
+ * today's route with the same people. Billable = the return price as it stands now (kept on the visit, charged once
+ * when it's done); otherwise included. Safe to replay: while a return visit is still open, asking again returns it.
+ * `scope` limits which visits the caller may act on (crew: visitScope).
+ */
+export async function addReturnVisit(user: Actor, visitId: string, billable: boolean, scope: Prisma.VisitWhereInput = {}) {
+  const made = await db.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "Visit" WHERE id = ${visitId} FOR UPDATE`; // two taps (or an offline replay) make one visit
+    const v = await tx.visit.findFirst({ where: { id: visitId, businessId: user.businessId, ...scope }, include: { job: { include: { lineItems: true } }, assignees: true } });
+    if (!v) throw new TransitionError("Visit not found");
+    if (v.state !== "COMPLETED" || !v.snowEventId) throw new TransitionError("A return visit follows a completed storm visit");
+    if (v.job.closedAt) throw new TransitionError("This job is closed");
+    const open = await tx.visit.findFirst({ where: { jobId: v.jobId, snowEventId: v.snowEventId, isReturn: true, state: { in: ["SCHEDULED", "EN_ROUTE", "IN_PROGRESS"] } } });
+    if (open) return open;
+    // The plan's clearing price before depth tiers and add-ons (a one-time booking: its per-visit lines).
+    const base = v.job.kind === "SNOW_PLAN" ? v.job.pricePerPushCents ?? 3000 : v.job.lineItems.filter((l) => l.perVisit).reduce((a, l) => a + l.totalCents, 0);
+    const today = todayLocal();
+    const ret = await tx.visit.create({
+      data: {
+        businessId: user.businessId, jobId: v.jobId, propertyId: v.propertyId, snowEventId: v.snowEventId, scheduledDate: toDbDate(today), anytime: true, source: "MANUAL",
+        isReturn: true, returnPriceCents: billable ? returnVisitPrice(base, (await getSettings(tx, user.businessId)).returnVisitPct) || null : null,
+        assignees: { create: v.assignees.map((a) => ({ userId: a.userId })) },
+      },
+    });
+    await alertAssigned(tx, user.businessId, user.id, v.assignees.map((a) => a.userId), today);
+    await logActivity(tx, { businessId: user.businessId, type: "visit.return_added", entityType: "Visit", entityId: ret.id, actorType: "USER", actorUserId: user.id, clientId: v.job.clientId, jobId: v.jobId, snowEventId: v.snowEventId, data: { billable, from: visitId } });
+    return ret;
+  });
+  kickOutbox();
+  return made;
+}
+
+/** How much ice melt went down on a visit (bags; decimals fine). Reporting only: the charge stays flat per visit. */
+export async function setIceMeltBags(user: Actor, visitId: string, bags: number | null) {
+  const { count } = await db.visit.updateMany({ where: { id: visitId, businessId: user.businessId, state: "COMPLETED", iceMeltApplied: true }, data: { iceMeltBags: bags } });
+  if (!count) throw new TransitionError("Ice melt wasn't put down on this visit");
 }
 
 /** Price this one visit differently from its job (extra work this time); null or no lines = back to the job's lines.

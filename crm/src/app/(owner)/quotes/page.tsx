@@ -1,12 +1,12 @@
 import { requireOwner } from "@/server/auth";
-import type { QuoteStatus } from "@/generated/prisma/client";
-import { ListPage, listHref, sortRows } from "@/components/list-page";
+import type { Prisma, QuoteStatus } from "@/generated/prisma/client";
+import { ListPage, listHref, pageOf } from "@/components/list-page";
 import { QUOTE } from "@/components/status";
 import { Badge } from "@/components/ui";
 import { dateOnly, localDayStart, addDays, prettyDate, todayLocal } from "@/server/dates";
 import { businessId, db } from "@/server/db";
 import { money } from "@/server/money";
-import { clientName } from "@/server/queries";
+import { byClient, clientName, nameHas, numberIs, textHas, words } from "@/server/queries";
 
 export const metadata = { title: "Quotes" };
 const STATUSES: QuoteStatus[] = ["DRAFT", "AWAITING_RESPONSE", "CHANGES_REQUESTED", "APPROVED", "CONVERTED", "DECLINED", "ARCHIVED"]; // the overview shows the first five
@@ -18,21 +18,34 @@ export default async function Quotes({ searchParams }: PageProps<"/quotes">) {
   const one = (k: string) => (typeof sp[k] === "string" ? (sp[k] as string) : undefined);
   const params = { status: one("status") ?? one("tab"), q: one("q"), sort: one("sort"), dir: one("dir") };
   const status = STATUSES.find((s) => s === params.status);
-  const all = await db.quote.findMany({ where: { businessId: await businessId() }, include: { client: true, property: true }, orderBy: { number: "desc" }, take: 1000 });
-  const q = params.q?.trim().toLowerCase();
-  const rows = sortRows(all.filter((x) => (status ? x.status === status : x.status !== "ARCHIVED") && (!q || `${x.number} ${x.title ?? ""} ${clientName(x.client)} ${x.property?.formatted ?? ""}`.toLowerCase().includes(q))),
-    params.sort, params.dir, { client: (x) => clientName(x.client).toLowerCase(), number: (x) => x.number, created: (x) => x.createdAt.getTime(), total: (x) => x.totalCents, status: (x) => STATUSES.indexOf(x.status) });
+  const bid = await businessId();
+  // Search, filter, sort and paging all happen in the database; the tiles count every quote, not just this page.
+  const where: Prisma.QuoteWhereInput = {
+    businessId: bid, status: status ?? { not: "ARCHIVED" },
+    AND: words(params.q).map((w) => ({ OR: [...numberIs(w), { title: textHas(w) }, { client: nameHas(w) }, { property: { formatted: textHas(w) } }] })),
+  };
+  const dir = params.dir === "asc" ? "asc" : "desc";
+  const orderBy: Prisma.QuoteOrderByWithRelationInput[] = params.sort === "client" ? [...byClient(dir), { number: "desc" }]
+    : params.sort === "created" ? [{ createdAt: dir }] : params.sort === "total" ? [{ totalCents: dir }, { number: "desc" }]
+    : params.sort === "status" ? [{ status: dir }, { number: "desc" }] : [{ number: params.sort === "number" ? dir : "desc" }];
   const since = localDayStart(addDays(todayLocal(), -30));
-  const sent = all.filter((x) => x.sentAt && x.sentAt >= since);
-  const won = all.filter((x) => (x.status === "APPROVED" || x.status === "CONVERTED") && x.sentAt && x.sentAt >= since);
+  const sum = { _count: { _all: true }, _sum: { totalCents: true } } as const;
+  const [total, counts, sent, won] = await Promise.all([
+    db.quote.count({ where }),
+    db.quote.groupBy({ by: ["status"], where: { businessId: bid }, _count: { _all: true } }),
+    db.quote.aggregate({ where: { businessId: bid, sentAt: { gte: since } }, ...sum }),
+    db.quote.aggregate({ where: { businessId: bid, sentAt: { gte: since }, status: { in: ["APPROVED", "CONVERTED"] } }, ...sum }),
+  ]);
+  const at = pageOf(one("page"), total);
+  const rows = await db.quote.findMany({ where, include: { client: true, property: true }, orderBy, skip: at.skip, take: at.take });
   return (
     <ListPage
-      title="Quotes" base="/quotes" params={params} newHref="/quotes/new" newLabel="New quote" searchPlaceholder="Search quotes, clients, addresses"
-      overview={STATUSES.slice(0, 5).map((s) => ({ label: QUOTE[s][0], count: all.filter((x) => x.status === s).length, dot: DOT[s], active: status === s, href: listHref("/quotes", params, { status: s }) }))}
+      title="Quotes" base="/quotes" params={params} at={at} newHref="/quotes/new" newLabel="New quote" searchPlaceholder="Search quotes, clients, addresses"
+      overview={STATUSES.slice(0, 5).map((s) => ({ label: QUOTE[s][0], count: counts.find((c) => c.status === s)?._count._all ?? 0, dot: DOT[s], active: status === s, href: listHref("/quotes", params, { status: s }) }))}
       metrics={[
-        { label: "Conversion rate", value: sent.length ? `${Math.round((won.length / sent.length) * 100)}%` : "—", sub: "of quotes sent in the past 30 days" },
-        { label: "Sent", value: money(sent.reduce((n, x) => n + x.totalCents, 0)), sub: `${sent.length} quotes · past 30 days` },
-        { label: "Converted", value: money(won.reduce((n, x) => n + x.totalCents, 0)), sub: `${won.length} quotes · past 30 days` },
+        { label: "Conversion rate", value: sent._count._all ? `${Math.round((won._count._all / sent._count._all) * 100)}%` : "—", sub: "of quotes sent in the past 30 days" },
+        { label: "Sent", value: money(sent._sum.totalCents ?? 0), sub: `${sent._count._all} quotes · past 30 days` },
+        { label: "Converted", value: money(won._sum.totalCents ?? 0), sub: `${won._count._all} quotes · past 30 days` },
       ]}
       filters={[{ name: "status", label: "Status", value: status ?? "", options: [{ value: "", label: "All active" }, ...STATUSES.map((s) => ({ value: s, label: QUOTE[s][0] }))] }]}
       columns={[{ key: "client", label: "Client", sortable: true }, { key: "number", label: "Quote", sortable: true }, { key: "property", label: "Property", className: "hidden md:table-cell" }, { key: "created", label: "Created", sortable: true, className: "hidden sm:table-cell" }, { key: "status", label: "Status", sortable: true }, { key: "total", label: "Total", sortable: true, align: "right" }]}

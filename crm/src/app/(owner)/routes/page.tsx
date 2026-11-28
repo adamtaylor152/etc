@@ -88,7 +88,7 @@ export default async function Routes({ searchParams }: PageProps<"/routes">) {
           {times.people.map((p) => (
             <p key={p.id}><span className="font-semibold" style={{ color: p.color }}>{p.name}</span>: {p.stops} stop{p.stops === 1 ? "" : "s"} · {duration(p.driveMin)} driving · about {duration(p.totalMin)} in all · back around {clock(p.finish)}</p>
           ))}
-          <p className="mt-1 text-xs text-ink-soft">Setting off {clock(from)}, {times.serviceMin} min a stop, including the drive back. {times.road ? "Road drive times." : "Straight-line estimates at 30 km/h (no road routing)."} Times are estimates.</p>
+          <p className="mt-1 text-xs text-ink-soft">Setting off {clock(from)}, {times.serviceMin} min a stop (or what a property usually takes, once it has 3 timed visits), including the drive back. {times.road ? "Road drive times." : "Straight-line estimates at 30 km/h (no road routing)."} Times are estimates.</p>
         </div>
       )}
       {groups.length ? (
@@ -105,8 +105,9 @@ export default async function Routes({ searchParams }: PageProps<"/routes">) {
                       <Link href={`/visits/${v.id}`} className="min-w-0 flex-1">
                         <span className="block font-semibold">{v.property.formatted}{v.property.routePriority && <span className="ml-2 rounded-full bg-blue/10 px-2 py-0.5 text-xs font-semibold text-blue">do first</span>}{sizeNote(v.job.kind === "SNOW_PLAN" || !!v.snowEventId, v.property) && <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-900">size not checked</span>}</span>
                         <span className="block text-sm text-ink-soft">
-                          {clientName(v.job.client)} · {v.job.kind === "SNOW_PLAN" ? "Every snowfall" : v.job.title}
+                          {clientName(v.job.client)} · {v.isReturn ? <b className="text-blue">Return visit</b> : v.job.kind === "SNOW_PLAN" ? "Every snowfall" : v.job.title}
                           {v.iceMeltApplied || v.job.iceMelt ? " · ice melt" : ""}{v.pushNumber && v.pushNumber > 1 ? ` · push ${v.pushNumber}` : ""}
+                          {times.usual.has(v.id) && ` · usually ${times.usual.get(v.id)} min`}
                         </span>
                         {v.property.accessNotes && <span className="block text-sm text-amber-800">{v.property.accessNotes}</span>}
                       </Link>

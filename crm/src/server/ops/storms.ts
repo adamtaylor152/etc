@@ -102,7 +102,7 @@ export async function setStormDepth(user: Actor, id: string, cm: number) {
     if (ev.status !== "ACTIVE") return;
     const day = todayLocal();
     for (let push = 1; push <= ev.pushCount; push++) await generate(tx, ev, cm, push, day, user.id);
-    const visits = await tx.visit.findMany({ where: { snowEventId: id, state: "SCHEDULED", job: { kind: "SNOW_PLAN" } }, include: { job: true } });
+    const visits = await tx.visit.findMany({ where: { snowEventId: id, state: "SCHEDULED", isReturn: false, job: { kind: "SNOW_PLAN" } }, include: { job: true } }); // a return visit was asked for by hand: the trigger doesn't apply
     const keep = new Set(plansTriggered(visits.map((v) => v.job), cm, ev.season.defaultTriggerCm).map((j) => j.id));
     const drop = visits.filter((v) => !keep.has(v.jobId)).map((v) => v.id);
     if (drop.length) await tx.visit.updateMany({ where: { id: { in: drop } }, data: { state: "SKIPPED", skippedAt: new Date(), skipReason: "BELOW_TRIGGER" } });
@@ -156,9 +156,9 @@ export async function cancelStorm(user: Actor, id: string) {
     const ev = await load(tx, user, id);
     if (ev.status === "COMPLETED") throw new TransitionError("A finished storm can't be cancelled");
     await tx.snowEvent.update({ where: { id }, data: { status: "CANCELLED" } });
-    await tx.visit.updateMany({ where: { snowEventId: id, state: { in: ["SCHEDULED", "EN_ROUTE"] }, source: "SNOW_EVENT" }, data: { state: "CANCELLED" } });
+    await tx.visit.updateMany({ where: { snowEventId: id, state: { in: ["SCHEDULED", "EN_ROUTE"] }, OR: [{ source: "SNOW_EVENT" }, { isReturn: true }] }, data: { state: "CANCELLED" } });
     // One-time bookings that rode along go back to waiting for snow.
-    await tx.visit.updateMany({ where: { snowEventId: id, state: "SCHEDULED", source: { not: "SNOW_EVENT" } }, data: { snowEventId: null, scheduledDate: null } });
+    await tx.visit.updateMany({ where: { snowEventId: id, state: "SCHEDULED", source: { not: "SNOW_EVENT" }, isReturn: false }, data: { snowEventId: null, scheduledDate: null } });
     await logActivity(tx, { businessId: user.businessId, type: "storm.cancelled", entityType: "SnowEvent", entityId: id, actorType: "USER", actorUserId: user.id, snowEventId: id });
   });
 }

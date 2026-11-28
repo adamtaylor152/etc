@@ -1,5 +1,5 @@
-// Photo uploads (before/after on a visit, or onto a job/request). multipart/form-data.
-// Crew can only add to a visit on their own route; jobs and requests are owner-only.
+// Photo uploads (before/after on a visit, or onto a job/request/quote). multipart/form-data.
+// Crew can only add to a visit on their own route; jobs, requests and quotes are owner-only.
 import { currentUser } from "@/server/auth";
 import { db } from "@/server/db";
 import { MediaError, saveImage } from "@/server/media";
@@ -15,10 +15,11 @@ export async function POST(req: Request) {
   const visitId = String(form.get("visitId") ?? "") || null;
   const jobId = String(form.get("jobId") ?? "") || null;
   const requestId = String(form.get("requestId") ?? "") || null;
+  const quoteId = String(form.get("quoteId") ?? "") || null; // a quote line's photo (the quote editor)
   const num = (k: string) => { const v = Number(form.get(k)); return form.get(k) && Number.isFinite(v) ? v : null; };
 
   // Resolve and authorize what the photo attaches to.
-  let links: { clientId?: string; propertyId?: string; jobId?: string; visitId?: string; requestId?: string } = {};
+  let links: { clientId?: string; propertyId?: string; jobId?: string; visitId?: string; requestId?: string; quoteId?: string } = {};
   if (visitId) {
     const v = await db.visit.findFirst({ where: { id: visitId, businessId: user.businessId, ...visitScope(user) }, include: { job: true } });
     if (!v) return Response.json({ error: "Visit not found" }, { status: 404 });
@@ -33,6 +34,10 @@ export async function POST(req: Request) {
     const r = await db.request.findFirst({ where: { id: requestId, businessId: user.businessId } });
     if (!r) return Response.json({ error: "Request not found" }, { status: 404 });
     links = { requestId, clientId: r.clientId, propertyId: r.propertyId ?? undefined };
+  } else if (quoteId) {
+    const q = await db.quote.findFirst({ where: { id: quoteId, businessId: user.businessId } });
+    if (!q) return Response.json({ error: "Quote not found" }, { status: 404 });
+    links = { quoteId, clientId: q.clientId, propertyId: q.propertyId ?? undefined };
   } else return Response.json({ error: "Nothing to attach to" }, { status: 400 });
 
   const files = form.getAll("file").filter((f): f is File => f instanceof File);

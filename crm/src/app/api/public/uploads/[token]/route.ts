@@ -16,7 +16,7 @@ export async function POST(req: Request, ctx: RouteContext<"/api/public/uploads/
   const json = (status: number, body: unknown) =>
     Response.json(body, { status, headers: { ...PUBLIC_HEADERS, ...(site ? { "Access-Control-Allow-Origin": origin, Vary: "Origin" } : {}) } });
   if (origin && origin !== env.appUrl && !site) return json(403, { error: "Bad origin" });
-  if (limited(`upload:${clientIp(req)}`, 60, 3_600_000)) return json(429, { error: "Too many uploads, try again later" });
+  if (await limited(`upload:${clientIp(req)}`, 60, 3_600_000)) return json(429, { error: "Too many uploads, try again later" });
   const t = await peekToken(db, token, ["PHOTO_UPLOAD"]);
   if (!t.ok || !t.token.requestId) return json(410, { error: "This link has expired. Reply to our email and we'll send a new one." });
   const request = await db.request.findUniqueOrThrow({ where: { id: t.token.requestId } });

@@ -10,6 +10,7 @@ import { deleteQuoteTemplate, renameQuoteTemplate } from "@/server/ops/quotes";
 import * as routes from "@/server/ops/routes";
 import { SETTING_DAYS, SETTING_LABELS, SettingsSchema } from "@/server/settings";
 import { TransitionError } from "@/server/status/visit";
+import { tiersFromRows } from "@/server/snow/tiers";
 
 const s = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 const opt = (v: string) => v || null;
@@ -51,8 +52,9 @@ export async function saveAutomations(f: FormData) {
   const toggles = Object.fromEntries(Object.keys(SETTING_LABELS).map((k) => [k, f.get(k) === "on"]));
   const days = Object.fromEntries(Object.values(SETTING_DAYS).filter((k) => s(f, k)).map((k) => [k, s(f, k)]));
   const grace = z.coerce.number().int().min(0).max(14).safeParse(s(f, "autoPayGraceDays") || undefined);
-  const parsed = SettingsSchema.safeParse({ ...(biz.settings as object), ...toggles, ...days, ...(grace.success ? { autoPayGraceDays: grace.data } : {}) });
-  if (!parsed.success) redirect(`/settings?error=${encodeURIComponent("Follow-up days must be a whole number from 1 to 60")}`);
+  const fee = f.has("lateFeeDollars") ? { lateFeeCents: Math.round(Number(s(f, "lateFeeDollars") || 0) * 100), lateFeeBps: Math.round(Number(s(f, "lateFeePercent") || 0) * 100) } : {};
+  const parsed = SettingsSchema.safeParse({ ...(biz.settings as object), ...toggles, ...days, ...fee, ...(grace.success ? { autoPayGraceDays: grace.data } : {}) });
+  if (!parsed.success) redirect(`/settings?error=${encodeURIComponent("Days must be a whole number from 1 to 60, and the late fee no more than $1,000 plus 25%")}`);
   const next = parsed.data;
   await db.business.update({ where: { id: biz.id }, data: { settings: next as Prisma.InputJsonValue } });
   revalidatePath("/", "layout");
@@ -67,6 +69,22 @@ export async function saveRouteSettings(f: FormData) {
   await db.business.update({ where: { id: biz.id }, data: { settings: next as Prisma.InputJsonValue } });
   revalidatePath("/", "layout");
   redirect("/settings/route?saved=1");
+}
+
+/** Snow pricing (the Snow page): the depth tiers a new plan starts from, and what a billable return visit costs. */
+export async function saveSnowPricing(f: FormData) {
+  const user = await requireOwner();
+  const biz = await db.business.findUniqueOrThrow({ where: { id: user.businessId } });
+  let next;
+  try {
+    next = SettingsSchema.parse({ ...(biz.settings as object), depthTiers: tiersFromRows(f.getAll("tierCm").map(String), f.getAll("tierAdd").map(String)), returnVisitPct: s(f, "returnVisitPct") || undefined });
+  } catch (e) {
+    if (!(e instanceof TransitionError || e instanceof z.ZodError)) throw e;
+    redirect(`/snow?error=${encodeURIComponent(e instanceof TransitionError ? e.message : "The return visit share is a whole number from 0 to 200")}`);
+  }
+  await db.business.update({ where: { id: biz.id }, data: { settings: next as Prisma.InputJsonValue } });
+  revalidatePath("/", "layout");
+  redirect("/snow?saved=pricing");
 }
 
 /** The order routes visit communities in: `ids` is the community codes, first to last. */

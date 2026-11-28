@@ -11,9 +11,9 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
   if (await currentUser()) redirect(next);
   const err = sp.error === "link" ? "That link has expired or was already used. Get a fresh one below." : null;
   return (
-    <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center p-6">
-      <div className="rounded-3xl bg-navy p-6 text-white"><Logo className="text-4xl" /><p className="mt-1 text-sm text-white/70">Crew back office</p></div>
-      <form action={requestLogin} className="mt-4 space-y-3 rounded-3xl border border-line bg-white p-6">
+    <main id="main" className="mx-auto flex min-h-dvh max-w-sm flex-col justify-center p-6">
+      <div className="rounded-2xl bg-night p-6 text-white"><Logo className="text-4xl" /><p className="mt-1 text-sm text-white/70">Crew back office</p></div>
+      <form action={requestLogin} className="mt-3 space-y-3 rounded-2xl border border-line bg-white p-6 shadow-card">
         {err && <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">{err}</p>}
         <input type="hidden" name="next" value={next} />
         <label className="block">

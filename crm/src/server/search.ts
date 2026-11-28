@@ -14,29 +14,37 @@ export function parseQuery(raw: string) {
   return { q, num, invoiceRef: !!ref, digits: digits.length >= 4 && digits.length >= q.replace(/[\s()+.-]/g, "").length - 1 ? digits.slice(-10) : null };
 }
 
-export async function search(businessId: string, raw: string): Promise<SearchHit[]> {
-  const { q, num, invoiceRef, digits } = parseQuery(raw);
-  if (q.length < 2 && num == null) return [];
+/** Clients by name, company, email or phone digits (pickers use this alone, without archived clients). */
+export async function searchClients(businessId: string, raw: string, opts: { take?: number; activeOnly?: boolean } = {}): Promise<SearchHit[]> {
+  const { q, digits } = parseQuery(raw);
+  if (!q) return [];
   const like = `%${q.replace(/[%_\\]/g, (c) => `\\${c}`)}%`;
-  const ci = { contains: q, mode: "insensitive" as const };
-  const [clientIds, properties, requests, quotes, jobs, invoices] = await Promise.all([
-    db.$queryRaw<{ id: string }[]>`
-      SELECT id FROM "Client" WHERE "businessId" = ${businessId} AND (
+  const clientIds = await db.$queryRaw<{ id: string }[]>`
+      SELECT id FROM "Client" WHERE "businessId" = ${businessId} ${opts.activeOnly ? Prisma.sql`AND "archivedAt" IS NULL` : Prisma.empty} AND (
         ("firstName" || ' ' || "lastName") ILIKE ${like} OR "companyName" ILIKE ${like} OR email ILIKE ${like}
         ${digits ? Prisma.sql`OR regexp_replace(coalesce(phone, ''), '\\D', '', 'g') LIKE ${`%${digits}%`}` : Prisma.empty}
-      ) ORDER BY "archivedAt" NULLS FIRST, "firstName" LIMIT 8`,
+      ) ORDER BY "archivedAt" NULLS FIRST, "firstName" LIMIT ${opts.take ?? 8}`;
+  const clients = clientIds.length ? await db.client.findMany({ where: { id: { in: clientIds.map((c) => c.id) } }, include: { properties: { take: 1, orderBy: { createdAt: "asc" } } } }) : [];
+  const order = new Map(clientIds.map((c, i) => [c.id, i]));
+  return clients.sort((a, b) => order.get(a.id)! - order.get(b.id)!).map((c): SearchHit => ({
+    kind: "client", id: c.id, title: clientName(c), sub: [c.phone, c.email, c.properties[0]?.formatted].filter(Boolean).join(" · ") + (c.archivedAt ? " · archived" : ""), href: `/clients/${c.id}`,
+  }));
+}
+
+export async function search(businessId: string, raw: string): Promise<SearchHit[]> {
+  const { q, num, invoiceRef } = parseQuery(raw);
+  if (q.length < 2 && num == null) return [];
+  const ci = { contains: q, mode: "insensitive" as const };
+  const [clients, properties, requests, quotes, jobs, invoices] = await Promise.all([
+    searchClients(businessId, raw),
     db.property.findMany({ where: { businessId, formatted: ci }, include: { client: true }, take: 5 }),
     db.request.findMany({ where: { businessId, OR: [...(num != null && !invoiceRef ? [{ number: num }] : []), { title: ci }] }, include: { client: true }, take: 4, orderBy: { number: "desc" } }),
     db.quote.findMany({ where: { businessId, OR: [...(num != null && !invoiceRef ? [{ number: num }] : []), { title: ci }] }, include: { client: true }, take: 4, orderBy: { number: "desc" } }),
     db.job.findMany({ where: { businessId, OR: [...(num != null && !invoiceRef ? [{ number: num }] : []), { title: ci }] }, include: { client: true }, take: 4, orderBy: { number: "desc" } }),
     db.invoice.findMany({ where: { businessId, OR: [...(num != null ? [{ number: num }] : []), { subject: ci }] }, include: { client: true }, take: 4, orderBy: { number: "desc" } }),
   ]);
-  const clients = clientIds.length ? await db.client.findMany({ where: { id: { in: clientIds.map((c) => c.id) } }, include: { properties: { take: 1, orderBy: { createdAt: "asc" } } } }) : [];
-  const order = new Map(clientIds.map((c, i) => [c.id, i]));
   return [
-    ...clients.sort((a, b) => order.get(a.id)! - order.get(b.id)!).map((c): SearchHit => ({
-      kind: "client", id: c.id, title: clientName(c), sub: [c.phone, c.email, c.properties[0]?.formatted].filter(Boolean).join(" · ") + (c.archivedAt ? " · archived" : ""), href: `/clients/${c.id}`,
-    })),
+    ...clients,
     ...properties.map((p): SearchHit => ({ kind: "property", id: p.id, title: p.formatted, sub: clientName(p.client), href: `/clients/${p.clientId}` })),
     ...requests.map((r): SearchHit => ({ kind: "request", id: r.id, title: `Request #${r.number} ${r.title}`, sub: clientName(r.client), href: `/requests/${r.id}` })),
     ...quotes.map((r): SearchHit => ({ kind: "quote", id: r.id, title: `Quote #${r.number}${r.title ? ` ${r.title}` : ""}`, sub: clientName(r.client), href: `/quotes/${r.id}` })),

@@ -5,6 +5,8 @@ const nextConfig: NextConfig = {
   // rather than Cache Components.
   output: "standalone",
   poweredByHeader: false,
+  // Stamped into the client bundle at build time: the service worker's cache version (src/components/sw-register.tsx).
+  env: { NEXT_PUBLIC_BUILD_ID: Date.now().toString(36) },
   // Notes and forms can carry photos (phones shrink them first, but a few full-size ones still pass 1 MB).
   experimental: { serverActions: { bodySizeLimit: "30mb" } },
   turbopack: {

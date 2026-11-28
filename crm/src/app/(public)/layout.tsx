@@ -16,14 +16,14 @@ export default async function PublicLayout({ children }: { children: React.React
   return (
     // --brand recolours everything "blue" on these pages (see globals.css).
     <div className="min-h-screen" style={brandColor ? ({ "--brand": brandColor } as CSSProperties) : undefined}>
-      <header className={logoId ? "border-b-[3px] border-blue bg-white" : "bg-navy text-white"}>
+      <header className={logoId ? "border-b-[3px] border-blue bg-white" : "bg-night text-white"}>
         <div className="mx-auto flex max-w-2xl items-center justify-between px-4 py-3">
           {/* eslint-disable-next-line @next/next/no-img-element -- private media via signed URL */}
           <a href={env.siteUrl}>{logoId ? <img src={logoPath(logoId)} alt={biz.name} className="h-10 w-auto max-w-56" /> : <Logo />}</a>
           <a href={`tel:+1${env.phone.replace(/\D/g, "")}`} className={`text-sm font-semibold ${logoId ? "text-navy/80" : "text-white/80"}`}>{env.phone}</a>
         </div>
       </header>
-      <main className="mx-auto max-w-2xl p-4 sm:p-6">{children}</main>
+      <main id="main" className="mx-auto max-w-2xl px-4 py-5 sm:px-6 sm:py-8">{children}</main>
       <footer className="pb-8 text-center text-xs text-ink-soft">etc. · Snow shovelling &amp; odd jobs in Calgary · <a href={`mailto:${env.helpEmail}`}>{env.helpEmail}</a></footer>
     </div>
   );

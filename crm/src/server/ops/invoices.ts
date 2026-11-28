@@ -1,6 +1,6 @@
 // Invoices and payments: unbilled charges -> draft invoice -> send -> payment (cash / e-Transfer / card) -> receipt.
 import type { PaymentMethod, PaymentTerms, Prisma } from "@/generated/prisma/client";
-import { billingEmail, depositCents, depositCredit, draftEditProblem, dueDate, etransferRef, invoiceTotals, isCreditLine, statusAfterPayments } from "../billing/invoice";
+import { billingEmail, depositCents, depositCredit, draftEditProblem, dueDate, lateFeeDue, etransferRef, invoiceTotals, isCreditLine, statusAfterPayments } from "../billing/invoice";
 import { instalmentKey, instalmentSchedule } from "../billing/instalments";
 import { periodKey, periodLabel, periodsDue } from "../billing/periods";
 import { dateOnly, todayLocal, toDbDate } from "../dates";
@@ -206,6 +206,41 @@ export async function invoiceSeasonalInstalments(where: { businessId?: string; i
   }
   if (made) kickOutbox();
   return made;
+}
+
+/**
+ * Adds the late fee (Settings) to invoices that have earned one. Once per invoice, claimed with a conditional update so two
+ * runs can't both add it. The fee is not taxed (a late-payment charge isn't a taxable supply) and never chases a client
+ * who turned invoice follow-ups off, has a refund on the invoice, or whose saved card is still being tried.
+ */
+export async function applyLateFees() {
+  const today = todayLocal();
+  let added = 0;
+  for (const biz of await db.business.findMany({ select: { id: true, settings: true } })) {
+    const s = parseSettings(biz.settings);
+    if (!s.lateFee) continue;
+    const invs = await db.invoice.findMany({
+      where: {
+        businessId: biz.id, status: "AWAITING_PAYMENT", kind: "STANDARD", lateFeeAppliedAt: null, dueOn: { lt: toDbDate(today) },
+        client: { followUpInvoices: true }, payments: { none: { refundedCents: { gt: 0 } } }, OR: [{ autoPayState: null }, { autoPayState: { notIn: ["SCHEDULED", "RETRYING"] } }],
+      },
+      include: { client: true, _count: { select: { lineItems: true } } },
+    });
+    for (const inv of invs) {
+      const fee = lateFeeDue({ ...inv, dueOn: dateOnly(inv.dueOn) }, today, s);
+      if (fee <= 0) continue;
+      await db.$transaction(async (tx) => {
+        const claimed = await tx.invoice.updateMany({ where: { id: inv.id, lateFeeAppliedAt: null, status: "AWAITING_PAYMENT" }, data: { lateFeeAppliedAt: new Date(), subtotalCents: { increment: fee }, totalCents: { increment: fee } } });
+        if (claimed.count !== 1) return;
+        await tx.invoiceLineItem.create({ data: { invoiceId: inv.id, name: "Late fee", description: `Unpaid ${s.lateFeeDays} days past the due date`, quantity: 1, unitPriceCents: fee, totalCents: fee, serviceDate: toDbDate(today), sortOrder: inv._count.lineItems } });
+        await logActivity(tx, { businessId: biz.id, type: "invoice.late_fee", entityType: "Invoice", entityId: inv.id, actorType: "SYSTEM", clientId: inv.clientId, data: { cents: fee } });
+        for (const to of env.ownerEmails) await enqueue(tx, { businessId: biz.id, template: "owner.notice", to, priority: 5, dedupeKey: `invoice:${inv.id}:late-fee:${to}`, props: { title: `Late fee added to invoice #${inv.number}`, body: `${inv.client.firstName} ${inv.client.lastName}: $${(fee / 100).toFixed(2)} added. Their next reminder shows the new balance.`, path: `/invoices/${inv.id}` } });
+        added++;
+      });
+    }
+  }
+  if (added) kickOutbox();
+  return added;
 }
 
 export async function sendInvoice(user: Actor, invoiceId: string, tx?: Tx) {
