@@ -1,3 +1,5 @@
+import { ConfirmButton } from "@/components/confirm-button";
+import { btn } from "@/components/ui";
 import { requireOwner } from "@/server/auth";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -85,7 +87,7 @@ export default async function StormPage({ params, searchParams }: PageProps<"/sn
             </Card>
           )}
           {(ev.status === "FORECAST" || live) && (
-            <form action={stormCancel}>{hidden}<Button variant="danger" className="w-full">Cancel storm (forecast bust)</Button></form>
+            <form action={stormCancel}>{hidden}<ConfirmButton message="Cancel this storm? Every visit on it that isn't done yet is cancelled." className={btn("danger", "w-full")}>Cancel storm (forecast bust)</ConfirmButton></form>
           )}
           {ev.notes && <Card title="Notes"><p className="text-sm">{ev.notes}</p></Card>}
           {visits.length > 0 && <ButtonLink href={`/snow/${ev.id}/report`} className="w-full">Proof-of-service report</ButtonLink>}

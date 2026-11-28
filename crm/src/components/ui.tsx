@@ -59,7 +59,7 @@ const BTN = {
   danger: "bg-white text-red-700 border-red-200 hover:bg-red-50",
 };
 type Variant = keyof typeof BTN;
-const btn = (v: Variant, extra = "") => `inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border px-4 text-sm font-semibold transition disabled:opacity-50 ${BTN[v]} ${extra}`;
+export const btn = (v: Variant, extra = "") => `inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border px-4 text-sm font-semibold transition disabled:opacity-50 ${BTN[v]} ${extra}`;
 
 export function Button({ variant = "primary", className = "", ...p }: ComponentProps<"button"> & { variant?: Variant }) {
   return <button {...p} className={btn(variant, className)} />;

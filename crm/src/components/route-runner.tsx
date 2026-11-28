@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Camera, Check, ChevronDown, MapPin, Navigation, Phone, SkipForward, Truck, WifiOff } from "lucide-react";
 import type { RunStop } from "@/server/runner";
 
-type Action = { id: string; visitId: string; to: "EN_ROUTE" | "IN_PROGRESS" | "COMPLETED" | "SKIPPED"; depthCm?: number | null; iceMeltApplied?: boolean | null; skipReason?: string; lat?: number | null; lng?: number | null };
+type Action = { id: string; visitId: string; to: "EN_ROUTE" | "IN_PROGRESS" | "COMPLETED" | "SKIPPED"; depthCm?: number | null; iceMeltApplied?: boolean | null; skipReason?: string; skipNote?: string; lat?: number | null; lng?: number | null };
 const QKEY = "etc-run-queue", PKEY = "etc-run-autotext";
 
 // ---- tiny IndexedDB store for queued photos (blobs don't fit in localStorage) ----
@@ -47,6 +47,7 @@ export function RouteRunner({ date, initial }: { date: string; initial: RunStop[
   const [iceMelt, setIceMelt] = useState(false);
   const [showList, setShowList] = useState(false);
   const [msg, setMsg] = useState("");
+  const [skipNote, setSkipNote] = useState("");
   const cam = useRef<HTMLInputElement>(null);
   const camKind = useRef<"BEFORE" | "AFTER">("AFTER");
 
@@ -58,6 +59,7 @@ export function RouteRunner({ date, initial }: { date: string; initial: RunStop[
     for (const a of queue()) {
       const r = await fetch("/api/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(a) }).catch(() => null);
       if (!r) break; // still offline
+      if (r.status === 401) { setMsg("Signed out. Open the app and sign in again to send your saved updates."); break; }
       if (r.ok || r.status === 409 || r.status === 404) localStorage.setItem(QKEY, JSON.stringify(queue().filter((x) => x.id !== a.id)));
       if (r.status === 409) setMsg((await r.json().catch(() => ({}))).error ?? "One action couldn't be applied");
     }
@@ -65,6 +67,8 @@ export function RouteRunner({ date, initial }: { date: string; initial: RunStop[
       const body = new FormData(); body.append("visitId", p.visitId); body.append("kind", p.kind); body.append("file", p.blob, "photo.jpg");
       const r = await fetch("/api/uploads", { method: "POST", body }).catch(() => null);
       if (!r) break;
+      // Signed out: keep the photo and say so. Anything else the server refused for good is dropped.
+      if (r.status === 401) { setMsg("Signed out. Open the app and sign in again to send your saved photos."); break; }
       if (r.ok || r.status < 500) await photoQueue("del", p.id);
     }
     await countPending();
@@ -161,9 +165,10 @@ export function RouteRunner({ date, initial }: { date: string; initial: RunStop[
           <button onClick={() => act(cur, "COMPLETED", { depthCm: depth ? Number(depth) : null, iceMeltApplied: cur.snow ? iceMelt : null })} className={`${big} mt-3 w-full bg-emerald-600 text-white`}><Check className="size-6" />Done</button>
           <details className="mt-2">
             <summary className="cursor-pointer list-none text-center text-sm font-semibold text-ink-soft"><SkipForward className="mr-1 inline size-4" />Skip this stop</summary>
+            <input value={skipNote} onChange={(e) => setSkipNote(e.target.value)} maxLength={500} placeholder="Note for the office (optional)" className="mt-2 min-h-11 w-full rounded-xl border-2 border-line px-3 text-sm" />
             <div className="mt-2 grid grid-cols-2 gap-2">
               {[["ALREADY_CLEARED", "Already clear"], ["BLOCKED_BY_CAR", "Car in the way"], ["NO_ACCESS", "Can't get in"], ["CLIENT_CANCELLED", "Client cancelled"], ["OTHER", "Too big for the price"]].map(([k, l]) => (
-                <button key={k} onClick={() => act(cur, "SKIPPED", { skipReason: k })} className="min-h-12 rounded-xl border-2 border-line text-sm font-semibold">{l}</button>
+                <button key={k} onClick={() => { act(cur, "SKIPPED", { skipReason: k, ...(skipNote.trim() ? { skipNote: skipNote.trim() } : {}) }); setSkipNote(""); }} className="min-h-12 rounded-xl border-2 border-line text-sm font-semibold">{l}</button>
               ))}
             </div>
           </details>
