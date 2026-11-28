@@ -5,7 +5,7 @@ import type { SkipReason, VisitState } from "@/generated/prisma/client";
 import { currentUser } from "@/server/auth";
 import { todayLocal } from "@/server/dates";
 import { db } from "@/server/db";
-import { transitionVisit } from "@/server/ops/visits";
+import { addReturnVisit, transitionVisit } from "@/server/ops/visits";
 import { runStops, visitScope } from "@/server/runner";
 import { TransitionError } from "@/server/status/visit";
 
@@ -19,8 +19,9 @@ export async function GET(req: Request) {
 }
 
 const Action = z.object({
-  visitId: z.string().min(1), to: z.enum(["EN_ROUTE", "IN_PROGRESS", "COMPLETED", "SKIPPED"]),
-  depthCm: z.number().int().min(0).max(200).nullish(), iceMeltApplied: z.boolean().nullish(),
+  // RETURN isn't a state: it adds a return visit after this (completed) storm stop. Crew choose billable or not, never a price.
+  visitId: z.string().min(1), to: z.enum(["EN_ROUTE", "IN_PROGRESS", "COMPLETED", "SKIPPED", "RETURN"]), billable: z.boolean().nullish(),
+  depthCm: z.number().int().min(0).max(200).nullish(), iceMeltApplied: z.boolean().nullish(), iceMeltBags: z.number().min(0).max(999).nullish(),
   skipReason: z.enum(["ALREADY_CLEARED", "BLOCKED_BY_CAR", "NO_ACCESS", "BELOW_TRIGGER", "CLIENT_CANCELLED", "WEATHER", "OTHER"]).nullish(),
   skipNote: z.string().max(500).nullish(), lat: z.number().nullish(), lng: z.number().nullish(),
 });
@@ -33,18 +34,28 @@ export async function POST(req: Request) {
   if (!a.success) return Response.json({ error: "Bad action" }, { status: 400 });
   const v = await db.visit.findFirst({ where: { id: a.data.visitId, businessId: user.businessId, ...visitScope(user) } });
   if (!v) return Response.json({ error: "Visit not found" }, { status: 404 });
+  if (a.data.to === "RETURN") {
+    try {
+      await addReturnVisit(user, v.id, !!a.data.billable, visitScope(user)); // a replay finds the open return visit and adds nothing
+    } catch (e) {
+      if (e instanceof TransitionError) return Response.json({ error: e.message }, { status: 409 });
+      throw e;
+    }
+    return Response.json({ ok: true, added: true });
+  }
+  const to = a.data.to;
   // Replays and out-of-order sends: already there (or past it) means nothing to do.
-  if (v.state === a.data.to || v.state === "SKIPPED" || v.state === "CANCELLED" || (ORDER.indexOf(v.state) >= ORDER.indexOf(a.data.to) && a.data.to !== "SKIPPED")) {
+  if (v.state === to || v.state === "SKIPPED" || v.state === "CANCELLED" || (ORDER.indexOf(v.state) >= ORDER.indexOf(to) && to !== "SKIPPED")) {
     return Response.json({ ok: true, state: v.state, noop: true });
   }
   try {
-    await transitionVisit(user, v.id, a.data.to, {
-      depthCm: a.data.depthCm ?? undefined, iceMeltApplied: a.data.iceMeltApplied ?? undefined,
+    await transitionVisit(user, v.id, to, {
+      depthCm: a.data.depthCm ?? undefined, iceMeltApplied: a.data.iceMeltApplied ?? undefined, iceMeltBags: a.data.iceMeltBags ?? undefined,
       skipReason: (a.data.skipReason ?? undefined) as SkipReason | undefined, skipNote: a.data.skipNote ?? undefined, lat: a.data.lat ?? null, lng: a.data.lng ?? null,
     });
   } catch (e) {
     if (e instanceof TransitionError) return Response.json({ error: e.message }, { status: 409 });
     throw e;
   }
-  return Response.json({ ok: true, state: a.data.to });
+  return Response.json({ ok: true, state: to });
 }

@@ -27,7 +27,10 @@ import { parseOverrides } from "@/server/billing/charges";
 import { LineItems } from "@/components/line-items";
 import { visitLinesSet } from "../../recurring-actions";
 import { paymentRecord } from "../../billing-actions";
-import { visitTransition } from "../../work-actions";
+import { visitIceMeltBags, visitReturn, visitTransition } from "../../work-actions";
+import { isSnowVisit, onSiteMinutes, usualByProperty, usualKey } from "@/server/ops/visit-times";
+import { getSettings } from "@/server/settings";
+import { returnVisitPrice } from "@/server/snow/tiers";
 
 const SKIP: [string, string][] = [
   ["ALREADY_CLEARED", "Already cleared"], ["BLOCKED_BY_CAR", "Blocked by a car"], ["NO_ACCESS", "Couldn't get in"],
@@ -77,13 +80,17 @@ export default async function VisitPage({ params, searchParams }: PageProps<"/vi
     db.timeEntry.findFirst({ where: { businessId: v.businessId, userId: user.id, endedAt: null } }),
     db.timeEntry.findMany({ where: { businessId: v.businessId, visitId: v.id, endedAt: { not: null } }, include: { user: true } }),
   ]);
+  const took = onSiteMinutes(v, visitTime), usual = (await usualByProperty(v.businessId, [v.propertyId])).get(usualKey(v.propertyId, isSnowVisit(v))) ?? null;
+  // What a billable return visit would cost right now (addReturnVisit uses the same rule).
+  const returnCents = v.state === "COMPLETED" && v.snowEventId && !v.job.closedAt
+    ? returnVisitPrice(v.job.kind === "SNOW_PLAN" ? v.job.pricePerPushCents ?? 3000 : v.job.lineItems.filter((l) => l.perVisit).reduce((a, l) => a + l.totalCents, 0), (await getSettings(db, v.businessId)).returnVisitPct) : null;
   return (
     <div className="mx-auto max-w-xl">
       <Flash error={sp.error} />
       <div className="mb-4 rounded-3xl bg-navy p-5 text-white">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <div className="text-xs font-semibold uppercase tracking-wider text-sky">{v.snowEvent ? `${v.snowEvent.name}${v.pushNumber ? ` · push ${v.pushNumber}` : ""}` : v.job.title}</div>
+            <div className="text-xs font-semibold uppercase tracking-wider text-sky">{v.snowEvent ? `${v.snowEvent.name}${v.pushNumber ? ` · push ${v.pushNumber}` : ""}` : v.job.title}{v.isReturn && " · Return visit"}</div>
             <h1 className="mt-1 font-display text-2xl font-bold">{v.property.formatted}</h1>
             <p className="text-white/70">{clientName(v.job.client)}{v.property.community && ` · ${v.property.community.name}`}</p>
           </div>
@@ -126,6 +133,11 @@ export default async function VisitPage({ params, searchParams }: PageProps<"/vi
         </Card>
       )}
 
+      {v.isReturn && (
+        <Card className="mb-4 border-blue/30">
+          <p className="text-sm"><b>Return visit.</b> We&apos;ve already cleared this address this storm; this trip is for what came back (usually the city plough at the driveway end). {v.returnPriceCents ? <>Billable: <b>{money(v.returnPriceCents)}</b>, charged once when it&apos;s marked done.</> : "Included: no charge."}</p>
+        </Card>
+      )}
       {v.extras.length > 0 && (
         <Card title="Extras the client added" className="mb-4 border-blue/30">
           <ul className="text-sm">{v.extras.map((e) => <li key={e.id} className="flex justify-between gap-2 py-0.5"><span className="font-semibold">{e.name}</span><span className="text-ink-soft">{money(e.unitPriceCents)}</span></li>)}</ul>
@@ -138,6 +150,7 @@ export default async function VisitPage({ params, searchParams }: PageProps<"/vi
         <VisitTimer visitId={v.id} runningSince={running?.visitId === v.id ? running.startedAt.toISOString() : null} back={`/visits/${v.id}`} />
         {running && running.visitId !== v.id && <p className="mt-2 text-xs text-ink-soft">{running.visitId ? "Your timer is running on another visit. Starting here stops that one." : "You're on the day clock. Starting here pauses it until you stop this timer."}</p>}
         {visitTime.length > 0 && <p className="mt-2 text-sm text-ink-soft">Logged: {visitTime.map((t) => `${personName(t.user)} ${hm(t.minutes ?? 0)}`).join(" · ")}</p>}
+        {(took != null || usual != null) && <p className="mt-2 text-sm">{v.state === "COMPLETED" && took != null ? <>Took <b>{took} min</b> on site{usual != null && ` (usually ${usual})`}.</> : usual != null ? `This address usually takes ${usual} min.` : null}</p>}
       </Card>
       <Card title="Who's on it" className="my-4">
         <form action={assignPeople} className="flex flex-wrap items-center gap-3">
@@ -174,6 +187,11 @@ export default async function VisitPage({ params, searchParams }: PageProps<"/vi
                   <input type="checkbox" name="iceMeltApplied" defaultChecked={v.iceMeltApplied ?? true} className="size-6" /> Ice melt put down
                 </label>
               )}
+              {hasIceMelt && (
+                <label className="block text-sm font-semibold">Bags of ice melt used (optional)
+                  <input name="iceMeltBags" type="number" inputMode="decimal" min={0} max={999} step="0.01" defaultValue={v.iceMeltBags != null ? Number(v.iceMeltBags) : ""} className={`${inputCls} mt-1`} />
+                </label>
+              )}
               <Button className="min-h-14 w-full text-base">Mark done</Button>
             </form>
           </Card>
@@ -197,12 +215,30 @@ export default async function VisitPage({ params, searchParams }: PageProps<"/vi
           <Dl rows={[
             ["When", prettyDateTime(v.completedAt ?? v.skippedAt)],
             ["Depth", v.depthCm != null ? `${v.depthCm} cm` : null],
-            ["Ice melt", v.state === "COMPLETED" && v.iceMeltApplied ? "Yes" : null],
+            ["Ice melt", v.state === "COMPLETED" && v.iceMeltApplied ? `Yes${v.iceMeltBags != null ? ` · ${Number(v.iceMeltBags)} bag${Number(v.iceMeltBags) === 1 ? "" : "s"}` : ""}` : null],
+            ["Time on site", v.state === "COMPLETED" && took != null ? `${took} min${usual != null ? ` (usually ${usual})` : ""}` : null],
             ["Reason", v.skipReason ? SKIP.find(([k]) => k === v.skipReason)?.[1] ?? v.skipReason : null],
             ["Note", v.skipNote],
             ["Location", v.completedLat != null ? <a className="text-blue" href={`https://www.google.com/maps/search/?api=1&query=${v.completedLat},${v.completedLng}`}>Recorded</a> : null],
             ["Charges", v.charges.length ? v.charges.map((c) => `${c.name}: ${money(c.totalCents)}`).join("\n") : null],
           ]} />
+          {v.state === "COMPLETED" && v.iceMeltApplied && (
+            <form action={visitIceMeltBags} className="mt-3 flex items-end gap-2">
+              <input type="hidden" name="id" value={v.id} /><input type="hidden" name="back" value={here} />
+              <label className="text-sm font-semibold">Bags of ice melt used<input name="bags" type="number" inputMode="decimal" min={0} max={999} step="0.01" defaultValue={v.iceMeltBags != null ? Number(v.iceMeltBags) : ""} className={`${inputCls} mt-1 w-32`} /></label>
+              <Button variant="secondary">Save</Button>
+            </form>
+          )}
+          {returnCents != null && (
+            <form action={visitReturn} className="mt-3 space-y-2 rounded-xl border border-line p-3">
+              <input type="hidden" name="id" value={v.id} /><input type="hidden" name="back" value={here} />
+              <p className="text-sm"><b>Plough came back?</b> Add a return visit to today&apos;s route for this address, with the same people.</p>
+              <div className="grid grid-cols-2 gap-2">
+                <button name="billable" value="0" className="min-h-11 rounded-full border-2 border-line bg-white text-sm font-semibold">Included (no charge)</button>
+                <button name="billable" value="1" className="min-h-11 rounded-full border-2 border-line bg-white text-sm font-semibold">Billable ({money(returnCents)})</button>
+              </div>
+            </form>
+          )}
           {invoice && owing > 0 && (
             <form action={paymentRecord} className="mt-3 space-y-2 rounded-xl bg-tint p-3">
               <input type="hidden" name="invoiceId" value={invoice.id} /><input type="hidden" name="back" value={here} />

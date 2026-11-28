@@ -5,17 +5,20 @@ import { DetailHeader } from "@/components/detail-header";
 import { Button, Card, Input } from "@/components/ui";
 import { requireOwner } from "@/server/auth";
 import { money } from "@/server/money";
-import { parseRange, PRESETS, REPORTS, totals, type Kind } from "@/server/reports";
+import { parseRange, PRESETS, reportSeason, REPORTS, totals, type Kind } from "@/server/reports";
 
 export default async function ReportPage({ params, searchParams }: PageProps<"/reports/[report]">) {
   const user = await requireOwner();
   const { report } = await params;
   const def = REPORTS[report];
   if (!def) notFound();
-  const r = parseRange(await searchParams);
-  const t = await def.run(user.businessId, r);
+  const sp = await searchParams;
+  const r = parseRange(sp);
+  // Snow plan reports are per season, not per date range.
+  const picked = def.seasonal ? await reportSeason(user.businessId, typeof sp.season === "string" ? sp.season : undefined) : null;
+  const t = await def.run(user.businessId, { ...r, season: picked?.season?.id });
   const sums = totals(t);
-  const qs = def.ranged ? `?from=${r.from}&to=${r.to}` : "";
+  const qs = def.ranged ? `?from=${r.from}&to=${r.to}` : picked?.season ? `?season=${picked.season.id}` : "";
   const show = (v: string | number | null, k: Kind) => (v == null ? "" : k === "money" ? money(v as number) : String(v));
   return (
     <>
@@ -28,6 +31,11 @@ export default async function ReportPage({ params, searchParams }: PageProps<"/r
           <label>To<Input type="date" name="to" defaultValue={r.to} /></label>
           <Button variant="secondary">Show</Button>
         </form>
+      )}
+      {picked && picked.seasons.length > 1 && (
+        <p className="no-print mb-4 flex flex-wrap gap-2 text-sm">
+          {picked.seasons.map((s) => <Link key={s.id} href={`/reports/${report}?season=${s.id}`} className={`rounded-full border px-3 py-1.5 font-semibold ${picked.season?.id === s.id ? "border-navy bg-navy text-white" : "border-line bg-white"}`}>{s.name}</Link>)}
+        </p>
       )}
       <Card>
         {t.rows.length ? (

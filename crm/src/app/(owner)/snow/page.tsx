@@ -7,6 +7,10 @@ import { businessId, db } from "@/server/db";
 import { money } from "@/server/money";
 import { clientName } from "@/server/queries";
 import { renewalCandidates, renewalSeason } from "@/server/ops/jobs";
+import { DepthTierFields } from "@/components/depth-tier-fields";
+import { getSettings } from "@/server/settings";
+import { parseTiers } from "@/server/snow/tiers";
+import { saveSnowPricing } from "../settings/actions";
 import { sendRenewals, stormCreate } from "../work-actions";
 
 export const metadata = { title: "Snow" };
@@ -15,6 +19,7 @@ export default async function Snow({ searchParams }: PageProps<"/snow">) {
   await requireOwner();
   const sp = await searchParams;
   const bid = await businessId();
+  const settings = await getSettings(db, bid);
   const renewTarget = await renewalSeason(bid);
   const renewCount = renewTarget ? (await renewalCandidates(bid, renewTarget.id)).length : 0;
   const today = toDbDate(todayLocal());
@@ -62,7 +67,7 @@ export default async function Snow({ searchParams }: PageProps<"/snow">) {
                       <span className="flex shrink-0 flex-col items-end gap-1">
                         <span>{p.triggerCm ?? season?.defaultTriggerCm} cm · {p.snowBillingMode === "SEASONAL"
                           ? `${money(p.seasonalPriceCents ?? 0)} season · ${p.invoices.length}/${p.seasonalInstalments ?? 1} paid${p.iceMelt && !p.addonsIncluded ? " + melt" : ""}`
-                          : `${money(p.pricePerPushCents ?? 3000)}${p.snowBillingMode === "PER_EVENT" ? " per storm" : ""}${p.iceMelt ? " + melt" : ""}`}</span>
+                          : `${parseTiers(p.depthTiers).length ? "from " : ""}${money(p.pricePerPushCents ?? 3000)}${p.snowBillingMode === "PER_EVENT" ? " per storm" : ""}${p.iceMelt ? " + melt" : ""}`}</span>
                         {p.planPausedAt ? <Badge>Paused</Badge> : p.property.community && <Badge>{p.property.community.name}</Badge>}
                       </span>
                     </Link>
@@ -79,6 +84,17 @@ export default async function Snow({ searchParams }: PageProps<"/snow">) {
             <input type="hidden" name="start" value="1" />
             <Button className="w-full">Start storm</Button>
             <p className="text-xs text-ink-soft">Creates today&apos;s visits for every plan whose trigger this meets, plus one-time bookings waiting for snow.</p>
+          </form>
+        </Card>
+        <Card title="Snow pricing" className="lg:col-start-3">
+          {sp.saved === "pricing" && <p className="mb-2 text-sm font-semibold text-emerald-700">Saved.</p>}
+          {sp.error && <p className="mb-2 text-sm font-semibold text-red-700">{String(sp.error)}</p>}
+          <form action={saveSnowPricing} className="space-y-3">
+            <DepthTierFields tiers={settings.depthTiers} hint="What a new plan starts with; each plan keeps its own copy, changed on its plan card. Plans you already have are not touched, and online bookings stay at the flat price the client saw." />
+            <label className="block text-sm font-semibold">Billable return visit (% of the plan&apos;s clearing price)
+              <Input name="returnVisitPct" type="number" min={0} max={200} step={1} defaultValue={settings.returnVisitPct} className="w-28" /></label>
+            <p className="text-xs text-ink-soft">A return visit is one more trip on the same storm (the city plough buried the driveway end). When you add one you choose included (no charge) or billable at this share of the plan&apos;s base price.</p>
+            <Button variant="secondary" className="w-full">Save snow pricing</Button>
           </form>
         </Card>
         <Card title="Plan renewals" className="lg:col-start-3">

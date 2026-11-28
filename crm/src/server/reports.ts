@@ -4,10 +4,11 @@ import { addDays, dateOnly, localDayStart, todayLocal, toDbDate, TZ } from "./da
 import { db } from "./db";
 import { clientName } from "./queries";
 import { personName } from "./schedule";
+import { planProfit } from "./ops/costing";
 
 export type Kind = "text" | "money" | "num";
 export type Table = { columns: [string, Kind][]; rows: (string | number | null)[][]; note?: string };
-export type Range = { from: string; to: string; person?: string }; // person: one team member (timesheets only)
+export type Range = { from: string; to: string; person?: string; season?: string }; // person: one team member (timesheets only); season: a Season id (snow plan reports)
 
 /** ?from&to, or a preset (?range=month|last-month|year|12m). Defaults to this calendar year. Pure, unit-tested. */
 export function parseRange(sp: { from?: unknown; to?: unknown; range?: unknown }, today = todayLocal(), fallback = "year"): Range & { preset: string } {
@@ -36,7 +37,54 @@ export function ageBucket(dueOn: string | null, today: string) {
   return days <= 30 ? 1 : days <= 60 ? 2 : days <= 90 ? 3 : 4;
 }
 
-type Report = { title: string; sub: string; ranged: boolean; run: (businessId: string, r: Range) => Promise<Table> };
+/** seasonal: picked by snow season instead of a date range. */
+type Report = { title: string; sub: string; ranged: boolean; seasonal?: boolean; run: (businessId: string, r: Range) => Promise<Table> };
+
+/** The season a seasonal report is for: the one asked for, else the current one, else the latest. */
+export async function reportSeason(businessId: string, id?: string) {
+  const seasons = await db.season.findMany({ where: { businessId }, orderBy: { startsOn: "desc" } });
+  const today = todayLocal();
+  return { seasons, season: seasons.find((s) => s.id === id) ?? seasons.find((s) => dateOnly(s.startsOn)! <= today && dateOnly(s.endsOn)! >= today) ?? seasons[0] ?? null };
+}
+
+const PLAN_BILLING = { PER_PUSH: "Per push", PER_EVENT: "Per storm", SEASONAL: "Seasonal" } as const;
+const pct = (profit: number, revenue: number) => (revenue > 0 ? `${Math.round((profit / revenue) * 100)}%` : "");
+const perVisit = (revenue: number, visits: number) => (visits ? (revenue / visits / 100).toFixed(2) : "");
+
+/** Every snow plan of a season with its money (the rules are planProfit's), and a note saying where labour came from. */
+async function seasonPlans(businessId: string, seasonId?: string) {
+  const { season } = await reportSeason(businessId, seasonId);
+  if (!season) return { plans: [], note: "No snow season is set up yet (Settings)." };
+  const jobs = await db.job.findMany({
+    where: { businessId, kind: "SNOW_PLAN", seasonId: season.id }, orderBy: { number: "asc" },
+    include: {
+      client: true, property: { include: { community: true } },
+      visits: { where: { state: "COMPLETED" }, select: { id: true, isReturn: true, snowEventId: true, arrivedAt: true, completedAt: true, completedById: true, charges: { where: { invoiceLineItemId: null }, select: { totalCents: true } } } },
+    },
+  });
+  const ids = jobs.map((j) => j.id);
+  const [users, lines, time, expenses] = await Promise.all([
+    db.user.findMany({ where: { businessId }, select: { id: true, hourlyCostCents: true } }),
+    // Invoiced = lines on invoices that aren't void: visit charges (linked by visit) and season instalments (linked by job).
+    db.invoiceLineItem.findMany({ where: { invoice: { businessId, status: { not: "VOID" } }, OR: [{ jobId: { in: ids } }, { visit: { jobId: { in: ids } } }] }, select: { totalCents: true, jobId: true, visit: { select: { jobId: true } } } }),
+    db.timeEntry.findMany({ where: { businessId, endedAt: { not: null }, jobId: { in: ids } }, select: { jobId: true, visitId: true, userId: true, minutes: true } }),
+    db.expense.findMany({ where: { businessId, jobId: { in: ids } }, select: { jobId: true, amountCents: true } }),
+  ]);
+  const cost = new Map(users.map((u) => [u.id, u.hourlyCostCents]));
+  const plans = jobs.map((j) => ({
+    job: j,
+    ...planProfit({
+      invoicedCents: lines.filter((l) => (l.visit?.jobId ?? l.jobId) === j.id).reduce((a, l) => a + l.totalCents, 0),
+      visits: j.visits.map((v) => ({ ...v, unbilledCents: v.charges.reduce((a, c) => a + c.totalCents, 0) })),
+      time: time.filter((t) => t.jobId === j.id), expenses: expenses.filter((e) => e.jobId === j.id), hourlyCost: (id) => cost.get(id) ?? 0,
+    }),
+  }));
+  const from = plans.reduce((a, p) => ({ timers: a.timers + p.labourFrom.timers, onSite: a.onSite + p.labourFrom.onSite, none: a.none + p.labourFrom.none }), { timers: 0, onSite: 0, none: 0 });
+  const note = `${season.name}. Revenue = invoiced (void invoices left out) + charges not invoiced yet. Labour = time entries × each person's hourly cost (${from.timers} visit${from.timers === 1 ? "" : "s"} had a timer); `
+    + `visits nobody timed use minutes on site, Arrived to Done, × the hourly cost of whoever completed them (${from.onSite}); ${from.none} had neither and count no labour. Expenses are the ones linked to the plan's job.`;
+  return { plans, note };
+}
+
 
 export const REPORTS: Record<string, Report> = {
   "aged-receivables": {
@@ -113,6 +161,60 @@ export const REPORTS: Record<string, Report> = {
       return { columns: [["Source", "text"], ["New clients", "num"], ["Quotes sent", "num"], ["Jobs", "num"], ["Became a job", "text"], ["Paid so far", "money"]], rows };
     },
   },
+  "plan-profit": {
+    title: "Snow plan profit", sub: "Each every-snowfall plan for a season: what it brought in, what it cost, and which ones are losing money.", ranged: false, seasonal: true,
+    async run(businessId, r) {
+      const { plans, note } = await seasonPlans(businessId, r.season);
+      const rows = plans.sort((a, b) => a.profitCents - b.profitCents).map((p) => [
+        `#${p.job.number} ${clientName(p.job.client)}`, p.job.property.formatted.replace(/, Calgary.*$/, ""), p.job.property.community?.name ?? "", PLAN_BILLING[p.job.snowBillingMode ?? "PER_PUSH"],
+        p.storms, p.visitsDone, p.pushes, p.returns, p.invoicedCents, p.unbilledCents, p.labourCents, p.expenseCents, p.profitCents,
+        pct(p.profitCents, p.revenueCents), perVisit(p.revenueCents, p.visitsDone), p.losing ? "Losing money" : "",
+      ]);
+      return {
+        columns: [["Plan", "text"], ["Address", "text"], ["Community", "text"], ["Billing", "text"], ["Storms", "num"], ["Visits done", "num"], ["Pushes", "num"], ["Return visits", "num"],
+          ["Invoiced", "money"], ["Not yet invoiced", "money"], ["Labour", "money"], ["Expenses", "money"], ["Profit", "money"], ["Margin", "text"], ["Revenue per visit ($)", "text"], ["Flag", "text"]],
+        rows, note,
+      };
+    },
+  },
+  "community-profit": {
+    title: "Snow profit by community", sub: "The season's every-snowfall plans rolled up by community: where the route makes money and where it doesn't.", ranged: false, seasonal: true,
+    async run(businessId, r) {
+      const { plans, note } = await seasonPlans(businessId, r.season);
+      const by = new Map<string, number[]>(); // plans, losing, visits, invoiced, unbilled, labour, expenses, profit
+      for (const p of plans) {
+        const k = p.job.property.community?.name ?? "No community", row = by.get(k) ?? [0, 0, 0, 0, 0, 0, 0, 0];
+        [1, p.losing ? 1 : 0, p.visitsDone, p.invoicedCents, p.unbilledCents, p.labourCents, p.expenseCents, p.profitCents].forEach((n, i) => { row[i] += n; });
+        by.set(k, row);
+      }
+      const rows = [...by].sort((a, b) => a[1][7] - b[1][7]).map(([k, v]) => [k, ...v, pct(v[7], v[3] + v[4]), perVisit(v[3] + v[4], v[2])]);
+      return {
+        columns: [["Community", "text"], ["Plans", "num"], ["Losing money", "num"], ["Visits done", "num"], ["Invoiced", "money"], ["Not yet invoiced", "money"], ["Labour", "money"], ["Expenses", "money"], ["Profit", "money"], ["Margin", "text"], ["Revenue per visit ($)", "text"]],
+        rows, note,
+      };
+    },
+  },
+  materials: {
+    title: "Materials used", sub: "Ice melt put down in the period, by month and storm, next to what was charged for it.", ranged: true,
+    async run(businessId, r) {
+      const visits = await db.visit.findMany({
+        where: { businessId, state: "COMPLETED", iceMeltApplied: true, completedAt: instants(r) }, orderBy: { completedAt: "asc" },
+        select: { completedAt: true, iceMeltBags: true, snowEvent: { select: { name: true } }, charges: { where: { name: { startsWith: "Ice melt" } }, select: { totalCents: true } } },
+      });
+      const by = new Map<string, [string, string, number, number, number, number]>();
+      for (const v of visits) {
+        const month = day(v.completedAt).slice(0, 7), storm = v.snowEvent?.name ?? "Not in a storm";
+        const row = by.get(`${month}|${storm}`) ?? [month, storm, 0, 0, 0, 0];
+        row[2]++; row[3] = Math.round((row[3] + Number(v.iceMeltBags ?? 0)) * 100) / 100; row[4] += v.iceMeltBags == null ? 1 : 0; row[5] += v.charges.reduce((a, c) => a + c.totalCents, 0);
+        by.set(`${month}|${storm}`, row);
+      }
+      return {
+        columns: [["Month", "text"], ["Storm", "text"], ["Visits with ice melt", "num"], ["Bags used", "num"], ["Visits with no quantity", "num"], ["Ice melt charged", "money"]],
+        rows: [...by.values()],
+        note: "Bags are what the crew entered on the visit; a visit with ice melt but no quantity counts 0 bags. Ice melt is charged flat per visit whatever the quantity (nothing when a season price includes it).",
+      };
+    },
+  },
   timesheets: {
     title: "Timesheets", sub: "Every time entry in the period, with what it cost.", ranged: true,
     async run(businessId, r) {
@@ -171,4 +273,4 @@ export const REPORTS: Record<string, Report> = {
 };
 
 /** Column sums for money and number columns (null where a sum makes no sense). */
-export const totals = (t: Table) => t.columns.map(([, kind], i) => (kind === "text" ? null : t.rows.reduce((a, r) => a + (typeof r[i] === "number" ? (r[i] as number) : 0), 0)));
+export const totals = (t: Table) => t.columns.map(([, kind], i) => (kind === "text" ? null : Math.round(t.rows.reduce((a, r) => a + (typeof r[i] === "number" ? (r[i] as number) : 0), 0) * 100) / 100)); // rounded: hours and bags are decimals

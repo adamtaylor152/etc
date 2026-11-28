@@ -7,6 +7,7 @@ import { travelMatrix } from "./routing-matrix";
 import { routeTimes } from "./routing/eta";
 import type { LatLng } from "./routing/order";
 import { parseSettings } from "./settings";
+import { isSnowVisit, usualByProperty, usualKey } from "./ops/visit-times";
 
 const include = {
   property: { include: { community: true } },
@@ -58,7 +59,8 @@ export async function routeEnds(businessId: string, userId?: string | null) {
 /**
  * Times for stops already in route order, setting off at `startAt`. Each person drives their own stops from their own
  * start point (unassigned stops are one more route from the depot); `oneRoute` treats the lot as a single route.
- * Stops without a map pin add service time but no driving.
+ * Stops without a map pin add service time but no driving. Time at a stop is what that property usually takes once
+ * it has enough timed visits (ops/visit-times.ts; `usual` has those), else the flat "minutes at a stop" setting.
  */
 export async function routeEtas(businessId: string, visits: RouteVisit[], startAt: Date, opts: { oneRoute?: boolean } = {}) {
   const [biz, users] = await Promise.all([
@@ -66,12 +68,15 @@ export async function routeEtas(businessId: string, visits: RouteVisit[], startA
     db.user.findMany({ where: { businessId } }),
   ]);
   const serviceMin = parseSettings(biz.settings).serviceMinutes, depot = depotOf(biz);
+  const byProperty = await usualByProperty(businessId, visits.map((v) => v.propertyId));
+  const usual = new Map(visits.flatMap((v) => { const u = v.isReturn ? null : byProperty.get(usualKey(v.propertyId, isSnowVisit(v))); return u == null ? [] : [[v.id, u] as const]; }));
+  const stopMin = (v: RouteVisit) => usual.get(v.id) ?? serviceMin;
   const chains = new Map<string, RouteVisit[]>();
   for (const v of visits) {
     const who = opts.oneRoute ? "" : v.assignees[0]?.userId ?? "";
     chains.set(who, [...(chains.get(who) ?? []), v]);
   }
-  const stops = new Map<string, { eta: Date; driveMin: number }>();
+  const stops = new Map<string, { eta: Date; driveMin: number; serviceMin: number }>();
   const people: { id: string; name: string; color: string; stops: number; driveMin: number; totalMin: number; finish: Date; path: LatLng[] }[] = [];
   let road = visits.length > 0;
   for (const [who, list] of chains) {
@@ -83,12 +88,12 @@ export async function routeEtas(businessId: string, visits: RouteVisit[], startA
     road &&= m.road;
     let at = 0; // index into pts of where the crew is
     const drive = list.map((v) => { const i = pinned.indexOf(v) + 1; if (!i) return 0; const d = m.minutes[at][i]; at = i; return d; });
-    const t = routeTimes(drive, serviceMin, m.minutes[at][pts.length - 1]);
-    list.forEach((v, i) => stops.set(v.id, { eta: new Date(startAt.getTime() + t.arrive[i] * 60_000), driveMin: drive[i] }));
+    const t = routeTimes(drive, list.map(stopMin), m.minutes[at][pts.length - 1]);
+    list.forEach((v, i) => stops.set(v.id, { eta: new Date(startAt.getTime() + t.arrive[i] * 60_000), driveMin: drive[i], serviceMin: stopMin(v) }));
     people.push({
       id: who, name: u ? u.name || u.email.split("@")[0] : "Unassigned", color: u?.color ?? "#14213d", stops: list.length,
       driveMin: t.driveMin, totalMin: t.totalMin, finish: new Date(startAt.getTime() + t.totalMin * 60_000), path: pts.slice(0, -1),
     });
   }
-  return { stops, people, road, serviceMin };
+  return { stops, people, road, serviceMin, usual };
 }

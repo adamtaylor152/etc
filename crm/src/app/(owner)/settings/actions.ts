@@ -10,6 +10,7 @@ import { deleteQuoteTemplate, renameQuoteTemplate } from "@/server/ops/quotes";
 import * as routes from "@/server/ops/routes";
 import { SETTING_DAYS, SETTING_LABELS, SettingsSchema } from "@/server/settings";
 import { TransitionError } from "@/server/status/visit";
+import { tiersFromRows } from "@/server/snow/tiers";
 
 const s = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 const opt = (v: string) => v || null;
@@ -68,6 +69,22 @@ export async function saveRouteSettings(f: FormData) {
   await db.business.update({ where: { id: biz.id }, data: { settings: next as Prisma.InputJsonValue } });
   revalidatePath("/", "layout");
   redirect("/settings/route?saved=1");
+}
+
+/** Snow pricing (the Snow page): the depth tiers a new plan starts from, and what a billable return visit costs. */
+export async function saveSnowPricing(f: FormData) {
+  const user = await requireOwner();
+  const biz = await db.business.findUniqueOrThrow({ where: { id: user.businessId } });
+  let next;
+  try {
+    next = SettingsSchema.parse({ ...(biz.settings as object), depthTiers: tiersFromRows(f.getAll("tierCm").map(String), f.getAll("tierAdd").map(String)), returnVisitPct: s(f, "returnVisitPct") || undefined });
+  } catch (e) {
+    if (!(e instanceof TransitionError || e instanceof z.ZodError)) throw e;
+    redirect(`/snow?error=${encodeURIComponent(e instanceof TransitionError ? e.message : "The return visit share is a whole number from 0 to 200")}`);
+  }
+  await db.business.update({ where: { id: biz.id }, data: { settings: next as Prisma.InputJsonValue } });
+  revalidatePath("/", "layout");
+  redirect("/snow?saved=pricing");
 }
 
 /** The order routes visit communities in: `ids` is the community codes, first to last. */
