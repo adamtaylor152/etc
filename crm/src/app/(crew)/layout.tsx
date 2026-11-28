@@ -19,7 +19,7 @@ export default async function CrewLayout({ children }: LayoutProps<"/">) {
           <CrewNav />
         </div>
         <form action={signOutAction} className="flex min-w-0 items-center gap-2 whitespace-nowrap text-sm">
-          <span className="hidden truncate text-white/70 sm:inline">{user.email}</span>
+          <span className="hidden truncate text-white/70 sm:inline">{user.name || user.email}</span>
           <button className="inline-flex min-h-11 items-center gap-1.5 rounded-lg px-2 font-semibold text-white/85 hover:bg-white/10 hover:text-white focus-visible:outline-sky"><LogOut className="size-4" aria-hidden />Sign out</button>
         </form>
       </header>

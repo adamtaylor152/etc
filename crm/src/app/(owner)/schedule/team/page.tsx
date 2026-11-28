@@ -62,7 +62,7 @@ export default async function TeamSchedule({ searchParams }: PageProps<"/schedul
       <div className={`grid items-start gap-5 ${!week ? "xl:grid-cols-[minmax(0,1fr)_26rem]" : ""}`}>
         <div className="min-w-0">
           <TeamBoard lanes={lanes} dates={dates} cards={cards} today={todayLocal()} />
-          <p className="mt-2 text-xs text-ink-soft">Drag a card to another person to reassign it{week ? ", or to another day to move it" : "; switch to Week to move it to another day"}. Finished work and storm visits stay where they are.</p>
+          <p className="mt-2 text-xs text-ink-soft">Drag a card to another person to reassign it{week ? ", or to another day to move it" : "; switch to Week to move it to another day"}. Finished work and storm visits stay where they are. Moving a visit tells the client about the new time.</p>
         </div>
         {!week && (
           <Card className="p-2! sm:p-2!">

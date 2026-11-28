@@ -5,6 +5,7 @@ import { db } from "@/server/db";
 import { clientName } from "@/server/queries";
 import { DetailHeader } from "./detail-header";
 import { ButtonLink, Empty } from "./ui";
+import { prettyPhone } from "./phone";
 
 export async function ClientPick({ businessId, base, keep = {}, q, title }: { businessId: string; base: string; keep?: Record<string, string>; q?: string; title: string }) {
   const term = q?.trim();
@@ -33,7 +34,7 @@ export async function ClientPick({ businessId, base, keep = {}, q, title }: { bu
             <li key={c.id}>
               <Link href={`${base}?${qs({ client: c.id })}`} className="flex min-h-14 items-center gap-3 px-4 py-2.5 hover:bg-tint">
                 <span className="grid size-8 shrink-0 place-items-center rounded-full bg-tint text-ink-soft" aria-hidden><User className="size-4" /></span>
-                <span className="min-w-0 flex-1"><span className="block truncate font-semibold">{clientName(c)}</span><span className="block truncate text-xs text-ink-soft">{[c.phone, c.properties[0]?.formatted].filter(Boolean).join(" · ") || "No phone or address yet"}</span></span>
+                <span className="min-w-0 flex-1"><span className="block truncate font-semibold">{clientName(c)}</span><span className="block truncate text-xs text-ink-soft">{[prettyPhone(c.phone), c.properties[0]?.formatted].filter(Boolean).join(" · ") || "No phone or address yet"}</span></span>
                 <ChevronRight className="size-4 shrink-0 text-ink-faint" aria-hidden />
               </Link>
             </li>

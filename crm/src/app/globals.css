@@ -74,6 +74,32 @@ table, .tabular-nums, [data-money], time { font-variant-numeric: tabular-nums; }
 :where(input[type="checkbox"], input[type="radio"], progress) { accent-color: var(--color-blue); }
 :where(input, select, textarea)::placeholder { color: var(--color-ink-faint); }
 
+/*
+  Phones: everything you press is at least 44px tall, by default, so a page has to ask for less rather than remember
+  to ask for enough. It all lives in the base layer, below the `sm` breakpoint, so desktop density is untouched:
+  1. Controls (buttons, text-buttons, disclosures, menu items, tabs, fields, selects) get the floor by default.
+     A utility on the element still wins, so a bigger target (min-h-12) stays bigger.
+  2. A control or link that asked for a small desktop height (min-h-7 to min-h-10, with or without `!`) is lifted to
+     44px, so those classes can never again make a sub-44px target on a phone. (Important in the base layer outranks
+     an important utility.) A bigger phone height on the element (max-sm:min-h-12 and up) is left alone.
+  3. A text link (blue, or `.tap` on any other link sitting in a row or heading) keeps its look and its row keeps its
+     height, but the box you can hit grows to 44px: padding, taken back with a negative margin. Links that are
+     already shaped (padded, bordered, filled, sized) are not touched.
+*/
+@layer base {
+  @media (width < 40rem) {
+    :where(button:not([role="switch"]), summary, select, textarea, [role="button"], [role="menuitem"], [role="tab"],
+      input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"], [type="hidden"], [type="color"])) { min-height: 2.75rem; }
+    :where(summary) { align-content: center; }
+    :where(a, button, summary, select, input, textarea, label, [role="button"], [role="menuitem"]):where(.min-h-7, .min-h-8, .min-h-9, .min-h-10, .min-h-7\!, .min-h-8\!, .min-h-9\!, .min-h-10\!):not([class*="max-sm:min-h-12"], [class*="max-sm:min-h-14"], [class*="max-sm:min-h-16"], [class*="max-sm:min-h-2"]) { min-height: 2.75rem !important; }
+    /* The extra eighth of an em covers an inline link, whose box is the height of its letters, not of its line. A
+       stretched link (after:inset-0 makes the whole row the target) gets the same box, so it measures as it behaves. */
+    :where(a.tap, a:where([class*="text-blue"], [class*="after:inset-0"]):not([class*="min-h-"], [class*="h-"], [class*="py-"], [class*=" p-"], [class^="p-"], [class*="border"], [class*="bg-"], [class*="size-"])) {
+      padding-block: calc((2.75rem - 1lh) / 2 + .125em); margin-block: calc((1lh - 2.75rem) / 2 - .125em);
+    }
+  }
+}
+
 /* Disclosure: a quiet chevron instead of the browser's triangle. */
 summary { list-style: none; }
 summary::-webkit-details-marker { display: none; }
@@ -83,11 +109,14 @@ details > summary:not(.list-none)::before {
   width: .45em; height: .45em;
   margin-right: .55em;
   border-right: 2px solid currentColor; border-bottom: 2px solid currentColor;
-  transform: translateY(-.15em) rotate(-45deg);
+  transform: translateY(-.05em) rotate(-45deg);
   transition: transform .15s ease;
   opacity: .6;
 }
-details[open] > summary:not(.list-none)::before { transform: translateY(-.25em) rotate(45deg); }
+details[open] > summary:not(.list-none)::before { transform: translateY(-.15em) rotate(45deg); }
+
+/* Reorder lists number their rows by where each row sits now, so an unsaved order still reads 1, 2, 3. */
+.reorder-n::before { content: counter(reorder); }
 
 /* Skeleton shimmer for loading states. */
 @keyframes etc-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }

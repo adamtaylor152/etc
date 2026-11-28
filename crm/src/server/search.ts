@@ -2,6 +2,7 @@
 import { Prisma } from "@/generated/prisma/client";
 import { db } from "./db";
 import { clientName } from "./queries";
+import { prettyPhone } from "@/components/phone";
 
 export type SearchHit = { kind: "client" | "property" | "request" | "quote" | "job" | "invoice"; id: string; title: string; sub: string; href: string };
 
@@ -27,7 +28,7 @@ export async function searchClients(businessId: string, raw: string, opts: { tak
   const clients = clientIds.length ? await db.client.findMany({ where: { id: { in: clientIds.map((c) => c.id) } }, include: { properties: { take: 1, orderBy: { createdAt: "asc" } } } }) : [];
   const order = new Map(clientIds.map((c, i) => [c.id, i]));
   return clients.sort((a, b) => order.get(a.id)! - order.get(b.id)!).map((c): SearchHit => ({
-    kind: "client", id: c.id, title: clientName(c), sub: [c.phone, c.email, c.properties[0]?.formatted].filter(Boolean).join(" · ") + (c.archivedAt ? " · archived" : ""), href: `/clients/${c.id}`,
+    kind: "client", id: c.id, title: clientName(c), sub: [prettyPhone(c.phone), c.email, c.properties[0]?.formatted].filter(Boolean).join(" · ") + (c.archivedAt ? " · archived" : ""), href: `/clients/${c.id}`,
   }));
 }
 

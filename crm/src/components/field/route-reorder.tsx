@@ -8,9 +8,11 @@ import { ArrowDown, ArrowUp, GripVertical } from "lucide-react";
 import { ico, step } from "@/components/reorder-list";
 import { btn } from "@/components/ui";
 
-export function RouteReorder({ items, action, hidden = {}, saves, cap = 10 }: {
+export function RouteReorder({ items, action, hidden = {}, saves, cap = 10, start = 1 }: {
   items: { id: string; node: ReactNode }[]; action: (f: FormData) => void | Promise<void>;
   hidden?: Record<string, string>; saves: { label: string; scope: string; hint: string; primary?: boolean }[]; cap?: number;
+  /** The number of this list's first stop: rows count up from it by where they sit now (`reorder-n`, globals.css). */
+  start?: number;
 }) {
   const saved = items.map((i) => i.id), key = saved.join(",");
   // Keyed on the server's order, so a save (or a stop getting done) drops any half-made local order.
@@ -30,9 +32,9 @@ export function RouteReorder({ items, action, hidden = {}, saves, cap = 10 }: {
   const open = all || changed || order.length <= cap;
   return (
     <>
-      <ol className="divide-y divide-line-soft">
+      <ol className="divide-y divide-line-soft" style={{ counterReset: `reorder ${start - 1}` }}>
         {order.map((id, i) => (
-          <li key={id} className={`items-start gap-2 ${open || i < cap ? "flex" : "hidden print:flex"} ${drag === id ? "opacity-40" : ""}`}
+          <li key={id} className={`items-start gap-2 [counter-increment:reorder] ${open || i < cap ? "flex" : "hidden print:flex"} ${drag === id ? "opacity-40" : ""}`}
             onDragOver={(e) => { if (!drag) return; e.preventDefault(); if (drag !== id) move(drag, i); }} onDrop={(e) => e.preventDefault()}>
             {items.length > 1 && (
               // Stacked on a phone (two full 44px targets beside a narrow row), side by side with a drag handle from `sm`.

@@ -32,9 +32,10 @@ import { WindowChips } from "@/components/window-chips";
 import { getSettings } from "@/server/settings";
 import { DepthTierFields } from "@/components/depth-tier-fields";
 import { describeTiers, parseTiers } from "@/server/snow/tiers";
+import { SKIP_LABEL } from "@/server/status/visit";
 
 const hm = (min: number) => `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
-const SKIP: [string, string][] = [["CLIENT_CANCELLED", "Client asked to skip"], ["WEATHER", "Weather"], ["NO_ACCESS", "Can't get in"], ["OTHER", "Other"]];
+const SKIP = (["CLIENT_CANCELLED", "WEATHER", "NO_ACCESS", "OTHER"] as const).map((k) => [k, SKIP_LABEL[k]] as const);
 
 export async function generateMetadata({ params }: PageProps<"/jobs/[id]">) {
   await requireOwner();
@@ -148,7 +149,7 @@ export default async function JobPage({ params, searchParams }: PageProps<"/jobs
                   return (
                     <li key={v.id} className="py-3 text-sm">
                       <div className="flex items-start justify-between gap-3">
-                        <Link href={`/visits/${v.id}`} className="group min-w-0 rounded-md">
+                        <Link href={`/visits/${v.id}`} className="group min-w-0 rounded-md max-sm:min-h-11 max-sm:content-center">
                           <span className="font-semibold tabular-nums group-hover:text-blue-deep">{v.scheduledDate ? prettyDate(dateOnly(v.scheduledDate)) : "Not scheduled"}</span>
                           {facts.length > 0 && <span className="block text-ink-soft">{facts.join(" · ")}</span>}
                         </Link>

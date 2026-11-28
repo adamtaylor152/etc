@@ -17,6 +17,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { CalendarClock, Check, CheckCheck, ClipboardList, Clock, GripVertical, Hammer, Inbox, PanelRightClose, PanelRightOpen, RefreshCw, TriangleAlert, X } from "lucide-react";
 import { assignPeople, calendarMove, taskDone } from "@/app/(owner)/schedule-actions";
+import { moveStatus } from "./move-status";
 import { clockTime } from "@/server/dates";
 import type { CalItem, Person } from "@/server/schedule";
 import { btn, Card } from "./ui";
@@ -81,7 +82,7 @@ export function ScheduleCalendar({ items, unscheduled, team, initialDate }: { it
     const [kind, id] = key.split(":") as [Kind, string];
     if (kind === "assessment") { revert?.(); return; }
     setMsg("Saving…");
-    try { const w = await calendarMove(kind, id, start, end, allDay); setMsg(w.length ? `Saved, but: ${w.join("; ")}` : "Saved"); router.refresh(); }
+    try { setMsg(moveStatus(await calendarMove(kind, id, start, end, allDay))); router.refresh(); }
     catch { revert?.(); setMsg("Couldn't save that move"); }
   }
   const toggleKind = (k: Kind) => setKinds((cur) => (cur.includes(k) ? cur.filter((x) => x !== k) : [...cur, k]));
@@ -179,6 +180,7 @@ export function ScheduleCalendar({ items, unscheduled, team, initialDate }: { it
             <span className="inline-flex items-center gap-1"><RefreshCw className="size-3.5" strokeWidth={1.75} aria-hidden />Asked to reschedule</span>
             <span className="inline-flex items-center gap-1"><CheckCheck className="size-3.5" strokeWidth={1.75} aria-hidden />Client confirmed</span>
           </div>
+          <p className="mt-2 text-xs text-ink-soft">Moving a visit tells the client about the new time.</p>
           {msg && <p className={`mt-3 rounded-lg border px-3.5 py-2.5 text-sm font-medium ${msgCls}`} role="status" aria-live="polite">{msg}</p>}
         </Card>
         {showDrawer && (

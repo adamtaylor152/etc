@@ -14,11 +14,11 @@ import { clientName } from "@/server/queries";
 import { getSettings } from "@/server/settings";
 import { rcsEnabled, smsEnabled, toE164 } from "@/server/sms";
 import { textLinkClient, textNewClient, textPhotosLink } from "../../text-actions";
+import { prettyPhone } from "@/components/phone";
 
 const TZ = "America/Edmonton";
 const day = (d: Date) => d.toLocaleDateString("en-CA", { timeZone: TZ, weekday: "long", month: "long", day: "numeric" });
 const time = (d: Date) => d.toLocaleTimeString("en-CA", { timeZone: TZ, hour: "numeric", minute: "2-digit" });
-const pretty = (n: string) => n.replace(/^\+1(\d{3})(\d{3})(\d{4})$/, "($1) $2-$3");
 const STATUS: Record<string, string> = { queued: "Sending…", sent: "Sent", delivered: "Delivered", read: "Read", failed: "Not sent", delivery_failed: "Not delivered", sending_failed: "Not sent", delivery_unconfirmed: "Sent" };
 
 export default async function Thread({ params, searchParams }: PageProps<"/messages/[key]">) {
@@ -44,7 +44,7 @@ export default async function Thread({ params, searchParams }: PageProps<"/messa
   const disabled = !smsEnabled() ? "Texting isn't set up yet. Ask whoever runs your hosting to turn it on."
     : !phone ? "No mobile number on file. Add one on the client page."
     : client?.smsOptOutAt ? `${client.firstName} texted STOP. They have to text START before you can text them.` : undefined;
-  const name = client ? clientName(client) : pretty(number!);
+  const name = client ? clientName(client) : prettyPhone(number!);
 
   return (
     <section className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-line bg-white shadow-card">
@@ -53,7 +53,7 @@ export default async function Thread({ params, searchParams }: PageProps<"/messa
         <div className="min-w-0 flex-1 md:pl-0">
           <h1 className="truncate font-display text-lg font-semibold leading-tight">{name}</h1>
           <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-ink-soft">
-            <span className="tabular-nums">{phone ? pretty(phone) : "No mobile number"}</span>
+            <span className="tabular-nums">{phone ? prettyPhone(phone) : "No mobile number"}</span>
             {optedOut && <Badge tone="amber">Texted STOP</Badge>}
             {unknown && <Badge tone="amber">Not linked to a client</Badge>}
           </p>

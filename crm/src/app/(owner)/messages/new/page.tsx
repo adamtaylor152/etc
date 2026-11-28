@@ -8,6 +8,7 @@ import { businessId, db } from "@/server/db";
 import { clientName } from "@/server/queries";
 import { toE164 } from "@/server/sms";
 import { textStart } from "../../text-actions";
+import { prettyPhone } from "@/components/phone";
 
 export default async function NewMessage({ searchParams }: PageProps<"/messages/new">) {
   await requireOwner();
@@ -27,7 +28,7 @@ export default async function NewMessage({ searchParams }: PageProps<"/messages/
           <Field label="Client" hint={clients.length ? "Clients with a mobile number on file." : "No clients have a mobile number on file yet. Type a number below."}>
             <select name="clientId" className={`${inputCls} min-h-11`}>
               <option value="">Choose a client…</option>
-              {clients.map((c) => <option key={c.id} value={c.id}>{clientName(c)} · {c.phone}</option>)}
+              {clients.map((c) => <option key={c.id} value={c.id}>{clientName(c)} · {prettyPhone(c.phone)}</option>)}
             </select>
           </Field>
           <p className="flex items-center gap-3 text-xs font-medium text-ink-soft before:h-px before:flex-1 before:bg-line after:h-px after:flex-1 after:bg-line">or text a number that isn&apos;t a client yet</p>

@@ -16,6 +16,9 @@ import { safePath } from "@/server/safe-path";
 const str = (f: FormData, k: string) => String(f.get(k) ?? "");
 const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
+/** How a move told the client about the new time ("email" or "text"), or null when it queued nothing. */
+type MoveNotice = "email" | "text" | null;
+
 /** FullCalendar gives "2026-12-01" (all-day) or an ISO datetime. */
 function parseSlot(start: string, end: string | null, allDay: boolean) {
   const date = start.slice(0, 10);
@@ -31,13 +34,13 @@ function parseSlot(start: string, end: string | null, allDay: boolean) {
 export async function calendarMove(kind: "visit" | "task" | "event", id: string, start: string, end: string | null, allDay: boolean) {
   const user = await requireOwner();
   const slot = parseSlot(start, end, allDay);
-  if (kind === "visit") await rescheduleVisitTimed(user, id, slot);
-  else await moveTask(user, id, slot);
+  const notified = kind === "visit" ? (await rescheduleVisitTimed(user, id, slot)).notified : null;
+  if (kind !== "visit") await moveTask(user, id, slot);
   revalidatePath("/schedule");
-  if (!slot.date) return [];
+  if (!slot.date) return { warnings: [], notified };
   const av = await loadAvailability(user.businessId, slot.date, slot.date);
   const me = av.busy.find((b) => b.id === id);
-  return me ? conflicts(me, av.busy, av.people, av.timeOff) : [];
+  return { warnings: me ? conflicts(me, av.busy, av.people, av.timeOff) : [], notified };
 }
 
 export async function calendarUnschedule(kind: "visit" | "task" | "event", id: string) {
@@ -111,10 +114,11 @@ export async function teamMove(kind: "visit" | "task" | "event", id: string, use
   const user = await requireOwner();
   day.parse(date);
   const ids = userId ? [userId] : [];
+  let notified: MoveNotice = null;
   if (kind === "visit") {
     const v = await db.visit.findFirstOrThrow({ where: { id, businessId: user.businessId } });
     const t = hhmm(v.anytime ? null : v.startAt), e = hhmm(v.anytime ? null : v.endAt);
-    await moveVisit(user, id, { date, startAt: t ? fromLocalInput(`${date}T${t}`) : null, endAt: e ? fromLocalInput(`${date}T${e}`) : null }, ids);
+    ({ notified } = await moveVisit(user, id, { date, startAt: t ? fromLocalInput(`${date}T${t}`) : null, endAt: e ? fromLocalInput(`${date}T${e}`) : null }, ids));
   } else {
     const t0 = await db.task.findFirstOrThrow({ where: { id, businessId: user.businessId } });
     const t = hhmm(t0.allDay ? null : t0.startAt), e = hhmm(t0.allDay ? null : t0.endAt);
@@ -123,7 +127,7 @@ export async function teamMove(kind: "visit" | "task" | "event", id: string, use
   revalidatePath("/schedule", "layout");
   const av = await loadAvailability(user.businessId, date, date);
   const me = av.busy.find((b) => b.id === id);
-  return me ? conflicts(me, av.busy, av.people, av.timeOff) : [];
+  return { warnings: me ? conflicts(me, av.busy, av.people, av.timeOff) : [], notified };
 }
 
 /** Find a time -> Book: set the date + time and the person. */

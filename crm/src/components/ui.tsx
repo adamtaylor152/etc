@@ -1,4 +1,7 @@
 // Tiny shared UI kit (Tailwind). Phone-first: big tap targets, readable in a cold driveway.
+// The 44px phone floor for buttons, fields, disclosures, menu items and tabs is a base rule in globals.css, so it holds
+// for hand-written controls too. Blue text links get a 44px hit box there as well; give any other link that sits in a
+// row or heading the `tap` class for the same thing.
 // The look lives in globals.css (tokens) and here (components): pages compose these and rarely style from scratch.
 import Link from "next/link";
 import type { ComponentProps, ReactNode } from "react";

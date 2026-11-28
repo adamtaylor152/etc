@@ -11,6 +11,7 @@ import { AddressField } from "./address-field";
 import { shrink } from "./photo-uploader";
 import { cta } from "./public/kit";
 import { inputCls } from "./ui";
+import { prettyPhone } from "./phone";
 
 type Service = { label: string; description?: string | null; price: string | null };
 type Slots = { windows: { key: string; label: string; hint: string }[]; days: { date: string; windows: string[] }[] };
@@ -94,7 +95,7 @@ export function BookingForm({ services, phone, mapsKey, refCode, utm, hub }: { s
     const res = hub ? null : await fetch("/api/public/bookings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).catch(() => null);
     const data = hub ? await hub.order(body).catch(() => null) : await res?.json().catch(() => ({}));
     if (data?.slotTaken) { setSlot(null); void loadSlots(); }
-    if (!(hub ? data?.ok : res?.ok)) return setState({ status: "error", msg: `${data?.error ?? "Couldn't reach us."} You can also call ${phone}.` });
+    if (!(hub ? data?.ok : res?.ok)) return setState({ status: "error", msg: `${data?.error ?? "Couldn't reach us."} You can also call ${prettyPhone(phone)}.` });
     // Quote jobs come back with a photo link: send the photos they picked through it, one at a time.
     const send = quoted && data.uploadUrl ? photos : [];
     let sent = 0;

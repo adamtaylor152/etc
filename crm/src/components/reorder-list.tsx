@@ -1,6 +1,8 @@
 "use client";
 // A list you reorder by dragging the handle (mouse) or tapping the arrows (touch), then save. Nothing is written
 // until a save button is pressed; each button posts the ids in their new order plus its own `scope`.
+// A row shows its number with an empty `<span className="reorder-n" />`: the number is counted from where the row sits
+// now (globals.css), so a half-made order still reads 1, 2, 3.
 import { useState, type ReactNode } from "react";
 import { ArrowDown, ArrowUp, GripVertical } from "lucide-react";
 import { btn } from "./ui";
@@ -26,9 +28,9 @@ export function ReorderList({ items, action, hidden = {}, saves }: {
   };
   return (
     <>
-      <ol className="divide-y divide-line">
+      <ol className="divide-y divide-line [counter-reset:reorder]">
         {order.map((id, i) => (
-          <li key={id} className={`flex items-center gap-1 ${drag === id ? "opacity-40" : ""}`}
+          <li key={id} className={`flex items-center gap-1 [counter-increment:reorder] ${drag === id ? "opacity-40" : ""}`}
             onDragOver={(e) => { if (!drag) return; e.preventDefault(); if (drag !== id) move(drag, i); }} onDrop={(e) => e.preventDefault()}>
             {items.length > 1 && <span className="no-print flex shrink-0 items-center gap-1 py-1.5 pr-1 text-ink-soft">
               {/* Dragging is a mouse thing: on phones the two arrows are the whole control. */}

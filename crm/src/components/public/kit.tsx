@@ -2,6 +2,7 @@
 // kit (ui.tsx) and add what a homeowner on a phone needs: bigger type, one tall full-width action, calm done states.
 import type { ComponentProps, ReactNode } from "react";
 import { CircleAlert, CircleCheck, Info } from "lucide-react";
+import { prettyPhone } from "@/components/phone";
 
 const CTA = {
   primary: "bg-blue text-white border-blue shadow-sm hover:bg-blue-deep hover:border-blue-deep",
@@ -95,7 +96,7 @@ export function TotalRow({ label, value, strong, muted }: { label: ReactNode; va
 export function Help({ phone, email, children }: { phone: string; email: string; children?: ReactNode }) {
   return (
     <p className="no-print mt-6 text-center text-sm text-ink-soft">
-      {children}{children && " "}Questions? Call <a href={`tel:+1${phone.replace(/\D/g, "")}`} className="font-semibold text-navy underline underline-offset-2">{phone}</a> or email{" "}
+      {children}{children && " "}Questions? Call <a href={`tel:+1${phone.replace(/\D/g, "")}`} className="font-semibold text-navy underline underline-offset-2">{prettyPhone(phone)}</a> or email{" "}
       <a href={`mailto:${email}`} className="font-semibold text-navy underline underline-offset-2">{email}</a>.
     </p>
   );

@@ -158,7 +158,7 @@ export default async function Reports({ searchParams }: PageProps<"/reports">) {
             <ul className="divide-y divide-line-soft text-sm">
               {profits.slice(0, CAP).map((p) => (
                 <li key={p.id}>
-                  <Link href={`/jobs/${p.id}`} className="group flex items-baseline justify-between gap-3 py-2">
+                  <Link href={`/jobs/${p.id}`} className="group flex items-baseline justify-between gap-3 py-2 max-sm:py-3">
                     <span className="min-w-0 truncate group-hover:text-blue-deep"><span className="tabular-nums text-ink-soft">#{p.number}</span> {p.title}</span>
                     <span className="flex shrink-0 items-baseline gap-2">
                       {p.marginPct != null && <span className="text-xs tabular-nums text-ink-soft">{p.marginPct}% margin</span>}
