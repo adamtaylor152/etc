@@ -96,7 +96,7 @@ export function HubLink({ name, url, site, phone }: { name: string; url: string;
   );
 }
 
-export function PlanRenewal({ name, season, price, url, site, phone }: { name: string; season: string; price: string; url: string; site: string; phone: string }) {
+export function PlanRenewal({ name, season, price, seasonPrice, url, site, phone }: { name: string; season: string; price: string; seasonPrice?: string; url: string; site: string; phone: string }) {
   return (
     <EtcEmail title={`Keep your snow plan for ${season}?`} preheader="One tap to stay on the every-snowfall route">
       <Header right="Snow plan" />
@@ -104,7 +104,9 @@ export function PlanRenewal({ name, season, price, url, site, phone }: { name: s
         <td className="px" style={{ padding: "32px 40px 26px" }}>
           <Eyebrow>{season}</Eyebrow>
           <H1>Stay on our snow route, {firstName(name)}?</H1>
-          <P>Thanks for being on the every-snowfall plan last winter. Renew in one tap and we&apos;ll keep clearing after every snowfall at {price} a time. Nothing to pay now; we invoice after each storm.</P>
+          <P>Thanks for being on the every-snowfall plan last winter. Renew in one tap and we&apos;ll keep clearing after every snowfall {seasonPrice
+            ? <>for the same {seasonPrice} season price. Nothing to pay now; we invoice when the season starts.</>
+            : <>at {price} a time. Nothing to pay now; we invoice after each storm.</>}</P>
           <Button href={url} label={`Renew for ${season}`} />
         </td>
       </tr>

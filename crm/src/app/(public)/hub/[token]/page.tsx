@@ -46,8 +46,8 @@ export default async function Hub({ params, searchParams }: PageProps<"/hub/[tok
   const invoiceLinks = await Promise.all(invoices.map((i) => link("INVOICE", { invoiceId: i.id })));
   const reportLinks = await Promise.all(past.map((v) => link("VISIT_REPORT", { visitId: v.id })));
   const renewTo = await renewalSeason(c.businessId);
-  const hadPlan = await db.job.count({ where: { clientId: c.id, kind: "SNOW_PLAN" } });
-  const canRenew = !!renewTo && hadPlan > 0 && !plans.some((p) => p.seasonId === renewTo.id);
+  const lastPlan = await db.job.findFirst({ where: { clientId: c.id, kind: "SNOW_PLAN" }, orderBy: { createdAt: "desc" } }); // the one renewPlan copies
+  const canRenew = !!renewTo && !!lastPlan && !plans.some((p) => p.seasonId === renewTo.id);
   const owing = invoices.filter((i) => i.status === "AWAITING_PAYMENT").reduce((a, i) => a + i.totalCents - i.amountPaidCents, 0);
   const hidden = <input type="hidden" name="t" value={token} />;
   return (
@@ -78,13 +78,17 @@ export default async function Hub({ params, searchParams }: PageProps<"/hub/[tok
       {sp.renewed && <p className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 font-medium text-emerald-800">You&apos;re renewed. See you after the next snowfall!</p>}
       {canRenew && (
         <Card title={`Renew your snow plan for ${renewTo!.name}?`} className="border-blue/30">
-          <p className="text-sm">Same address, same price per clearing. Nothing to pay now.</p>
+          <p className="text-sm">{lastPlan!.snowBillingMode === "SEASONAL"
+            ? `Same address, same ${money(lastPlan!.seasonalPriceCents ?? 0)} season price. We'll send the invoice when the season starts.`
+            : "Same address, same price per clearing. Nothing to pay now."}</p>
           <form action={hubRenewPlan} className="mt-3">{hidden}<button className="min-h-12 rounded-full bg-blue px-6 font-semibold text-white">Renew my plan</button></form>
         </Card>
       )}
       {plans.map((p) => (
         <Card key={p.id} title="Every-snowfall plan">
-          <p className="text-sm">{p.property.formatted} · {p.season?.name} · we come when {p.triggerCm ?? p.season?.defaultTriggerCm ?? 2} cm or more falls · {money(p.pricePerPushCents ?? 3000)} per clearing{p.iceMelt ? " + ice melt" : ""}.</p>
+          <p className="text-sm">{p.property.formatted} · {p.season?.name} · we come when {p.triggerCm ?? p.season?.defaultTriggerCm ?? 2} cm or more falls · {p.snowBillingMode === "SEASONAL"
+            ? `${money(p.seasonalPriceCents ?? 0)} for the season${p.iceMelt ? (p.addonsIncluded ? ", ice melt included" : " + ice melt") : ""}`
+            : `${money(p.pricePerPushCents ?? 3000)} per ${p.snowBillingMode === "PER_EVENT" ? "storm" : "clearing"}${p.iceMelt ? " + ice melt" : ""}`}.</p>
           <form action={hubPausePlan} className="mt-3">{hidden}<input type="hidden" name="jobId" value={p.id} /><input type="hidden" name="pause" value={p.planPausedAt ? "0" : "1"} />
             {p.planPausedAt
               ? <><Badge tone="amber">Paused</Badge> <button className="ml-2 min-h-11 rounded-full bg-blue px-5 font-semibold text-white">Resume my plan</button></>

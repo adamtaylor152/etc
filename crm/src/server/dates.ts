@@ -59,3 +59,10 @@ export function fromLocalInput(s: string): Date | null {
 export function toLocalInput(d: Date): string {
   return format(new TZDate(d, TZ), "yyyy-MM-dd'T'HH:mm");
 }
+
+/** "today", "tomorrow" or "on Tuesday, Dec 2": how a reminder names the visit day. Pure, unit-tested. */
+export function dayWord(date: string, today: string = todayLocal()): string {
+  if (date === today) return "today";
+  if (date === addDays(today, 1)) return "tomorrow";
+  return `on ${new Date(`${date}T12:00:00Z`).toLocaleDateString("en-CA", { weekday: "long", month: "short", day: "numeric", timeZone: "UTC" })}`;
+}

@@ -6,7 +6,7 @@ import { business, businessId, db } from "@/server/db";
 import { env } from "@/server/env";
 import { parseSettings, SETTING_LABELS, type ToggleKey } from "@/server/settings";
 import { stripeEnabled } from "@/server/stripe";
-import { saveAutomations, saveBusiness, savePrice, saveSeason, saveTax } from "./actions";
+import { saveAutomations, saveBusiness, saveSchedule, saveSeason, saveTax } from "./actions";
 
 export const metadata = { title: "Settings" };
 
@@ -16,15 +16,15 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
   const bid = await businessId();
   const biz = await business();
   const settings = parseSettings(biz.settings);
-  const [seasons, services, users, area] = await Promise.all([
+  const [seasons, users, area] = await Promise.all([
     db.season.findMany({ where: { businessId: bid }, orderBy: { startsOn: "desc" } }),
-    db.service.findMany({ where: { businessId: bid }, orderBy: { sortOrder: "asc" } }),
     db.user.findMany({ where: { businessId: bid }, orderBy: { email: "asc" } }),
     db.serviceCommunity.findMany({ where: { businessId: bid, active: true }, include: { community: true }, orderBy: { sortOrder: "asc" } }),
   ]);
   return (
     <>
-      <PageHeader title="Settings" actions={<><Link href="/settings/checklists" className="inline-flex min-h-10 items-center rounded-lg border border-line bg-white px-4 text-sm font-semibold hover:bg-tint">Checklists</Link><Link href="/settings/team" className="inline-flex min-h-10 items-center rounded-lg border border-line bg-white px-4 text-sm font-semibold hover:bg-tint">Team &amp; people</Link></>} />
+      <PageHeader title="Settings" actions={<><Link href="/settings/price-book" className="inline-flex min-h-10 items-center rounded-lg border border-line bg-white px-4 text-sm font-semibold hover:bg-tint">Price book</Link><Link href="/settings/checklists" className="inline-flex min-h-10 items-center rounded-lg border border-line bg-white px-4 text-sm font-semibold hover:bg-tint">Checklists</Link><Link href="/settings/team" className="inline-flex min-h-10 items-center rounded-lg border border-line bg-white px-4 text-sm font-semibold hover:bg-tint">Team &amp; people</Link></>} />
+      {typeof sp.error === "string" && <p role="alert" className="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-medium text-red-800">{sp.error}</p>}
       {sp.saved && <p className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-medium text-emerald-800">Saved.</p>}
       <div className="grid gap-5 lg:grid-cols-2">
         <Card title="Business">
@@ -58,6 +58,28 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
           </form>
         </Card>
 
+        <Card title="Reminders & arrival windows">
+          <form id="schedule" action={saveSchedule} className="space-y-3">
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              Remind clients <input name="reminderDaysBefore" type="number" min={1} max={7} defaultValue={settings.reminderDaysBefore} aria-label="Days before" className="h-9 w-16 rounded-lg border border-line px-2" /> day(s) before, at
+              <select name="reminderHour" defaultValue={settings.reminderHour} aria-label="Hour" className="h-9 rounded-lg border border-line bg-white px-2">
+                {Array.from({ length: 16 }, (_, i) => i + 6).map((h) => <option key={h} value={h}>{h % 12 || 12} {h < 12 ? "am" : "pm"}</option>)}
+              </select>
+            </div>
+            <p className="text-sm font-semibold">Arrival windows <span className="font-normal text-ink-soft">(offered in online booking and as one-tap times on the schedule forms)</span></p>
+            {[...settings.arrivalWindows, ...Array.from({ length: Math.max(0, 6 - settings.arrivalWindows.length) }, () => ({ key: "", label: "", from: "", to: "" }))].map((w, i) => (
+              <div key={i} className="grid grid-cols-[1fr_7rem_7rem] gap-2">
+                <input type="hidden" name="winKey" value={w.key} />
+                <Input name="winLabel" defaultValue={w.label} placeholder={w.key ? undefined : "Add a window"} maxLength={20} aria-label="Window name" />
+                <Input name="winFrom" type="time" defaultValue={w.from} aria-label="From" />
+                <Input name="winTo" type="time" defaultValue={w.to} aria-label="To" />
+              </div>
+            ))}
+            <p className="text-xs text-ink-soft">Clear a name to remove that window. Times already booked keep their own start and end.</p>
+            <Button>Save</Button>
+          </form>
+        </Card>
+
         <Card title="GST & payments">
           <form action={saveTax} className="space-y-3">
             <label className="flex items-center gap-3"><input type="checkbox" name="taxRegistered" defaultChecked={biz.taxRegistered} className="size-5" /> <span><b>GST registered</b><span className="block text-sm text-ink-soft">Leave off while under the $30,000 small-supplier threshold: no GST is charged or shown.</span></span></label>
@@ -88,21 +110,6 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
               </form>
             ))}
           </div>
-        </Card>
-
-        <Card title="Price book" className="lg:col-span-2">
-          <div id="prices" className="divide-y divide-line">
-            {services.map((sv) => (
-              <form key={sv.id} action={savePrice} className="flex flex-wrap items-center gap-3 py-2 text-sm">
-                <input type="hidden" name="id" value={sv.id} />
-                <span className="min-w-48 flex-1 font-semibold">{sv.name}{sv.isAddon && <span className="ml-1 text-xs text-ink-soft">(add-on)</span>}</span>
-                <label className="flex items-center gap-1">$<Input name="price" type="number" step="0.01" min={0} defaultValue={sv.unitPriceCents != null ? sv.unitPriceCents / 100 : ""} placeholder="Quote" className="w-28" /></label>
-                <label className="flex items-center gap-1"><input type="checkbox" name="active" defaultChecked={sv.active} className="size-4" /> active</label>
-                <Button variant="secondary">Save</Button>
-              </form>
-            ))}
-          </div>
-          <p className="mt-2 text-xs text-ink-soft">Prices include tax. New bookings use these; existing jobs keep the price they were booked at. The public booking page&apos;s prices are set on etccrew.ca.</p>
         </Card>
 
         <Card title="Who can sign in">

@@ -1,13 +1,23 @@
+"use client";
 // Quote line editor (plain form fields, indexed names). Shows existing lines plus a few blank rows.
+// Picking a price-book service by name fills that row's details and price when they are still empty.
 import { inputCls } from "./ui";
+
+type Service = { name: string; description: string | null; unitPriceCents: number | null };
 
 type Line = { name: string; description?: string | null; quantity: number; unitPriceCents: number | null; isOptional: boolean; isSelected: boolean };
 
-export function QuoteLinesEditor({ lines, suggestions = [] }: { lines: Line[]; suggestions?: string[] }) {
+export function QuoteLinesEditor({ lines, services = [] }: { lines: Line[]; services?: Service[] }) {
+  const fill = (i: number, el: HTMLInputElement) => {
+    const s = services.find((x) => x.name === el.value);
+    const set = (k: string, v: string) => { const f = el.form?.elements.namedItem(`line_${i}_${k}`); if (f instanceof HTMLInputElement && !f.value) f.value = v; };
+    if (s?.description) set("desc", s.description);
+    if (s?.unitPriceCents != null) set("price", String(s.unitPriceCents / 100));
+  };
   const rows: Line[] = [...lines, ...Array.from({ length: Math.max(3, 6 - lines.length) }, () => ({ name: "", quantity: 1, unitPriceCents: null, isOptional: false, isSelected: true }))];
   return (
     <div>
-      <datalist id="quote-services">{suggestions.map((s) => <option key={s} value={s} />)}</datalist>
+      <datalist id="quote-services">{services.map((s) => <option key={s.name} value={s.name} />)}</datalist>
       <div className="hidden grid-cols-[1fr_4.5rem_6rem_5.5rem] gap-2 px-1 pb-1 text-xs font-semibold uppercase tracking-wide text-ink-soft sm:grid">
         <span>Item</span><span>Qty</span><span>Price $</span><span>Optional</span>
       </div>
@@ -15,7 +25,7 @@ export function QuoteLinesEditor({ lines, suggestions = [] }: { lines: Line[]; s
         {rows.map((l, i) => (
           <div key={i} className="grid grid-cols-[1fr_4.5rem_6rem] gap-2 rounded-xl border border-line p-2 sm:grid-cols-[1fr_4.5rem_6rem_5.5rem] sm:border-0 sm:p-0">
             <div className="space-y-1">
-              <input name={`line_${i}_name`} defaultValue={l.name} list="quote-services" placeholder={i < lines.length ? "" : "Add an item"} className={inputCls} />
+              <input name={`line_${i}_name`} defaultValue={l.name} list="quote-services" onChange={(e) => fill(i, e.currentTarget)} placeholder={i < lines.length ? "" : "Add an item"} className={inputCls} />
               <input name={`line_${i}_desc`} defaultValue={l.description ?? ""} placeholder="Details (optional)" className={`${inputCls} min-h-9 text-sm`} />
             </div>
             <input name={`line_${i}_qty`} type="number" step="0.25" min="0.25" defaultValue={l.quantity} className={inputCls} aria-label="Quantity" />

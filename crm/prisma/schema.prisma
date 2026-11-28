@@ -447,6 +447,9 @@ model Service {
   bookable       Boolean         @default(true)
   active         Boolean         @default(true)
   sortOrder      Int             @default(0)
+  defaultDurationMin Int? // stored + shown only for now (scheduling later)
+  unitCostCents  Int? // what it costs us per unit (job profit later)
+  taxExempt      Boolean         @default(false) // stored only; invoice totals don't read it yet
 
   @@unique([businessId, key])
 }
@@ -612,6 +615,9 @@ model Job {
   snowBillingMode    SnowBillingMode?
   pricePerPushCents  Int?
   seasonalPriceCents Int?
+  seasonalInstalments Int? // SEASONAL: 1 = paid in full up front, N = monthly instalments
+  seasonalFirstDueOn  DateTime? @db.Date // SEASONAL: when instalment 1 is invoiced; the rest follow on the 1st of each month
+  addonsIncluded      Boolean   @default(false) // SEASONAL: ice melt is covered by the season price
   iceMelt            Boolean          @default(false)
   planPausedAt       DateTime?
   sizeHoldAt         DateTime? // waiting on the client to OK a new price for a bigger driveway; no visits until then
@@ -750,6 +756,8 @@ model Invoice {
 
   @@unique([businessId, number])
   @@unique([businessId, etransferRef])
+  @@unique([businessId, instalmentKey])
+  instalmentKey      String? // seasonal snow plan instalment "<jobId>:<n>": never invoiced twice
   kind               InvoiceKind @default(STANDARD)
   quoteId            String? // deposit invoices: the quote they're for
   appliedToInvoiceId String? // deposit invoices: the job invoice that used this deposit up
@@ -1115,7 +1123,9 @@ model Expense {
   date         DateTime @db.Date
   category     String   @default("Materials")
   description  String
-  amountCents  Int
+  amountCents  Int // what was paid, GST included
+  gstCents     Int      @default(0) // the GST part of amountCents (input tax credit)
+  vendor       String? // where it was bought
   attachmentId String?
   createdAt    DateTime @default(now())
 

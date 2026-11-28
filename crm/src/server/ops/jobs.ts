@@ -1,7 +1,10 @@
 // Job operations from the back office: new one-off jobs, every-snowfall plans, pause/close.
 import { alertAssigned } from "./assign-alerts";
+import { WALK_PREFIX } from "../billing/charges";
 import { defaultChecklistFor } from "./checklists";
-import { addDays, todayLocal, toDbDate } from "../dates";
+import { Prisma, type SnowBillingMode } from "@/generated/prisma/client";
+import { maxInstalments, planBillingLocked, seasonalTermsError } from "../billing/instalments";
+import { addDays, dateOnly, todayLocal, toDbDate } from "../dates";
 import { recurrenceDates, toRRule, type Repeat } from "../recurrence";
 import { db, type Tx } from "../db";
 import { logActivity, nextNumber } from "../records";
@@ -11,6 +14,26 @@ import { TransitionError } from "../status/visit";
 
 type Actor = { id: string; businessId: string };
 export type LineInput = { name: string; description?: string; unitPriceCents: number; quantity: number };
+
+/** How a snow plan is billed. The seasonal fields only matter for SEASONAL. */
+export type PlanBilling = { mode: SnowBillingMode; seasonalPriceCents?: number | null; instalments?: number | null; firstDueOn?: string | null; addonsIncluded?: boolean };
+
+/** Job columns for a billing mode. Seasonal terms must fit the season; the first payment defaults to today (or the season's first day). */
+function billingColumns(b: PlanBilling, season: { startsOn: Date; endsOn: Date }) {
+  if (b.mode !== "SEASONAL") return { snowBillingMode: b.mode, seasonalPriceCents: null, seasonalInstalments: null, seasonalFirstDueOn: null, addonsIncluded: false };
+  const today = todayLocal(), starts = dateOnly(season.startsOn)!;
+  const firstDueOn = b.firstDueOn || (starts > today ? starts : today);
+  const count = b.instalments ?? 1;
+  const err = seasonalTermsError({ priceCents: b.seasonalPriceCents ?? null, count, firstDueOn, seasonEndsOn: dateOnly(season.endsOn)! });
+  if (err) throw new TransitionError(err);
+  return { snowBillingMode: b.mode, seasonalPriceCents: b.seasonalPriceCents!, seasonalInstalments: count, seasonalFirstDueOn: toDbDate(firstDueOn), addonsIncluded: !!b.addonsIncluded };
+}
+
+/** What has already been billed under a plan's current terms (see planBillingLocked). */
+export const planBillingUse = async (jobId: string) => ({
+  visitCharges: await db.visitCharge.count({ where: { visit: { jobId } } }),
+  instalmentInvoices: await db.invoice.count({ where: { instalmentKey: { startsWith: `${jobId}:` } } }),
+});
 
 export async function createOneOffJob(user: Actor, input: {
   clientId: string; propertyId: string; title: string; instructions?: string; lines: LineInput[]; date: string | null;
@@ -49,7 +72,7 @@ export async function createOneOffJob(user: Actor, input: {
   });
 }
 
-export async function createSnowPlan(user: Actor, input: { clientId: string; propertyId: string; triggerCm: number | null; pricePerPushCents: number; iceMelt: boolean }) {
+export async function createSnowPlan(user: Actor, input: { clientId: string; propertyId: string; triggerCm: number | null; pricePerPushCents: number; iceMelt: boolean; billing?: PlanBilling }) {
   const prop = await db.property.findFirstOrThrow({ where: { id: input.propertyId, clientId: input.clientId, businessId: user.businessId } });
   return db.$transaction(async (tx) => {
     const season = await seasonFor(tx, user.businessId, todayLocal());
@@ -59,7 +82,7 @@ export async function createSnowPlan(user: Actor, input: { clientId: string; pro
       data: {
         businessId: user.businessId, number: await nextNumber(tx, user.businessId, "JOB"), clientId: input.clientId, propertyId: prop.id,
         seasonId: season.id, kind: "SNOW_PLAN", title: "Every snowfall", billingType: "PER_VISIT", invoiceSchedule: "PER_SNOW_EVENT",
-        snowBillingMode: "PER_PUSH", triggerCm: input.triggerCm, pricePerPushCents: input.pricePerPushCents, iceMelt: input.iceMelt,
+        ...billingColumns(input.billing ?? { mode: "PER_PUSH" }, season), triggerCm: input.triggerCm, pricePerPushCents: input.pricePerPushCents, iceMelt: input.iceMelt,
         lineItems: { create: [{ name: "Snow shovelling, every snowfall (per push)", unitPriceCents: input.pricePerPushCents, totalCents: input.pricePerPushCents }] },
       },
     });
@@ -68,11 +91,23 @@ export async function createSnowPlan(user: Actor, input: { clientId: string; pro
   });
 }
 
-export async function updatePlan(user: Actor, jobId: string, input: { triggerCm: number | null; pricePerPushCents: number; iceMelt: boolean }) {
-  const job = await db.job.findFirstOrThrow({ where: { id: jobId, businessId: user.businessId, kind: "SNOW_PLAN" } });
+/** billing omitted = leave the billing mode alone. Changing mode, season price or instalment plan is refused once the plan is locked. */
+export async function updatePlan(user: Actor, jobId: string, input: { triggerCm: number | null; pricePerPushCents: number; iceMelt: boolean; billing?: PlanBilling }) {
+  const job = await db.job.findFirstOrThrow({ where: { id: jobId, businessId: user.businessId, kind: "SNOW_PLAN" }, include: { season: true } });
+  const { billing, ...rest } = input;
+  let cols: Prisma.JobUncheckedUpdateInput = {};
+  if (billing) {
+    if (!job.season) throw new TransitionError("This plan has no season");
+    const next = billingColumns({ ...billing, firstDueOn: billing.firstDueOn || dateOnly(job.seasonalFirstDueOn) }, job.season);
+    const changed = next.snowBillingMode !== (job.snowBillingMode ?? "PER_PUSH") || next.seasonalPriceCents !== job.seasonalPriceCents
+      || next.seasonalInstalments !== job.seasonalInstalments || dateOnly(next.seasonalFirstDueOn) !== dateOnly(job.seasonalFirstDueOn);
+    if (changed && planBillingLocked(await planBillingUse(job.id))) throw new TransitionError("This plan already has charges or instalment invoices, so its billing can't change. End it and start a new plan instead.");
+    // A flat season price replaces any per-push price the client was still being asked to OK.
+    cols = !changed ? { addonsIncluded: next.addonsIncluded } : next.snowBillingMode === "SEASONAL" ? { ...next, sizeHoldAt: null, pendingPrice: Prisma.DbNull } : next;
+  }
   await db.$transaction(async (tx) => {
-    await tx.job.update({ where: { id: job.id }, data: input });
-    await logActivity(tx, { businessId: user.businessId, type: "plan.updated", entityType: "Job", entityId: job.id, actorType: "USER", actorUserId: user.id, clientId: job.clientId, jobId: job.id, data: input });
+    await tx.job.update({ where: { id: job.id }, data: { ...rest, ...cols } });
+    await logActivity(tx, { businessId: user.businessId, type: "plan.updated", entityType: "Job", entityId: job.id, actorType: "USER", actorUserId: user.id, clientId: job.clientId, jobId: job.id, data: { ...rest, ...(billing ?? {}) } });
   });
 }
 
@@ -244,17 +279,26 @@ export async function renewalCandidates(businessId: string, seasonId: string) {
 export async function renewPlan(businessId: string, clientId: string, actor: { userId?: string; clientId?: string }) {
   const season = await renewalSeason(businessId);
   if (!season) throw new Error("No season set up to renew into");
-  const last = await db.job.findFirst({ where: { businessId, clientId, kind: "SNOW_PLAN" }, orderBy: { createdAt: "desc" } });
+  const last = await db.job.findFirst({ where: { businessId, clientId, kind: "SNOW_PLAN" }, orderBy: { createdAt: "desc" }, include: { lineItems: true } });
   if (!last) throw new Error("No previous plan");
   return db.$transaction(async (tx) => {
     const existing = await tx.job.findFirst({ where: { propertyId: last.propertyId, seasonId: season.id, kind: "SNOW_PLAN", closedAt: null } });
     if (existing) return existing;
+    // A seasonal plan keeps its season price and instalment plan (as many as still fit); the first payment is due when the new season starts.
+    const today = todayLocal(), starts = dateOnly(season.startsOn)!, firstDueOn = starts > today ? starts : today;
+    const billing = billingColumns({
+      mode: last.snowBillingMode ?? "PER_PUSH", seasonalPriceCents: last.seasonalPriceCents, firstDueOn, addonsIncluded: last.addonsIncluded,
+      instalments: Math.max(1, Math.min(last.seasonalInstalments ?? 1, maxInstalments(firstDueOn, dateOnly(season.endsOn)!))),
+    }, season);
     const job = await tx.job.create({
       data: {
         businessId, number: await nextNumber(tx, businessId, "JOB"), clientId, propertyId: last.propertyId, seasonId: season.id, kind: "SNOW_PLAN",
-        title: "Every snowfall", billingType: "PER_VISIT", invoiceSchedule: last.invoiceSchedule, snowBillingMode: last.snowBillingMode,
+        title: "Every snowfall", billingType: "PER_VISIT", invoiceSchedule: last.invoiceSchedule, ...billing,
         triggerCm: last.triggerCm, pricePerPushCents: last.pricePerPushCents, iceMelt: last.iceMelt, instructions: last.instructions,
-        lineItems: { create: [{ name: "Snow shovelling, every snowfall (per push)", unitPriceCents: last.pricePerPushCents ?? 3000, totalCents: last.pricePerPushCents ?? 3000 }] },
+        lineItems: { create: [
+          { name: "Snow shovelling, every snowfall (per push)", unitPriceCents: last.pricePerPushCents ?? 3000, totalCents: last.pricePerPushCents ?? 3000 },
+          ...last.lineItems.filter((l) => l.name.startsWith(WALK_PREFIX)).map((l) => ({ name: l.name, unitPriceCents: l.unitPriceCents, totalCents: l.totalCents, perVisit: true, sortOrder: 2 })), // the extra sidewalk carries over
+        ] },
       },
     });
     await logActivity(tx, { businessId, type: "plan.renewed", entityType: "Job", entityId: job.id, actorType: actor.clientId ? "CLIENT" : "USER", actorUserId: actor.userId, actorClientId: actor.clientId, clientId, jobId: job.id, data: { season: season.name } });
