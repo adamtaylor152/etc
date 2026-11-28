@@ -94,7 +94,7 @@ export default async function PublicQuote({ params, searchParams }: PageProps<"/
           </form>
         </details>
       )}
-      <p className="text-center text-sm text-ink-soft">Questions? Call {env.phone} or email {env.helpEmail}.</p>
+      <p className="text-center text-sm text-ink-soft"><a href={`/q/${token}/pdf`} className="font-semibold text-blue">Download PDF</a> · Questions? Call {env.phone} or email {env.helpEmail}.</p>
     </div>
   );
 }

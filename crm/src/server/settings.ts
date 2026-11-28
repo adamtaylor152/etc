@@ -11,6 +11,7 @@ export const SettingsSchema = z.object({
   snowAlert: z.boolean().default(true),             // email owners when the forecast meets a plan trigger
   reviewRequests: z.boolean().default(false),
   allowPartialPayments: z.boolean().default(false),
+  tipsEnabled: z.boolean().default(false),          // optional tip (10/15/20% or custom) when a client pays an invoice by card
   reviewDelayHours: z.coerce.number().int().min(1).max(240).default(24), // after a visit is done
   referralRewardCents: z.coerce.number().int().min(0).max(50_000).default(1000), // credit for the referrer
   referralDiscountCents: z.coerce.number().int().min(0).max(50_000).default(0), // credit for the new client // new invoices let clients pay part online       // ask for a Google review after the first job of the season
@@ -54,6 +55,7 @@ export const SETTING_LABELS: Record<ToggleKey, [string, string]> = {
   stormHeadsUp: ["Storm heads-up", "Emails every plan client “you’re on our route” when a storm starts."],
   snowAlert: ["Snow alert to owners", "Emails you when the forecast meets a plan trigger in the next 36 hours."],
   allowPartialPayments: ["Partial payments", "New invoices let clients pay part of the balance online (you can change it per invoice)."],
+  tipsEnabled: ["Tips on card payments", "Clients paying an invoice by card can add a tip (10%, 15%, 20% or their own amount). Tips are kept apart from the invoice and from GST."],
   reviewRequests: ["Google review requests", "Asks happy clients for a review after their first job of the season (needs your review link)."],
   dailyDigest: ["6am daily digest", "Today’s visits, late work, unbilled charges and failed emails."],
   quoteFollowUp: ["Quote follow-up", "A reminder if the client hasn’t answered, by email or text (however the quote was last sent)."],

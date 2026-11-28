@@ -190,7 +190,8 @@ async function snowAlert() {
 async function invoiceReminders() {
   const today = todayLocal();
   const due = await db.invoice.findMany({
-    where: { status: "AWAITING_PAYMENT", dueOn: { lt: toDbDate(today) }, remindersSent: { lt: 2 }, client: { followUpInvoices: true } },
+    // A refund re-opens an invoice; chasing the client for money we just sent back is the owner's call, not automatic.
+    where: { status: "AWAITING_PAYMENT", dueOn: { lt: toDbDate(today) }, remindersSent: { lt: 2 }, client: { followUpInvoices: true }, payments: { none: { refundedCents: { gt: 0 } } } },
     include: { client: true },
   });
   for (const inv of due) {

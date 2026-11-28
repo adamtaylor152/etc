@@ -4,7 +4,7 @@ import { billingEmail, depositCents, depositCredit, draftEditProblem, dueDate, e
 import { instalmentKey, instalmentSchedule } from "../billing/instalments";
 import { periodKey, periodLabel, periodsDue } from "../billing/periods";
 import { dateOnly, todayLocal, toDbDate } from "../dates";
-import { db, type Tx } from "../db";
+import { db, type Db, type Tx } from "../db";
 import { enqueue, kickOutbox } from "../email/outbox";
 import { env } from "../env";
 import { logActivity, nextNumber } from "../records";
@@ -241,9 +241,9 @@ export async function markSent(user: Actor, invoiceId: string) {
 }
 
 /** Re-derive paid amount and status after a payment or refund changes. */
-export const recomputeInvoice = (invoiceId: string) => recompute(db, invoiceId);
+export const recomputeInvoice = (invoiceId: string, tx: Db = db) => recompute(tx, invoiceId);
 
-async function recompute(tx: Tx, invoiceId: string) {
+async function recompute(tx: Db, invoiceId: string) {
   const inv = await tx.invoice.findUniqueOrThrow({ where: { id: invoiceId } });
   const agg = await tx.payment.aggregate({ where: { invoiceId }, _sum: { amountCents: true, refundedCents: true } });
   const paid = (agg._sum.amountCents ?? 0) - (agg._sum.refundedCents ?? 0);
@@ -261,7 +261,7 @@ async function recompute(tx: Tx, invoiceId: string) {
 
 export async function recordPayment(user: Actor, input: {
   invoiceId: string; method: PaymentMethod; amountCents: number; reference?: string; note?: string;
-  stripePaymentIntentId?: string; stripeCheckoutSessionId?: string; feeCents?: number; unmatchedPaymentId?: string; receivedAt?: Date;
+  stripePaymentIntentId?: string; stripeCheckoutSessionId?: string; feeCents?: number; unmatchedPaymentId?: string; receivedAt?: Date; tipCents?: number;
 }, outerTx?: Tx) {
   if (!Number.isInteger(input.amountCents) || input.amountCents <= 0) throw new TransitionError("Enter an amount");
   const run = async (tx: Tx) => {
@@ -272,7 +272,7 @@ export async function recordPayment(user: Actor, input: {
       data: {
         businessId: user.businessId, clientId: inv.clientId, invoiceId: inv.id, method: input.method, amountCents: input.amountCents,
         reference: input.reference || null, note: input.note || null, stripePaymentIntentId: input.stripePaymentIntentId,
-        stripeCheckoutSessionId: input.stripeCheckoutSessionId, feeCents: input.feeCents, recordedById: user.id ?? undefined,
+        stripeCheckoutSessionId: input.stripeCheckoutSessionId, feeCents: input.feeCents, tipCents: input.tipCents || null, recordedById: user.id ?? undefined,
         unmatchedPaymentId: input.unmatchedPaymentId, ...(input.receivedAt ? { receivedAt: input.receivedAt } : {}),
       },
     });
@@ -304,7 +304,11 @@ export async function recordPayment(user: Actor, input: {
 export async function deletePayment(user: Actor, paymentId: string) {
   await db.$transaction(async (tx) => {
     const p = await tx.payment.findFirstOrThrow({ where: { id: paymentId, businessId: user.businessId } });
-    if (p.method === "CARD") throw new TransitionError("Refund card payments in Stripe");
+    if (p.method === "CARD") throw new TransitionError("Card payments can't be removed. Refund it instead.");
+    // An overpayment's extra went to account credit: it leaves with the payment, unless it has been spent.
+    const extra = await tx.clientCredit.findMany({ where: { paymentId: p.id } });
+    if (extra.some((c) => c.appliedToInvoiceId)) throw new TransitionError("The extra from this payment was already used as credit on another invoice. Refund it instead.");
+    await tx.clientCredit.deleteMany({ where: { paymentId: p.id } });
     await tx.payment.delete({ where: { id: p.id } });
     await recompute(tx, p.invoiceId);
     await logActivity(tx, { businessId: user.businessId, type: "payment.deleted", entityType: "Invoice", entityId: p.invoiceId, actorType: "USER", actorUserId: user.id ?? undefined, clientId: p.clientId, data: { amountCents: p.amountCents } });
@@ -315,7 +319,7 @@ export async function deletePayment(user: Actor, paymentId: string) {
 export async function voidInvoice(user: Actor, invoiceId: string, reason: string) {
   await db.$transaction(async (tx) => {
     const inv = await tx.invoice.findFirstOrThrow({ where: { id: invoiceId, businessId: user.businessId }, include: { payments: true } });
-    if (inv.payments.length) throw new TransitionError("Remove its payments first");
+    if (inv.payments.some((p) => p.refundedCents < p.amountCents)) throw new TransitionError("Remove or refund its payments first"); // fully refunded payments hold no money
     await tx.visitCharge.updateMany({ where: { invoiceLineItem: { invoiceId } }, data: { invoiceLineItemId: null } });
     // Deposits and account credits this invoice used up go back to unused, so the re-issued invoice gets them again.
     await tx.invoice.updateMany({ where: { kind: "DEPOSIT", appliedToInvoiceId: invoiceId }, data: { appliedToInvoiceId: null } });

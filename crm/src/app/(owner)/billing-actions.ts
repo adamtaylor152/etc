@@ -6,7 +6,8 @@ import { requireOwner } from "@/server/auth";
 import { toDbDate } from "@/server/dates";
 import { db } from "@/server/db";
 import { kickOutbox } from "@/server/email/outbox";
-import { billingRun, deletePayment, invoiceFixedJob, invoiceUnbilled, markSent, recordPayment, sendInvoice, setBadDebt, updateDraftInvoice, voidInvoice } from "@/server/ops/invoices";
+import { recordPaymentKeepingExtra } from "@/server/ops/credits";
+import { billingRun, deletePayment, invoiceFixedJob, invoiceUnbilled, markSent, sendInvoice, setBadDebt, updateDraftInvoice, voidInvoice } from "@/server/ops/invoices";
 import { TransitionError } from "@/server/status/visit";
 import { mintToken } from "@/server/tokens";
 
@@ -90,7 +91,8 @@ export async function paymentRecord(f: FormData) {
   await guard(f, async () => {
     const amountCents = Math.round(z.coerce.number().positive().max(100_000).parse(str(f, "amount")) * 100);
     const method = z.enum(["CASH", "ETRANSFER", "CHEQUE", "OTHER"]).parse(str(f, "method"));
-    await recordPayment(user, { invoiceId: str(f, "invoiceId"), method, amountCents, reference: str(f, "reference").slice(0, 100), note: str(f, "note").slice(0, 300) });
+    // More than the balance is refused unless the owner ticked "keep the extra as account credit".
+    await recordPaymentKeepingExtra(user, { invoiceId: str(f, "invoiceId"), method, amountCents, reference: str(f, "reference").slice(0, 100), note: str(f, "note").slice(0, 300), keepExtra: str(f, "keepExtra") === "on" });
   });
   revalidatePath("/", "layout");
   redirect(back(f));
