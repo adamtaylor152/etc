@@ -51,16 +51,18 @@ export default async function PublicInvoice({ params, searchParams }: PageProps<
           <tbody className="divide-y divide-line">
             {inv.lineItems.map((l) => (
               <tr key={l.id}>
-                <td className="py-2.5">{l.name}{Number(l.quantity) !== 1 && ` × ${Number(l.quantity)}`}<span className="block text-xs text-ink-soft">{prettyDate(dateOnly(l.serviceDate))}</span></td>
+                <td className="py-2.5">{l.name}{Number(l.quantity) !== 1 && ` × ${Number(l.quantity)}`}{l.description && <span className="block text-xs text-ink-soft">{l.description}</span>}<span className="block text-xs text-ink-soft">{prettyDate(dateOnly(l.serviceDate))}</span></td>
                 <td className="py-2.5 text-right font-semibold">{money(l.totalCents)}</td>
               </tr>
             ))}
           </tbody>
           <tfoot className="border-t-2 border-navy">
+            {inv.discountCents > 0 && <><tr><td className="pt-3 text-ink-soft">Subtotal</td><td className="pt-3 text-right text-ink-soft">{money(inv.subtotalCents)}</td></tr><tr><td className="text-ink-soft">Discount</td><td className="text-right text-ink-soft">−{money(inv.discountCents)}</td></tr></>}
             <tr><td className="pt-3 font-semibold">Total</td><td className="pt-3 text-right font-display text-2xl font-bold">{money(inv.totalCents)}</td></tr>
             {inv.amountPaidCents > 0 && <><tr><td className="text-ink-soft">Paid</td><td className="text-right text-ink-soft">−{money(inv.amountPaidCents)}</td></tr><tr><td className="font-semibold">Balance</td><td className="text-right font-semibold">{money(balance)}</td></tr></>}
           </tfoot>
         </table>
+        {inv.message && <p className="mt-4 whitespace-pre-line rounded-lg bg-tint p-3 text-sm">{inv.message}</p>}
         <p className="mt-3 text-xs text-ink-soft">
           {biz.taxRegistered ? `${biz.taxName} ${money(inv.taxCents)}${biz.pricesIncludeTax ? " included" : ""}${biz.taxNumber ? ` · ${biz.taxName} #${biz.taxNumber}` : ""}` : "Prices include tax."}
           {" "}{biz.legalName ?? biz.name} · {(biz.website ?? env.siteUrl).replace(/^https?:\/\//, "")} · {env.helpEmail}

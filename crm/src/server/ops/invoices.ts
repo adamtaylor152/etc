@@ -1,6 +1,6 @@
 // Invoices and payments: unbilled charges -> draft invoice -> send -> payment (cash / e-Transfer / card) -> receipt.
-import type { PaymentMethod, Prisma } from "@/generated/prisma/client";
-import { billingEmail, depositCents, depositCredit, dueDate, etransferRef, invoiceTotals, statusAfterPayments } from "../billing/invoice";
+import type { PaymentMethod, PaymentTerms, Prisma } from "@/generated/prisma/client";
+import { billingEmail, depositCents, depositCredit, draftEditProblem, dueDate, etransferRef, invoiceTotals, isCreditLine, statusAfterPayments } from "../billing/invoice";
 import { todayLocal, toDbDate } from "../dates";
 import { db, type Tx } from "../db";
 import { enqueue, kickOutbox } from "../email/outbox";
@@ -234,6 +234,46 @@ export async function voidInvoice(user: Actor, invoiceId: string, reason: string
     await tx.visitCharge.updateMany({ where: { invoiceLineItem: { invoiceId } }, data: { invoiceLineItemId: null } });
     await tx.invoice.update({ where: { id: invoiceId }, data: { status: "VOID", voidedAt: new Date(), voidReason: reason || null } });
     await logActivity(tx, { businessId: user.businessId, type: "invoice.voided", entityType: "Invoice", entityId: invoiceId, actorType: "USER", actorUserId: user.id ?? undefined, clientId: inv.clientId });
+  });
+}
+
+export type DraftLineIn = { id?: string; name: string; description?: string; quantity: number; unitPriceCents: number; serviceDate?: Date | null };
+/**
+ * Edit a draft: lines, discount, terms, message. Sent invoices stay locked (void and re-issue).
+ * A removed line releases its visit charge, exactly as void does, so a later invoice picks it up. A kept line may be
+ * re-priced: only the invoice line changes, the charge keeps its own amount and stays linked (still billed, never twice).
+ * Credit lines (deposits, account credits) are not touched.
+ */
+export async function updateDraftInvoice(user: Actor & { id: string }, invoiceId: string, input: { lines: DraftLineIn[]; discountCents: number; paymentTerms: PaymentTerms; message: string }) {
+  await db.$transaction(async (tx) => {
+    const inv = await tx.invoice.findFirstOrThrow({ where: { id: invoiceId, businessId: user.businessId }, include: { lineItems: { orderBy: { sortOrder: "asc" } } } });
+    const locked = new TransitionError("Only draft invoices can be edited. Void a sent invoice and re-issue it.");
+    if (inv.status !== "DRAFT" || inv.kind !== "STANDARD") throw locked;
+    const credits = inv.lineItems.filter(isCreditLine), editable = inv.lineItems.filter((l) => !isCreditLine(l));
+    const lines = input.lines.filter((l) => l.name.trim()).map((l) => ({ ...l, name: l.name.trim().slice(0, 200), totalCents: Math.round(l.quantity * l.unitPriceCents) }));
+    const ids = lines.flatMap((l) => (l.id ? [l.id] : []));
+    if (new Set(ids).size !== ids.length || ids.some((id) => !editable.some((e) => e.id === id))) throw new TransitionError("This invoice changed. Refresh and try again.");
+    const biz = await tx.business.findUniqueOrThrow({ where: { id: user.businessId } });
+    const problem = draftEditProblem(lines.map((l) => l.totalCents), -credits.reduce((n, c) => n + c.totalCents, 0), input.discountCents, inv.amountPaidCents, biz);
+    if (problem) throw new TransitionError(problem);
+    const totals = invoiceTotals([...lines, ...credits].map((l) => l.totalCents), input.discountCents, biz);
+    // Checked again in the write, so an invoice sent a moment ago can't be changed under the client.
+    const res = await tx.invoice.updateMany({
+      where: { id: inv.id, status: "DRAFT", kind: "STANDARD" },
+      data: { paymentTerms: input.paymentTerms, message: input.message || null, discountCents: input.discountCents, subtotalCents: totals.subtotalCents, taxCents: totals.taxCents, totalCents: totals.totalCents },
+    });
+    if (res.count !== 1) throw locked;
+    const gone = editable.filter((e) => !ids.includes(e.id)).map((e) => e.id);
+    await tx.visitCharge.updateMany({ where: { invoiceLineItemId: { in: gone } }, data: { invoiceLineItemId: null } });
+    await tx.invoiceLineItem.deleteMany({ where: { id: { in: gone } } });
+    for (const [i, l] of lines.entries()) {
+      const data = { name: l.name, description: l.description || null, quantity: l.quantity, unitPriceCents: l.unitPriceCents, totalCents: l.totalCents, serviceDate: l.serviceDate ?? null, sortOrder: i };
+      if (l.id) await tx.invoiceLineItem.update({ where: { id: l.id }, data });
+      else await tx.invoiceLineItem.create({ data: { ...data, invoiceId: inv.id, jobId: inv.jobId } });
+    }
+    for (const [i, c] of credits.entries()) await tx.invoiceLineItem.update({ where: { id: c.id }, data: { sortOrder: lines.length + i } });
+    if (inv.amountPaidCents) await recompute(tx, inv.id); // a part-paid draft whose new total is covered becomes paid
+    await logActivity(tx, { businessId: user.businessId, type: "invoice.edited", entityType: "Invoice", entityId: inv.id, actorType: "USER", actorUserId: user.id, clientId: inv.clientId, jobId: inv.jobId ?? undefined });
   });
 }
 

@@ -2,7 +2,7 @@ import { BLUE, BODY_FONT, Button, EtcEmail, Eyebrow, FONT, Footer, H1, Header, I
 
 export type InvoiceEmailData = {
   name: string; number: number; subject: string; issued: string; due: string; lines: { name: string; date: string; amount: string }[];
-  total: string; paid: string | null; balance: string; taxNote: string | null; payUrl: string; etransferEmail: string; etransferRef: string;
+  total: string; discount: string | null; message: string | null; paid: string | null; balance: string; taxNote: string | null; payUrl: string; etransferEmail: string; etransferRef: string;
   cardEnabled: boolean; site: string; phone: string;
 };
 
@@ -19,6 +19,10 @@ function Lines({ d }: { d: InvoiceEmailData }) {
               <td align="right" style={{ padding: "10px 0", borderTop: i ? `1px solid ${LINE}` : undefined, fontFamily: BODY_FONT, fontSize: 14, fontWeight: 600, color: NAVY, whiteSpace: "nowrap" }}>{l.amount}</td>
             </tr>
           ))}
+          {d.discount && (
+            <tr><td style={{ padding: "10px 0", borderTop: `1px solid ${LINE}`, fontFamily: BODY_FONT, fontSize: 14, color: INK_SOFT }}>Discount</td>
+              <td align="right" style={{ padding: "10px 0", borderTop: `1px solid ${LINE}`, fontFamily: BODY_FONT, fontSize: 14, color: INK_SOFT }}>−{d.discount}</td></tr>
+          )}
           {d.paid && (
             <tr><td style={{ padding: "10px 0", borderTop: `1px solid ${LINE}`, fontFamily: BODY_FONT, fontSize: 14, color: INK_SOFT }}>Paid so far</td>
               <td align="right" style={{ padding: "10px 0", borderTop: `1px solid ${LINE}`, fontFamily: BODY_FONT, fontSize: 14, color: INK_SOFT }}>−{d.paid}</td></tr>
@@ -58,6 +62,7 @@ export function InvoiceSent({ d, reminder }: { d: InvoiceEmailData; reminder?: 1
           <Eyebrow>{reminder ? "Friendly reminder" : `Issued ${d.issued}`} · due {d.due}</Eyebrow>
           <H1>{reminder ? `Hi ${first}, just a reminder` : `Thanks, ${first}! Here's your invoice`}</H1>
           <P>{reminder ? `Invoice #${d.number} (${d.subject}) still shows ${d.balance} owing. If you've already paid, thank you, and please ignore this.` : `${d.subject}. Every job helps Silas get to electrician school.`}</P>
+          {!reminder && d.message && <P style={{ whiteSpace: "pre-line", color: NAVY }}>{d.message}</P>}
         </td>
       </tr>
       <tr><td className="px" style={{ padding: "0 40px" }}><Lines d={d} /></td></tr>
