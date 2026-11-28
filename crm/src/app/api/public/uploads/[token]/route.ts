@@ -1,4 +1,5 @@
-// Customer photo uploads for a quote (from the /u/[token] page). Token-scoped to one request; no login.
+// Customer photo uploads for a quote (from the /u/[token] page, or right after booking on either booking form).
+// Token-scoped to one request; no login. A multipart POST needs no CORS preflight, just the allow-origin header.
 import { db } from "@/server/db";
 import { enqueue, kickOutbox } from "@/server/email/outbox";
 import { env } from "@/server/env";
@@ -7,12 +8,14 @@ import { MediaError, saveImage } from "@/server/media";
 import { peekToken } from "@/server/tokens";
 
 const PER_BATCH = 10, PER_TOKEN = 30;
-const json = (status: number, body: unknown) => Response.json(body, { status, headers: PUBLIC_HEADERS });
 
 export async function POST(req: Request, ctx: RouteContext<"/api/public/uploads/[token]">) {
   const { token } = await ctx.params;
   const origin = req.headers.get("origin");
-  if (origin && origin !== env.appUrl) return json(403, { error: "Bad origin" });
+  const site = !!origin && env.publicOrigins.includes(origin); // etccrew.ca's book.html
+  const json = (status: number, body: unknown) =>
+    Response.json(body, { status, headers: { ...PUBLIC_HEADERS, ...(site ? { "Access-Control-Allow-Origin": origin, Vary: "Origin" } : {}) } });
+  if (origin && origin !== env.appUrl && !site) return json(403, { error: "Bad origin" });
   if (limited(`upload:${clientIp(req)}`, 60, 3_600_000)) return json(429, { error: "Too many uploads, try again later" });
   const t = await peekToken(db, token, ["PHOTO_UPLOAD"]);
   if (!t.ok || !t.token.requestId) return json(410, { error: "This link has expired. Reply to our email and we'll send a new one." });

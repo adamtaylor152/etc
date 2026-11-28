@@ -163,8 +163,12 @@ export default async function JobPage({ params, searchParams }: PageProps<"/jobs
           </section>
           <JobCosting businessId={bid} jobId={job.id} people={await team(bid)} back={here} />
           <Card title="Photos">
-            {photos.length ? <Gallery photos={photos} back={here} /> : <p className="text-sm text-ink-soft">Before &amp; after photos are taken on each visit. Photos the client sent with their request show here too.</p>}
-            <div className="mt-3 max-w-xs"><PhotoUploader endpoint="/api/uploads" fields={{ jobId: job.id, kind: "OTHER" }} label="Add photos" camera={false} /></div>
+            <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+              <PhotoUploader endpoint="/api/uploads" fields={{ jobId: job.id, kind: "BEFORE" }} label="Before" camera={false} />
+              <PhotoUploader endpoint="/api/uploads" fields={{ jobId: job.id, kind: "AFTER" }} label="After" camera={false} />
+              <PhotoUploader endpoint="/api/uploads" fields={{ jobId: job.id, kind: "OTHER" }} label="Other" camera={false} />
+            </div>
+            {photos.length ? <Gallery photos={photos} back={here} /> : <p className="text-sm text-ink-soft">Add as many before &amp; after photos as you like, here or on each visit. Photos the client sent with their request show here too.</p>}
           </Card>
 
           <Card title="Charges & invoices" actions={<div className="flex items-center gap-2">

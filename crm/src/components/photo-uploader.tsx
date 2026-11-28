@@ -4,7 +4,7 @@
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 
-async function shrink(file: File): Promise<Blob> {
+export async function shrink(file: File): Promise<Blob> {
   if (!file.type.startsWith("image/")) return file;
   try {
     const bmp = await createImageBitmap(file, { imageOrientation: "from-image" });
@@ -19,6 +19,8 @@ async function shrink(file: File): Promise<Blob> {
   }
 }
 
+const MAX = 30; // ponytail: one request per photo, so this only bounds a single pick; the servers cap totals
+
 export function PhotoUploader({ endpoint, fields = {}, label, camera = true, done, geo = false }: {
   endpoint: string; fields?: Record<string, string>; label: string; camera?: boolean; done?: string; geo?: boolean;
 }) {
@@ -32,7 +34,7 @@ export function PhotoUploader({ endpoint, fields = {}, label, camera = true, don
     setBusy(true);
     let pos: GeolocationPosition | null = null;
     if (geo) pos = await new Promise((r) => navigator.geolocation?.getCurrentPosition(r, () => r(null), { timeout: 5000, maximumAge: 120_000 }) ?? r(null));
-    const list = [...files].slice(0, 10);
+    const list = [...files].slice(0, MAX);
     let ok = 0;
     for (const [i, f] of list.entries()) {
       setStatus(`Uploading ${i + 1} of ${list.length}…`);
@@ -50,7 +52,7 @@ export function PhotoUploader({ endpoint, fields = {}, label, camera = true, don
         return;
       }
     }
-    setStatus(done ?? `${ok} photo${ok === 1 ? "" : "s"} added`);
+    setStatus((done ?? `${ok} photo${ok === 1 ? "" : "s"} added`) + (files.length > MAX ? ` (the first ${MAX}; add the rest in another batch)` : ""));
     setBusy(false);
     if (input.current) input.current.value = "";
     router.refresh();
