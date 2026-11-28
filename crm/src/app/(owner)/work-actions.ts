@@ -1,6 +1,7 @@
 "use server";
 // Jobs, visits, plans and storms. Each action re-checks the session, validates input, and sends the user
 // back where they came from (with ?error= on a rule violation).
+import { fromLocalInput } from "@/server/dates";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
@@ -11,7 +12,7 @@ import { createRecurringJob, createSnowPlan, renewalCandidates, renewalSeason, s
 import { db } from "@/server/db";
 import { enqueue, kickOutbox } from "@/server/email/outbox";
 import { env } from "@/server/env";
-import { addPush, cancelStorm, createStorm, finishStorm, setStormDepth, startStorm } from "@/server/ops/storms";
+import { addPush, cancelStorm, createStorm, finishStorm, setSnowEnded, setStormDepth, startStorm } from "@/server/ops/storms";
 import { TransitionError } from "@/server/status/visit";
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
@@ -128,6 +129,12 @@ export async function stormPush(f: FormData) {
 export async function stormFinish(f: FormData) {
   const user = await requireOwner();
   await run(f, () => finishStorm(user, str(f, "id")));
+}
+
+export async function stormSnowEnded(f: FormData) {
+  const user = await requireOwner();
+  const at = str(f, "at");
+  await run(f, () => setSnowEnded(user, str(f, "id"), f.get("clear") ? null : at ? fromLocalInput(at) : new Date()));
 }
 
 export async function stormCancel(f: FormData) {

@@ -131,7 +131,7 @@ export async function finishStorm(user: Actor, id: string) {
   await db.$transaction(async (tx) => {
     const ev = await load(tx, user, id);
     if (ev.status !== "ACTIVE") throw new TransitionError("Only an active storm can be finished");
-    await tx.snowEvent.update({ where: { id }, data: { status: "COMPLETED", completedAt: new Date(), snowEndedAt: new Date() } });
+    await tx.snowEvent.update({ where: { id }, data: { status: "COMPLETED", completedAt: new Date() } }); // snowEndedAt is the owner's to record (bylaw clock)
     // Plans bill once per storm: one draft invoice per client, reviewed and sent from Billing.
     const clients = await tx.visitCharge.findMany({
       where: { businessId: user.businessId, invoiceLineItemId: null, visit: { snowEventId: id, job: { kind: "SNOW_PLAN", invoiceSchedule: "PER_SNOW_EVENT" } } },
@@ -143,6 +143,13 @@ export async function finishStorm(user: Actor, id: string) {
 }
 
 /** Forecast bust: cancel visits nobody has started. Done visits stay done (and billable). */
+/** When the snow stopped: starts the 24-hour sidewalk clock (see snow/bylaw.ts). Null clears it. */
+export async function setSnowEnded(user: Actor, id: string, at: Date | null) {
+  if (at && at.getTime() > Date.now() + 5 * 60_000) throw new TransitionError("That time is in the future");
+  const { count } = await db.snowEvent.updateMany({ where: { id, businessId: user.businessId }, data: { snowEndedAt: at } });
+  if (!count) throw new TransitionError("Storm not found");
+}
+
 export async function cancelStorm(user: Actor, id: string) {
   await db.$transaction(async (tx) => {
     const ev = await load(tx, user, id);
