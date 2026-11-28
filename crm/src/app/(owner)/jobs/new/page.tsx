@@ -27,6 +27,7 @@ export default async function NewJob({ searchParams }: PageProps<"/jobs/new">) {
   const client = await db.client.findFirst({ where: { id: clientId, businessId: bid }, include: { properties: { where: { archivedAt: null } } } });
   if (!client) notFound();
   const people = await team(bid);
+  const checklists = await db.checklistTemplate.findMany({ where: { businessId: bid, active: true }, orderBy: { name: "asc" } });
   const plan = sp.kind === "plan";
   const recurring = sp.kind === "recurring";
   const services = await db.service.findMany({ where: { businessId: bid, active: true }, orderBy: { sortOrder: "asc" } });
@@ -113,6 +114,11 @@ export default async function NewJob({ searchParams }: PageProps<"/jobs/new">) {
             </fieldset>
             <LineItems services={services.map((sv) => ({ id: sv.id, name: sv.name, unitPriceCents: sv.unitPriceCents }))}
               initial={(request?.services ?? []).filter((x) => x !== "Snow shovelling").map((name) => ({ name, price: (() => { const sv = services.find((x) => (x.bookingLabel ?? x.name) === name); return sv?.unitPriceCents != null ? String(sv.unitPriceCents / 100) : ""; })() }))} />
+            {checklists.length > 0 && (
+              <Field label="Visit checklist" hint="Blank = automatic from the services above (if one has a checklist)">
+                <select name="checklistTemplateId" className={inputCls}><option value="">Automatic</option><option value="none">No checklist</option>{checklists.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
+              </Field>
+            )}
             <Field label="Billing">
               <select name="billingType" className={inputCls}><option value="PER_VISIT">Invoice per visit (charges added when each visit is done)</option><option value="FIXED_PRICE">Fixed price for the whole job (invoice when it&apos;s finished)</option></select>
             </Field>

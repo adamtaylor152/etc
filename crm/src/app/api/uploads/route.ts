@@ -39,6 +39,7 @@ export async function POST(req: Request) {
       saved.push(await saveImage(user.businessId, { bytes: Buffer.from(await f.arrayBuffer()), contentType: f.type }, {
         ...links, kind, uploadedByType: "USER", uploadedById: user.id, capturedLat: num("lat"), capturedLng: num("lng"),
         sharedWithClient: kind === "BEFORE" || kind === "AFTER", // before/after go in the client's "done" email
+        caption: String(form.get("caption") ?? "").slice(0, 60) || undefined, // "checklist:<itemId>" ties a photo to a checklist item
       }));
     }
   } catch (e) {

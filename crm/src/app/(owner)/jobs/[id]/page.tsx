@@ -1,3 +1,4 @@
+import { jobChecklistSet } from "../../checklist-actions";
 import { JobCosting } from "@/components/job-costing";
 import { team } from "@/server/schedule";
 import Link from "next/link";
@@ -40,6 +41,7 @@ export default async function JobPage({ params, searchParams }: PageProps<"/jobs
     }),
   ]);
   const today = todayLocal();
+  const checklists = await db.checklistTemplate.findMany({ where: { businessId: bid, active: true }, orderBy: { name: "asc" } });
   const here = `/jobs/${id}`;
   const plan = job.kind === "SNOW_PLAN";
   const closed = !!job.closedAt;
@@ -144,6 +146,15 @@ export default async function JobPage({ params, searchParams }: PageProps<"/jobs
             ) : <Empty>{plan ? "Visits appear here when a storm starts." : "No visits yet."}</Empty>}
           </Card>
 
+          <section className="rounded-lg border border-line bg-white p-4 shadow-card">
+            <form action={jobChecklistSet} className="flex flex-wrap items-center gap-2 text-sm">
+              <input type="hidden" name="jobId" value={job.id} />
+              <span className="font-bold">Visit checklist</span>
+              <select name="templateId" defaultValue={job.checklistTemplateId ?? ""} className="min-h-9 rounded-lg border border-line bg-white px-2"><option value="">None</option>{checklists.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
+              <button className="min-h-9 rounded-lg border border-line px-3 font-semibold hover:bg-tint">Save</button>
+              <Link href="/settings/checklists" className="text-xs text-blue">Edit checklists</Link>
+            </form>
+          </section>
           <JobCosting businessId={bid} jobId={job.id} people={await team(bid)} back={here} />
           <Card title="Photos">
             {photos.length ? <Gallery photos={photos} back={here} /> : <p className="text-sm text-ink-soft">Before &amp; after photos are taken on each visit. Photos the client sent with their request show here too.</p>}

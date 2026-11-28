@@ -424,6 +424,7 @@ model Service {
   unitPriceCents Int?
   unit           PriceUnit       @default(EACH)
   isAddon        Boolean         @default(false)
+  checklistTemplateId String? // jobs with this service get this checklist
   bookable       Boolean         @default(true)
   active         Boolean         @default(true)
   sortOrder      Int             @default(0)
@@ -605,6 +606,7 @@ model Job {
   @@unique([businessId, number])
   @@index([businessId, kind, seasonId])
   // raw SQL in migration: one open snow plan per property per season
+  checklistTemplateId String? // each visit gets a copy of this checklist
 }
 
 model JobLineItem {
@@ -1084,4 +1086,28 @@ model Expense {
 
   @@index([businessId, date])
   @@index([jobId])
+}
+
+/** A reusable checklist. items: [{id, label, type: CHECKBOX|YESNO|TEXT|NUMBER|PHOTO, required, showClient}]. */
+model ChecklistTemplate {
+  id         String   @id @default(cuid())
+  businessId String
+  name       String
+  items      Json     @default("[]")
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  @@index([businessId])
+}
+
+/** A visit's own copy of a checklist (so editing the template never rewrites history) plus the answers. */
+model VisitChecklist {
+  id           String    @id @default(cuid())
+  businessId   String
+  visitId      String    @unique
+  templateName String
+  items        Json
+  answers      Json      @default("{}")
+  completedAt  DateTime?
+  updatedAt    DateTime  @updatedAt
 }

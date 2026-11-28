@@ -22,7 +22,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
   ]);
   return (
     <>
-      <PageHeader title="Settings" actions={<Link href="/settings/team" className="inline-flex min-h-10 items-center rounded-lg border border-line bg-white px-4 text-sm font-semibold hover:bg-tint">Team &amp; people</Link>} />
+      <PageHeader title="Settings" actions={<><Link href="/settings/checklists" className="inline-flex min-h-10 items-center rounded-lg border border-line bg-white px-4 text-sm font-semibold hover:bg-tint">Checklists</Link><Link href="/settings/team" className="inline-flex min-h-10 items-center rounded-lg border border-line bg-white px-4 text-sm font-semibold hover:bg-tint">Team &amp; people</Link></>} />
       {sp.saved && <p className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-medium text-emerald-800">Saved.</p>}
       <div className="grid gap-5 lg:grid-cols-2">
         <Card title="Business">
