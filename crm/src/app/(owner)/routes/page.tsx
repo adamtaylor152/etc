@@ -6,9 +6,10 @@ import { requireOwner } from "@/server/auth";
 import type { GeoJsonObject } from "geojson";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, Eye, EyeOff, Navigation, Printer, TriangleAlert } from "lucide-react";
+import { DatePick } from "@/components/auto-submit";
 import { RouteReorder } from "@/components/field/route-reorder";
 import { RouteMap } from "@/components/route-map";
-import { Badge, Button, ButtonLink, Card, Empty, Input, PageHeader, btn, inputCls } from "@/components/ui";
+import { Badge, Button, ButtonLink, Card, Empty, Field, Input, PageHeader, btn, inputCls } from "@/components/ui";
 import { addDays, fromLocalInput, prettyDate, todayLocal, toDbDate } from "@/server/dates";
 import { business, businessId, db } from "@/server/db";
 import { clientName } from "@/server/queries";
@@ -49,7 +50,7 @@ export default async function Routes({ searchParams }: PageProps<"/routes">) {
   const multi = next.length > 1
     ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(next.at(-1)!)}&waypoints=${encodeURIComponent(next.slice(0, -1).join("|"))}`
     : null;
-  const dayBtn = "inline-flex size-10 items-center justify-center rounded-lg border border-line bg-white text-ink-soft shadow-sm hover:bg-tint hover:text-navy";
+  const dayBtn = "inline-flex size-11 shrink-0 items-center justify-center rounded-lg border border-line bg-white text-ink-soft shadow-sm hover:bg-tint hover:text-navy sm:size-9";
   const who = (u: { name: string | null; email: string }) => u.name || u.email.split("@")[0];
   return (
     <>
@@ -58,15 +59,11 @@ export default async function Routes({ searchParams }: PageProps<"/routes">) {
         sub={<span className="tabular-nums">{visits.length} stop{visits.length === 1 ? "" : "s"}{showDone ? "" : " left"}</span>}
         actions={<div className="no-print flex flex-wrap items-center gap-2">
           {!storm && (
-            // On a phone the day and its arrows take one row and the set-off time the next; from tablet up it is one line.
-            <div className="flex w-full flex-wrap items-center gap-1 sm:w-auto sm:flex-nowrap">
-              <Link href={`/routes?date=${addDays(day, -1)}`} className={`${dayBtn} order-1`} aria-label="Previous day"><ChevronLeft className="size-4" aria-hidden /></Link>
-              <form className="contents">
-                <Input type="date" name="date" defaultValue={day} aria-label="Day" className="order-2 min-w-0 flex-1 basis-[calc(100%-5.5rem)] sm:w-40! sm:flex-none sm:basis-auto" />
-                <Input type="time" name="start" defaultValue={setOff ?? ""} aria-label="Set off at (for the ETAs)" title="Set off at (for the ETAs)" className="order-4 w-32! flex-none sm:order-3 sm:w-28!" />
-                <Button variant="secondary" className="order-5 sm:order-4">Go</Button>
-              </form>
-              <Link href={`/routes?date=${addDays(day, 1)}`} className={`${dayBtn} order-3 sm:order-5`} aria-label="Next day"><ChevronRight className="size-4" aria-hidden /></Link>
+            // One control: step a day either way, or pick one (the page reloads on the day picked).
+            <div className="flex items-center gap-1" role="group" aria-label="Day">
+              <Link href={`/routes?date=${addDays(day, -1)}`} className={dayBtn} aria-label="Previous day"><ChevronLeft className="size-4" aria-hidden /></Link>
+              <DatePick key={day} date={day} />
+              <Link href={`/routes?date=${addDays(day, 1)}`} className={dayBtn} aria-label="Next day"><ChevronRight className="size-4" aria-hidden /></Link>
             </div>
           )}
           <ButtonLink href={`${base}${showDone ? "" : "&done=1"}`}>{showDone ? <EyeOff className="size-4" aria-hidden /> : <Eye className="size-4" aria-hidden />}{showDone ? "Hide done" : "Show done"}</ButtonLink>
@@ -82,6 +79,16 @@ export default async function Routes({ searchParams }: PageProps<"/routes">) {
               </div>
             )}
             <Card title="Plan this route" className="no-print">
+                {!storm && (
+                  <form className="mb-4 border-b border-line-soft pb-4">
+                    <input type="hidden" name="date" value={day} />{showDone && <input type="hidden" name="done" value="1" />}
+                    <div className="flex items-end gap-2">
+                      <div className="min-w-0 flex-1"><Field label="Set off at"><Input key={`${day}-${setOff}`} type="time" name="start" defaultValue={setOff ?? (day === todayLocal() ? "" : "08:00")} /></Field></div>
+                      <Button variant="secondary">Update times</Button>
+                    </div>
+                    <p className="mt-1.5 text-xs text-ink-soft">Arrival times are worked out from this. Left blank, today&apos;s route runs from now and other days from 8:00 a.m.</p>
+                  </form>
+                )}
                 <form action={routeAutoOrder}>
                   <input type="hidden" name="back" value={here} />
                   <div className="flex flex-wrap items-center gap-2">
@@ -160,7 +167,7 @@ export default async function Routes({ searchParams }: PageProps<"/routes">) {
                           </Link>
                           <span className="flex shrink-0 flex-col items-end gap-1.5">
                             {eta && <span className="whitespace-nowrap pt-0.5 text-sm font-semibold tabular-nums" title={`${duration(eta.driveMin)} drive`}><span className="sr-only">Arriving about </span><span aria-hidden>~</span>{clock(eta.eta)}</span>}
-                            {v.state !== "SCHEDULED" && <Badge tone={done ? "green" : v.state === "SKIPPED" ? "gray" : "navy"}>{done ? "Done" : v.state === "SKIPPED" ? "Skipped" : "On it"}</Badge>}
+                            {v.state !== "SCHEDULED" && <Badge tone={done ? "green" : v.state === "SKIPPED" ? "gray" : "blue"}>{done ? "Done" : v.state === "SKIPPED" ? "Skipped" : "On it"}</Badge>}
                             <a href={mapsLink(v.property.formatted)} aria-label={`Navigate to ${v.property.formatted}`} className={btn("secondary", "no-print min-h-9! px-3!")}><Navigation className="size-3.5" aria-hidden />Go</a>
                           </span>
                           <span className="hidden size-6 shrink-0 rounded border-2 border-navy print:block" aria-hidden />

@@ -12,6 +12,7 @@ export const metadata = { title: "Pipeline" };
 // A dot beside each column name: the same semantic colours as status badges (the name carries the meaning).
 const DOT: Record<Stage, string> = { new: "bg-blue", assessment: "bg-blue", quoting: "bg-ink-faint", sent: "bg-amber-500", changes: "bg-red-600", won: "bg-emerald-600", lost: "bg-ink-faint" };
 const CLOSED: Stage[] = ["won", "lost"];
+const CAP = 15; // cards shown per column before "Show all"
 type Card = { key: string; href: string; kind: string; title: string; client: string; cents: number | null; since: Date; note?: string | null };
 
 /** Server-side "now" maths kept out of the component body. */
@@ -55,6 +56,22 @@ export default async function Pipeline() {
             {STAGES.map(([k, label]) => {
               const cards = cols.get(k)!;
               const closed = CLOSED.includes(k);
+              const card = (c: Card) => (
+                <li key={c.key}>
+                  <Link href={c.href} className={`block rounded-lg border px-3 py-2.5 text-sm ${closed ? "border-line-soft bg-white/70 hover:border-line hover:bg-white" : "border-line bg-white shadow-card hover:border-ink-faint/60 hover:shadow-sm"}`}>
+                    <span className="flex items-baseline justify-between gap-3">
+                      <span className={`min-w-0 truncate font-semibold ${closed ? "text-ink-soft" : ""}`}>{c.client}</span>
+                      {c.cents != null && c.cents > 0 && <span className={`shrink-0 font-semibold tabular-nums ${closed ? "text-ink-soft" : ""}`}>{money(c.cents)}</span>}
+                    </span>
+                    <span className="block truncate text-ink-soft">{c.title}</span>
+                    {c.note && <span className="mt-0.5 block truncate text-xs text-ink-soft">{c.note}</span>}
+                    <span className="mt-1.5 flex items-center justify-between gap-2 text-xs text-ink-soft">
+                      <span className="tabular-nums">{c.kind}</span>
+                      <span className="rounded bg-tint px-1.5 py-px tabular-nums" title="How long it has sat in this stage">{age(c.since)}</span>
+                    </span>
+                  </Link>
+                </li>
+              );
               return (
                 <section key={k} aria-label={`${label}: ${cards.length}`} className={`flex w-[17.5rem] max-w-[82vw] shrink-0 snap-start flex-col rounded-xl border ${closed ? "border-dashed border-line bg-transparent" : "border-line-soft bg-line-soft/70"}`}>
                   <header className="px-3 pb-1 pt-3">
@@ -66,24 +83,17 @@ export default async function Pipeline() {
                     <p className="mt-0.5 pl-4 text-xs text-ink-soft tabular-nums">{sum(cards) > 0 ? <><span className={`font-semibold ${closed ? "" : "text-navy"}`}>{money(sum(cards))}</span> in quotes</> : cards.length ? "No quote totals yet" : " "}</p>
                   </header>
                   <ul className="space-y-2 p-2">
-                    {cards.map((c) => (
-                      <li key={c.key}>
-                        <Link href={c.href} className={`block rounded-lg border px-3 py-2.5 text-sm ${closed ? "border-line-soft bg-white/70 hover:border-line hover:bg-white" : "border-line bg-white shadow-card hover:border-ink-faint/60 hover:shadow-sm"}`}>
-                          <span className="flex items-baseline justify-between gap-3">
-                            <span className={`min-w-0 truncate font-semibold ${closed ? "text-ink-soft" : ""}`}>{c.client}</span>
-                            {c.cents != null && c.cents > 0 && <span className={`shrink-0 font-semibold tabular-nums ${closed ? "text-ink-soft" : ""}`}>{money(c.cents)}</span>}
-                          </span>
-                          <span className="block truncate text-ink-soft">{c.title}</span>
-                          {c.note && <span className="mt-0.5 block truncate text-xs text-ink-soft">{c.note}</span>}
-                          <span className="mt-1.5 flex items-center justify-between gap-2 text-xs text-ink-soft">
-                            <span className="tabular-nums">{c.kind}</span>
-                            <span className="rounded bg-tint px-1.5 py-px tabular-nums" title="How long it has sat in this stage">{age(c.since)}</span>
-                          </span>
-                        </Link>
-                      </li>
-                    ))}
+                    {cards.slice(0, CAP).map(card)}
                     {!cards.length && <li className="px-1 py-6 text-center text-xs text-ink-soft">Nothing here</li>}
                   </ul>
+                  {cards.length > CAP && (
+                    <details className="group px-2 pb-2">
+                      <summary className="flex min-h-11 list-none items-center justify-center rounded-lg text-sm font-semibold text-blue hover:bg-white/70 hover:text-blue-deep">
+                        <span className="tabular-nums group-open:hidden">Show all {cards.length}</span><span className="hidden group-open:inline">Show fewer</span>
+                      </summary>
+                      <ul className="mt-2 space-y-2">{cards.slice(CAP).map(card)}</ul>
+                    </details>
+                  )}
                 </section>
               );
             })}

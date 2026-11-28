@@ -36,6 +36,12 @@ import { describeTiers, parseTiers } from "@/server/snow/tiers";
 const hm = (min: number) => `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
 const SKIP: [string, string][] = [["CLIENT_CANCELLED", "Client asked to skip"], ["WEATHER", "Weather"], ["NO_ACCESS", "Can't get in"], ["OTHER", "Other"]];
 
+export async function generateMetadata({ params }: PageProps<"/jobs/[id]">) {
+  await requireOwner();
+  const j = await db.job.findFirst({ where: { id: (await params).id, businessId: await businessId() }, select: { number: true, title: true } });
+  return { title: j ? `Job #${j.number} · ${j.title}` : "Job" };
+}
+
 export default async function JobPage({ params, searchParams }: PageProps<"/jobs/[id]">) {
   await requireOwner();
   const { id } = await params;
@@ -81,6 +87,9 @@ export default async function JobPage({ params, searchParams }: PageProps<"/jobs
   const KIND = job.kind === "SNOW_PLAN" ? "Every-snowfall plan" : job.kind === "RECURRING" ? "Recurring job" : "One-off job";
   const unbilledCents = unbilled.reduce((a, c) => a + c.totalCents, 0);
   const canInvoice = unbilled.length > 0 || (job.billingType === "FIXED_PRICE" && !fixedMonthly && !job.invoices.some((i) => i.status !== "VOID"));
+  // One primary action per view: invoice what is owed; otherwise open the next visit; otherwise book one.
+  const nextVisit = job.visits.filter((v) => v.scheduledDate && ["SCHEDULED", "EN_ROUTE", "IN_PROGRESS"].includes(v.state)).sort((a, b) => +a.scheduledDate! - +b.scheduledDate!)[0];
+  const primary = canInvoice ? "invoice" : nextVisit ? "visit" : !closed && !plan ? "add" : null;
   const small = "min-h-9! px-3!";
   const check = "flex min-h-10 items-center gap-2 text-sm font-semibold";
 
@@ -101,6 +110,7 @@ export default async function JobPage({ params, searchParams }: PageProps<"/jobs
               <Button>Create invoice</Button>
             </form>
           )}
+          {primary === "visit" && <ButtonLink href={`/visits/${nextVisit.id}`} variant="primary">Open next visit</ButtonLink>}
           <ButtonLink href={`${here}/edit`}><Pencil className="size-4" aria-hidden />Edit</ButtonLink>
           {!plan && <ButtonLink href={`/jobs/new?client=${job.clientId}&from=${job.id}`}><Copy className="size-4" aria-hidden />Create similar job</ButtonLink>}
           <form action={jobClose}>
@@ -113,13 +123,17 @@ export default async function JobPage({ params, searchParams }: PageProps<"/jobs
       <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
         {/* Left: the work, and what it has earned. */}
         <div className="min-w-0 space-y-5">
-          <Card title="Visits" actions={!closed && (
-            <form action={visitAdd} className="flex items-center gap-2">
-              <input type="hidden" name="jobId" value={job.id} /><input type="hidden" name="back" value={here} />
-              <Input type="date" name="date" className="w-36! sm:w-40!" aria-label="Date for the new visit (blank = unscheduled)" title="Blank = unscheduled" />
-              <Button variant="secondary">Add visit</Button>
-            </form>
-          )}>
+          <Card title="Visits" actions={job.visits.length > 0 && <span className="text-xs font-medium tabular-nums text-ink-soft">{job.visits.length} visit{job.visits.length === 1 ? "" : "s"}</span>}>
+            {!closed && (
+              <form action={visitAdd} className="mb-3 rounded-lg bg-tint p-3">
+                <input type="hidden" name="jobId" value={job.id} /><input type="hidden" name="back" value={here} />
+                <div className="flex items-end gap-2">
+                  <div className="min-w-0 flex-1 sm:max-w-56"><Field label="Add a visit on"><Input type="date" name="date" /></Field></div>
+                  <Button variant={primary === "add" ? "primary" : "secondary"}>Add visit</Button>
+                </div>
+                <p className="mt-1.5 text-xs text-ink-soft">Leave the date blank to add it without a day yet.</p>
+              </form>
+            )}
             {job.visits.length ? (
               <ul className="-my-1 divide-y divide-line-soft">
                 {job.visits.map((v) => {
@@ -149,7 +163,7 @@ export default async function JobPage({ params, searchParams }: PageProps<"/jobs
                         </span>
                       </div>
                       {open && (!v.snowEventId || !plan) && (
-                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <div className="relative mt-2 flex flex-wrap items-center gap-2">
                           {!v.snowEventId && (
                             <form action={visitSchedule} className="flex items-center gap-1">
                               <input type="hidden" name="id" value={v.id} /><input type="hidden" name="back" value={here} />
@@ -158,9 +172,9 @@ export default async function JobPage({ params, searchParams }: PageProps<"/jobs
                             </form>
                           )}
                           {!plan && (
-                            <details className="relative">
+                            <details>
                               <summary className={`list-none ${btn("secondary", small)}`}>Skip</summary>
-                              <form action={visitTransition} className="absolute left-0 z-10 mt-1 w-64 space-y-2 rounded-xl border border-line bg-white p-3 shadow-lift">
+                              <form action={visitTransition} className="absolute left-0 top-full z-10 mt-1 w-64 max-w-full space-y-2 rounded-xl border border-line bg-white p-3 shadow-lift">
                                 <input type="hidden" name="id" value={v.id} /><input type="hidden" name="to" value="SKIPPED" /><input type="hidden" name="back" value={here} />
                                 <select name="skipReason" className={inputCls} aria-label="Reason">{SKIP.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
                                 <input name="skipNote" placeholder="Note (optional)" aria-label="Note (optional)" maxLength={500} className={inputCls} />
@@ -174,7 +188,7 @@ export default async function JobPage({ params, searchParams }: PageProps<"/jobs
                   );
                 })}
               </ul>
-            ) : <Empty>{plan ? "Visits appear here when a storm starts." : closed ? "No visits on this job." : "No visits yet. Pick a date above and add the first one."}</Empty>}
+            ) : <Empty>{plan ? "Visits appear here when a storm starts." : closed ? "No visits on this job." : "No visits yet. Pick a day above and add the first one."}</Empty>}
           </Card>
 
           {plan ? (
