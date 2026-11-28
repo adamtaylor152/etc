@@ -17,7 +17,6 @@ import { signedMediaPath } from "@/server/media";
 import { SignaturePad } from "@/components/signature-pad";
 import { STATEMENTS } from "@/server/ops/signatures";
 import { autoPayPending, cardLabel } from "@/server/billing/autopay";
-import { parseSettings } from "@/server/settings";
 import { clientSignInvoice } from "./actions";
 
 export const metadata = { title: { absolute: "Your invoice · etc." } };
