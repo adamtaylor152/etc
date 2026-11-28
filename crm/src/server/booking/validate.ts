@@ -8,6 +8,7 @@ export const SERVICES = [
 ] as const;
 export const PLANS = ["One-time visit", "Every snowfall"] as const;
 export const PAYMENTS = ["Cash", "e-Transfer"] as const;
+export const DRIVE_SIZES = ["Standard", "Large", "Oversized"] as const; // missing = Standard (older forms)
 
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 const CTRL = /[\x00-\x09\x0b-\x1f\x7f]/g; // everything but \n
@@ -15,6 +16,7 @@ const CTRL = /[\x00-\x09\x0b-\x1f\x7f]/g; // everything but \n
 export type Booking = {
   name: string; email: string; phone: string; address: string; access: string; notes: string;
   plan: string; payment: string; date: string; services: string[]; icemelt: boolean; estimate: string;
+  size: string; extraWalk: boolean; // snow shovelling only: driveway size and corner lot / long sidewalk
   // optional geo from Places autocomplete (new; ignored if absent or outside Calgary)
   lat: number | null; lng: number | null; placeId: string; postalCode: string;
 };
@@ -65,28 +67,31 @@ export function validate(d: Record<string, unknown>, todayLocal: string): Bookin
     const yesterday = new Date(Date.parse(todayLocal + "T00:00:00Z") - 86_400_000).toISOString().slice(0, 10);
     if (b.date < yesterday) throw new BookingError("date is in the past");
   }
+  const size = !shovel ? "" : d.size == null || d.size === "" ? "Standard" : String(d.size);
+  if (shovel && !(DRIVE_SIZES as readonly string[]).includes(size)) throw new BookingError("pick a driveway size");
   const lat = typeof d.lat === "number" ? d.lat : null;
   const lng = typeof d.lng === "number" ? d.lng : null;
   const geoOk = lat != null && lng != null && inCalgary(lat, lng);
   const out: Booking = {
-    ...b, services: uniq, icemelt: shovel && d.icemelt === true, estimate: "",
+    ...b, services: uniq, icemelt: shovel && d.icemelt === true, estimate: "", size, extraWalk: shovel && size !== "Oversized" && d.extraWalk === true,
     lat: geoOk ? lat : null, lng: geoOk ? lng : null,
   };
   out.estimate = estimate(out);
   return out;
 }
 
-/** Prices are tax included. Only shovelling has a fixed price; everything else is quoted. */
-export function estimate(b: Pick<Booking, "services" | "plan" | "icemelt">): string {
+/** Prices are tax included. Shovelling has a fixed price by driveway size (oversized is quoted); everything else is quoted. */
+export function estimate(b: Pick<Booking, "services" | "plan" | "icemelt"> & Partial<Pick<Booking, "size" | "extraWalk">>): string {
   const quoted = b.services.filter((s) => s !== "Snow shovelling");
-  if (!b.services.includes("Snow shovelling")) return "Quote";
-  const base = b.plan === "Every snowfall" ? 30 : 35; // every-snowfall plan gets $5 off
-  const money = `$${base + (b.icemelt ? 5 : 0)}` + (b.plan === "Every snowfall" ? " / snowfall" : "");
+  if (!b.services.includes("Snow shovelling") || b.size === "Oversized") return "Quote";
+  const base = (b.plan === "Every snowfall" ? 30 : 35) + (b.size === "Large" ? 15 : 0); // every-snowfall plan gets $5 off; keep in sync with book.html
+  const money = `$${base + (b.icemelt ? 5 : 0) + (b.extraWalk ? 10 : 0)}` + (b.plan === "Every snowfall" ? " / snowfall" : "");
   return money + (quoted.length ? " + quote" : "");
 }
 
-export function serviceLines(b: Pick<Booking, "services" | "plan" | "icemelt">): string[] {
-  return b.services.map((s) => (s === "Snow shovelling" ? `${s} (${b.plan}${b.icemelt ? ", + ice melt" : ""})` : s));
+export function serviceLines(b: Pick<Booking, "services" | "plan" | "icemelt"> & Partial<Pick<Booking, "size" | "extraWalk">>): string[] {
+  const size = b.size && b.size !== "Standard" ? `, ${b.size.toLowerCase()} driveway` : "";
+  return b.services.map((s) => (s === "Snow shovelling" ? `${s} (${b.plan}${size}${b.extraWalk ? ", + extra sidewalk" : ""}${b.icemelt ? ", + ice melt" : ""})` : s));
 }
 
 export function whenText(b: Pick<Booking, "date" | "plan">): string {

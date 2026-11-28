@@ -28,9 +28,11 @@ export default async function Snow({ searchParams }: PageProps<"/snow">) {
     }) : [],
   ]);
   const active = plans.filter((p) => !p.planPausedAt);
+  const toCheck = await db.property.count({ where: { businessId: bid, sizeCheckedAt: null, archivedAt: null, jobs: { some: { closedAt: null, OR: [{ kind: "SNOW_PLAN" }, { kind: "ONE_OFF", title: { startsWith: "Snow" } }] } } } });
   return (
     <>
       <PageHeader title="Snow" sub={season ? `${season.name} · default trigger ${season.defaultTriggerCm} cm` : "No season covers today"} />
+      {toCheck > 0 && <Link href="/snow/sizes" className="mb-4 block rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm font-semibold text-amber-950">{toCheck} driveway{toCheck === 1 ? "" : "s"} need a size check before the next storm →</Link>}
       <div className="grid gap-5 lg:grid-cols-3">
         <div className="space-y-5 lg:col-span-2">
           <Card title="Storms">

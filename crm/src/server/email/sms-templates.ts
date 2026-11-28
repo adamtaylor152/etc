@@ -2,6 +2,7 @@
 import { db } from "../db";
 import { env } from "../env";
 import { mintToken } from "../tokens";
+import { dollars } from "../ops/drive-size";
 
 type Ctx = { businessId: string };
 const first = (n: string) => n.trim().split(" ")[0] || "there";
@@ -30,6 +31,13 @@ export const smsTemplates = {
     const v = await db.visit.findUniqueOrThrow({ where: { id: p.visitId }, include: { job: { include: { client: true } }, property: true } });
     const raw = await mintToken(db, ctx.businessId, "VISIT_CONFIRM", { visitId: v.id, clientId: v.job.clientId });
     return `Hi ${first(v.job.client.firstName)}, etc. is booked for ${v.property.formatted.split(",")[0]} tomorrow. Confirm or change: ${env.appUrl}/c/${raw} - etc.`;
+  },
+  "sms.price_change": async (p: { jobId: string }, ctx: Ctx) => {
+    const job = await db.job.findUniqueOrThrow({ where: { id: p.jobId }, include: { client: true, property: true } });
+    const pend = job.pendingPrice as { base: number; walk: number } | null;
+    const raw = await mintToken(db, ctx.businessId, "PRICE_CHANGE", { jobId: job.id, clientId: job.clientId });
+    const price = pend ? `${dollars(pend.base + pend.walk)}${job.kind === "SNOW_PLAN" ? " per snowfall" : ""}` : "a new price";
+    return `Hi ${first(job.client.firstName)}, we checked ${job.property.formatted.split(",")[0]}: it's bigger than a standard driveway, so it's ${price}. OK it or cancel (no charge): ${env.appUrl}/p/${raw} - etc.`;
   },
   "sms.campaign": async (p: { campaignId: string; clientId: string }) => {
     const c = await db.campaign.findUniqueOrThrow({ where: { id: p.campaignId } });

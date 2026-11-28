@@ -112,3 +112,20 @@ export function PlanRenewal({ name, season, price, url, site, phone }: { name: s
     </EtcEmail>
   );
 }
+
+export function PriceChange({ name, address, size, was, now, plan, url, site, phone }: { name: string; address: string; size: string; was: string; now: string; plan: boolean; url: string; site: string; phone: string }) {
+  return (
+    <EtcEmail title="Your snow clearing price" preheader={`Your driveway is bigger than a standard one: ${now}${plan ? " per snowfall" : ""}`}>
+      <Header right="Snow clearing" />
+      <tr>
+        <td className="px" style={{ padding: "32px 40px 26px" }}>
+          <Eyebrow>Before we start</Eyebrow>
+          <H1>Hi {firstName(name)}, we checked your driveway</H1>
+          <P>We had a look at {address}. It&apos;s a {size.toLowerCase()} driveway, so the price is {now}{plan ? " per snowfall" : ""} instead of {was}. Nothing changes until you say yes, and you can cancel at no charge.</P>
+          <Button href={url} label="See the price and choose" />
+        </td>
+      </tr>
+      <Footer site={site} phone={phone} reason="You're getting this because you booked snow clearing with etc." />
+    </EtcEmail>
+  );
+}

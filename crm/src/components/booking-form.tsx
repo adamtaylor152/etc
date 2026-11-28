@@ -20,6 +20,7 @@ export function BookingForm({ services, phone }: { services: Service[]; phone: s
     const body = {
       name: f.get("name"), email: f.get("email"), phone: f.get("phone"), address: f.get("address"), access: f.get("access"),
       services: picked, plan: shovel ? plan : "", icemelt: shovel && f.get("icemelt") === "on",
+      size: shovel ? f.get("size") : undefined, extraWalk: shovel && f.get("extraWalk") === "on",
       date: shovel && plan === "Every snowfall" ? "" : f.get("date"), notes: f.get("notes"), payment: f.get("payment"), website: f.get("website"), smsOptIn: f.get("smsOptIn") === "on",
     };
     const res = await fetch("/api/public/bookings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).catch(() => null);
@@ -68,7 +69,13 @@ export function BookingForm({ services, phone }: { services: Service[]; phone: s
           {["One-time visit", "Every snowfall"].map((p) => (
             <label key={p} className="flex items-center gap-2"><input type="radio" name="plan" checked={plan === p} onChange={() => setPlan(p)} className="size-5" /> {p}{p === "Every snowfall" && <span className="text-sm text-ink-soft"> ($5 off every time)</span>}</label>
           ))}
+          <p className="pt-1 text-sm font-semibold">How big is the driveway?</p>
+          {[["Standard", "1–2 car, front walk and steps"], ["Large", "3 car, extra long or wide (+$15)"], ["Oversized", "Acreage, back lane, shared or commercial (we'll quote)"]].map(([v, d], i) => (
+            <label key={v} className="flex items-center gap-2"><input type="radio" name="size" value={v} defaultChecked={i === 0} className="size-5" /> <span><b>{v}</b> <span className="text-sm text-ink-soft">{d}</span></span></label>
+          ))}
+          <label className="flex items-center gap-2"><input type="checkbox" name="extraWalk" className="size-5" /> Corner lot or extra sidewalk (+$10)</label>
           <label className="flex items-center gap-2"><input type="checkbox" name="icemelt" className="size-5" /> Add ice melt (+$5)</label>
+          <p className="text-xs text-ink-soft">Prices are for the size you pick. We check every driveway on the map before the first visit; if it&apos;s bigger, we&apos;ll send you the right price to OK first.</p>
         </fieldset>
       )}
       {!(shovel && plan === "Every snowfall") && <label className="block text-sm font-semibold">Preferred date (optional)<input name="date" type="date" className={input} /></label>}

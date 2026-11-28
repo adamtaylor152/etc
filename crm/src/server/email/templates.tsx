@@ -4,7 +4,7 @@ import type { ReactElement } from "react";
 import { BookingConfirmation, OwnerNewBooking, type BookingEmailProps } from "@/emails/booking";
 import { OwnerLogin } from "@/emails/login";
 import { InvoiceSent, OwnerPaymentReceived, PaymentReceipt, type InvoiceEmailData } from "@/emails/invoice";
-import { HubLink, OwnerNotice, PlanRenewal, QuoteApproved, QuoteSent, type QuoteEmailData } from "@/emails/quote";
+import { HubLink, OwnerNotice, PlanRenewal, PriceChange, QuoteApproved, QuoteSent, type QuoteEmailData } from "@/emails/quote";
 import { DailyDigest, ReviewRequest, VisitScheduled } from "@/emails/schedule";
 import { OnMyWay, OwnerSnowAlert, StormHeadsUp } from "@/emails/snow";
 import { OwnerPhotosUploaded, PhotoUploadRequest, VisitDone } from "@/emails/visit";
@@ -19,6 +19,7 @@ import { CampaignEmail } from "@/emails/campaign";
 import { clickUrl, openPixelUrl, unsubscribeUrl, type Block } from "../ops/campaigns";
 import { env } from "../env";
 import { mintToken } from "../tokens";
+import { currentCharge, dollars, SIZES, type Pending } from "../ops/drive-size";
 
 type Ctx = { businessId: string; to: string };
 type Template<P> = { subject: (p: P) => string; render: (p: P, ctx: Ctx) => Promise<ReactElement> };
@@ -203,6 +204,17 @@ const ownerNotice: Template<{ title: string; body: string; path: string }> = {
   },
 };
 
+const priceChange: Template<{ jobId: string }> = {
+  subject: () => "Your snow clearing price (please confirm)",
+  async render(p, ctx) {
+    const job = await db.job.findUniqueOrThrow({ where: { id: p.jobId }, include: { client: true, property: true, lineItems: true } });
+    const pend = job.pendingPrice as unknown as Pending;
+    const was = currentCharge(job.lineItems);
+    const raw = await mintToken(db, ctx.businessId, "PRICE_CHANGE", { jobId: job.id, clientId: job.clientId });
+    return <PriceChange name={clientName(job.client)} address={job.property.formatted.split(",")[0]} size={SIZES[pend.size].short} was={dollars(was.base + was.walk)} now={dollars(pend.base + pend.walk)} plan={job.kind === "SNOW_PLAN"} url={`${env.appUrl}/p/${raw}`} site={env.siteUrl} phone={env.phone} />;
+  },
+};
+
 const hubLink: Template<{ clientId: string }> = {
   subject: () => "Your etc. page (visits, photos, invoices)",
   async render(p, ctx) {
@@ -296,6 +308,7 @@ export const templates = {
   "owner.notice": ownerNotice,
   "campaign.email": campaignEmail,
   "hub.link": hubLink,
+  "price.change": priceChange,
   "visit.scheduled": visitScheduled,
   "visit.reminder": visitReminder,
   "review.request": reviewRequest,

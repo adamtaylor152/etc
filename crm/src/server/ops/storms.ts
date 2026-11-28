@@ -18,7 +18,7 @@ type Actor = { id: string; businessId: string };
 /** Create visits for push `push` of this storm. Returns how many new visits were created. */
 async function generate(tx: Tx, ev: SnowEvent & { season: { defaultTriggerCm: number } }, cm: number, push: number, day: string) {
   const plans = await tx.job.findMany({
-    where: { businessId: ev.businessId, kind: "SNOW_PLAN", seasonId: ev.seasonId, closedAt: null, planPausedAt: null },
+    where: { businessId: ev.businessId, kind: "SNOW_PLAN", seasonId: ev.seasonId, closedAt: null, planPausedAt: null, sizeHoldAt: null }, // held = waiting on a new-price OK
     include: { property: { select: { routeSort: true } } },
   });
   const hit = plansTriggered(plans, cm, ev.season.defaultTriggerCm);
@@ -35,7 +35,7 @@ async function generate(tx: Tx, ev: SnowEvent & { season: { defaultTriggerCm: nu
     await tx.visit.updateMany({
       where: {
         businessId: ev.businessId, snowEventId: null, state: "SCHEDULED",
-        job: { kind: "ONE_OFF", closedAt: null, title: { startsWith: "Snow" } },
+        job: { kind: "ONE_OFF", closedAt: null, sizeHoldAt: null, title: { startsWith: "Snow" } },
         OR: [{ scheduledDate: null }, { scheduledDate: { lte: toDbDate(day) } }],
       },
       data: { snowEventId: ev.id, scheduledDate: toDbDate(day) },

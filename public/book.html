@@ -185,7 +185,15 @@
           <label class="choice"><input type="radio" name="plan" value="One-time visit" checked><div><b>One-time</b><span>Just this once</span></div><span class="price">$35</span></label>
           <label class="choice"><input type="radio" name="plan" value="Every snowfall"><div><b>Every snowfall</b><span>We come automatically all winter</span></div><span class="price">$30</span></label>
         </div>
+        <div class="group-title">How big is the driveway?</div>
+        <div class="choices">
+          <label class="choice"><input type="radio" name="size" value="Standard" checked><div><b>Standard</b><span>1–2 car driveway, front walk and steps</span></div><span class="price" data-size="0"></span></label>
+          <label class="choice"><input type="radio" name="size" value="Large"><div><b>Large</b><span>3 car, extra long or wide</span></div><span class="price" data-size="15"></span></label>
+          <label class="choice"><input type="radio" name="size" value="Oversized"><div><b>Oversized</b><span>Acreage, back lane, shared or commercial</span></div><span class="price">Quote</span></label>
+        </div>
+        <label class="choice" id="walk-opt"><input type="checkbox" name="extraWalk" value="yes"><div><b>Corner lot or extra sidewalk</b><span>Long public sidewalk, side walk or back walkway</span></div><span class="price">+$10</span></label>
         <label class="choice"><input type="checkbox" name="icemelt" value="yes"><div><b>Add ice melt</b><span>Pet-safe, works down to –31°C</span></div><span class="price">+$5</span></label>
+        <p class="muted" style="font-size:.9rem;margin:-6px 0 14px">Prices are for the size you pick. We check every driveway on the map before the first visit; if it's bigger, we'll send you the right price to OK first.</p>
       </div>
       <div class="choices">
         <label class="choice"><input type="checkbox" name="services" value="Commercial snow removal"><div><b>Commercial snow removal</b><span>Storefronts, lots and pathways</span></div><span class="price">Quote</span></label>
@@ -292,6 +300,16 @@
     form.plan.value = "One-time visit";
     form.date.value = preDate;
   }
+  // Size prices follow the plan: one-time $35/$50, every snowfall $30/$45 (keep in sync with the CRM's estimate()).
+  function syncSize() {
+    const base = form.plan.value === "Every snowfall" ? 30 : 35;
+    form.querySelectorAll("[data-size]").forEach(el => el.textContent = `$${base + Number(el.dataset.size)}`);
+    const big = form.size.value === "Oversized";
+    $("walk-opt").hidden = big;
+    if (big) form.extraWalk.checked = false;
+  }
+  form.querySelectorAll("[name=plan], [name=size]").forEach(el => el.addEventListener("change", syncSize));
+  syncSize();
   const syncShovel = () => $("shovel-opts").hidden = !$("svc-shovel").checked;
   $("svc-shovel").addEventListener("change", syncShovel);
   syncShovel();
@@ -382,14 +400,15 @@
     const services = [...form.querySelectorAll("[name=services]:checked")].map(c => c.value);
     const shovel = services.includes("Snow shovelling");
     const ice = shovel && form.icemelt.checked;
-    const perVisit = shovel ? (form.plan.value === "Every snowfall" ? 30 : 35) + (ice ? 5 : 0) : 0; // keep in sync with server.py estimate()
-    const quoted = services.filter(s => s !== "Snow shovelling");
+    const size = form.size.value, big = shovel && size === "Oversized", walk = shovel && !big && form.extraWalk.checked;
+    const perVisit = shovel && !big ? (form.plan.value === "Every snowfall" ? 30 : 35) + (size === "Large" ? 15 : 0) + (ice ? 5 : 0) + (walk ? 10 : 0) : 0; // keep in sync with the CRM's estimate()
+    const quoted = services.filter(s => s !== "Snow shovelling" || big);
     return {
       raw: services,
       name: form.elements.name.value.trim(), email: form.email.value.trim(), phone: form.phone.value.trim(),
       address: form.address.value.trim(), access: form.access.value.trim(),
-      services: services.map(s => s === "Snow shovelling" ? `Snow shovelling (${form.plan.value}${ice ? ", + ice melt" : ""})` : s),
-      shovel, every: shovel && form.plan.value === "Every snowfall", perVisit, quoted,
+      services: services.map(s => s === "Snow shovelling" ? `Snow shovelling (${form.plan.value}, ${size.toLowerCase()} driveway${walk ? ", + extra sidewalk" : ""}${ice ? ", + ice melt" : ""})` : s),
+      size, walk, shovel: shovel && !big, every: shovel && form.plan.value === "Every snowfall", perVisit, quoted,
       date: form.date.value, notes: form.notes.value.trim(), payment: form.payment.value,
     };
   }
@@ -432,7 +451,7 @@
     btn.disabled = true; btn.textContent = "Sending…"; $("error").textContent = "";
     const payload = JSON.stringify({
       name: d.name, email: d.email, phone: d.phone, address: d.address, access: d.access,
-      services: d.raw, plan: form.plan.value, icemelt: form.icemelt.checked,
+      services: d.raw, plan: form.plan.value, icemelt: form.icemelt.checked, size: d.raw.includes("Snow shovelling") ? d.size : undefined, extraWalk: d.walk,
       date: d.date, notes: d.notes, payment: d.payment, website: form.website.value, smsOptIn: !!d.phone && form.smsOptIn.checked, offers: form.offers.checked, ...(geo || {}),
       slot: pickedSlot && d.quoted.length ? (pickedSlot.window ? { date: pickedSlot.date, window: pickedSlot.window } : { date: pickedSlot.date, start: pickedSlot.start }) : undefined,
       ref: new URLSearchParams(location.search).get("ref") || localStorage.getItem("etcRef") || undefined, // referral code from a friend's link
