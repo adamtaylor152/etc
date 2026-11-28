@@ -10,7 +10,7 @@ import { QuoteLinesEditor } from "@/components/quote-lines";
 import { RecordPanel } from "@/components/record-panel";
 import { Badge, Button, Card, Dl, Field, Input, PageHeader, Textarea, inputCls } from "@/components/ui";
 import { dateOnly, prettyDate, prettyDateTime, todayLocal } from "@/server/dates";
-import { businessId, db } from "@/server/db";
+import { business, businessId, db } from "@/server/db";
 import { money } from "@/server/money";
 import { clientName } from "@/server/queries";
 import { quoteEditable, quoteExpired } from "@/server/status/quote";
@@ -21,6 +21,7 @@ export default async function QuotePage({ params, searchParams }: PageProps<"/qu
   const { id } = await params;
   const sp = await searchParams;
   const bid = await businessId();
+  const biz = await business();
   const q = await db.quote.findFirst({ where: { id, businessId: bid }, include: { client: true, property: true, request: true, lineItems: { orderBy: { sortOrder: "asc" } } } });
   if (!q) notFound();
   const [services, photos] = await Promise.all([
@@ -100,6 +101,7 @@ export default async function QuotePage({ params, searchParams }: PageProps<"/qu
                 </tbody>
                 <tfoot className="border-t-2 border-navy">
                   {q.discountCents > 0 && <tr><td colSpan={2} className="pt-2 text-ink-soft">Discount</td><td className="pt-2 text-right">−{money(q.discountCents)}</td></tr>}
+                  {q.taxCents > 0 && <tr><td colSpan={2} className="pt-2 text-ink-soft">{biz.taxName}{biz.pricesIncludeTax ? " (included)" : ""}</td><td className="pt-2 text-right">{money(q.taxCents)}</td></tr>}
                   <tr><td colSpan={2} className="pt-2 font-semibold">Total</td><td className="pt-2 text-right font-display text-xl font-bold">{money(q.totalCents)}</td></tr>
                 </tfoot>
               </table>
