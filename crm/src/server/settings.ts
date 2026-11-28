@@ -21,6 +21,7 @@ export const SettingsSchema = z.object({
   assignmentAlerts: z.boolean().default(true),      // tell the assigned person when an owner assigns or moves their work
   reminderDaysBefore: z.coerce.number().int().min(1).max(7).default(1), // first visit reminder: this many days ahead...
   reminderHour: z.coerce.number().int().min(6).max(21).default(17),     // ...at this hour (Calgary time)
+  clientReschedule: z.boolean().default(false),      // clients can move their own visit to an open window from the reminder link
   reminderMorningOf: z.boolean().default(false),    // second reminder at 7am on the day
   arrivalWindows: z.array(z.object({
     key: z.string().regex(/^[a-z0-9_-]{1,20}$/), label: z.string().trim().min(1).max(20),
@@ -50,6 +51,7 @@ export const SETTING_LABELS: Record<ToggleKey, [string, string]> = {
   dailyDigest: ["6am daily digest", "Today’s visits, late work, unbilled charges and failed emails."],
   quoteFollowUp: ["Quote follow-up", "One reminder 3 days after sending if the client hasn’t answered."],
   visitReminders: ["Visit reminders", "Reminder before scheduled visits (not snow), by email and text. Clients can confirm with a tap or by replying YES."],
+  clientReschedule: ["Clients can reschedule themselves", "The “confirm or change” link in reminders lets a client pick another open day and arrival window (when the people on the visit are free). You get a notice. Off: they can only ask."],
   reminderMorningOf: ["Morning-of reminder", "A second reminder at 7 am on the day of the visit."],
   assignmentAlerts: ["Assignment alerts to the team", "Emails the person you assign or move work for (and texts them, if their team record has a phone): what, where, when and a link to their route. Never prices."],
   smsUpdates: ["Text updates", "Texts “on the way”, “all done” (with photos link) and storm days to clients who said yes to texts. Needs Telnyx keys."],
