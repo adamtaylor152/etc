@@ -73,7 +73,7 @@ export function QuoteLinesEditor({ lines, services = [], options = [], quoteId }
           <div key={i} className={`group/line ${grid} py-3 has-[.line-name:placeholder-shown]:py-2 sm:items-start`}>
             <div className="col-span-3 space-y-1.5 sm:col-span-1">
               <input name={`line_${i}_name`} defaultValue={l.name} list="quote-services" onChange={(e) => fill(i, e.currentTarget)} placeholder={i < lines.length ? "Item name" : "Add an item"} aria-label={`Item ${i + 1} name`} className={`line-name ${inputCls}`} />
-              <input name={`line_${i}_desc`} defaultValue={l.description ?? ""} placeholder="Details (optional)" aria-label={`Item ${i + 1} details`} className="w-full min-h-9 group-has-[.line-name:placeholder-shown]/line:hidden rounded-lg border border-line bg-white px-3 py-1.5 text-base outline-none hover:border-ink-faint/60 focus:border-blue focus:ring-2 focus:ring-blue/20 sm:text-[13px]" />
+              <input name={`line_${i}_desc`} defaultValue={l.description ?? ""} placeholder="Details (optional)" aria-label={`Item ${i + 1} details`} className="w-full min-h-9 max-sm:min-h-11 group-has-[.line-name:placeholder-shown]/line:hidden rounded-lg border border-line bg-white px-3 py-1.5 text-base outline-none hover:border-ink-faint/60 focus:border-blue focus:ring-2 focus:ring-blue/20 sm:text-[13px]" />
               {(withOptions || quoteId) && (
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[13px] group-has-[.line-name:placeholder-shown]/line:hidden">
                   {withOptions && (

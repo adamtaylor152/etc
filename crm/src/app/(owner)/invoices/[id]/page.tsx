@@ -78,7 +78,7 @@ export default async function InvoicePage({ params, searchParams }: PageProps<"/
   // Everything that isn't the next step lives under More.
   const more: MenuItem[] = [
     ...(inv.status === "DRAFT" ? [{ label: "Mark sent (no email)", action: invoiceMarkSent, fields }] : []),
-    { label: "Client view", action: viewAsClient, fields },
+    { label: "View as the client", action: viewAsClient, fields },
     ...(inv.status === "AWAITING_PAYMENT" ? [{ divider: true as const }, { label: "Write off", action: invoiceBadDebt, fields: { ...fields, bad: "1" }, confirm: "Write this invoice off as bad debt? You can undo it later." }] : []),
     ...(inv.status === "BAD_DEBT" ? [{ divider: true as const }, { label: "Undo write-off", action: invoiceBadDebt, fields: { ...fields, bad: "0" } }] : []),
     ...(open && !holdsMoney ? [...(inv.status === "DRAFT" ? [{ divider: true as const }] : []), { label: "Void invoice", action: invoiceVoid, fields, danger: true, confirm: "Void this invoice? Its charges go back to unbilled." }] : []),
@@ -238,7 +238,7 @@ export default async function InvoicePage({ params, searchParams }: PageProps<"/
                         <div className="mt-1 flex flex-wrap items-start gap-x-4 gap-y-1 text-xs">
                           {canRefund && (
                             <details className="open:basis-full">
-                              <summary className="inline-flex min-h-8 items-center font-semibold text-blue hover:text-blue-deep">Refund</summary>
+                              <summary className="inline-flex min-h-8 max-sm:min-h-11 items-center font-semibold text-blue hover:text-blue-deep">Refund</summary>
                               {route.via === "none" ? <p className="mt-1 max-w-[70ch] text-xs text-ink-soft">{route.why}</p> : (
                                 <form action={paymentRefund} className="mt-2 space-y-2 rounded-lg bg-tint p-3">
                                   <input type="hidden" name="id" value={p.id} /><input type="hidden" name="back" value={here} /><input type="hidden" name="already" value={p.refundedCents} />
@@ -257,7 +257,7 @@ export default async function InvoicePage({ params, searchParams }: PageProps<"/
                               )}
                             </details>
                           )}
-                          {canRemove && <form action={paymentDelete}><input type="hidden" name="id" value={p.id} /><input type="hidden" name="back" value={here} /><ConfirmButton message="Remove this payment? The invoice will show the amount as owing again." className="inline-flex min-h-8 items-center font-semibold text-ink-soft hover:text-red-700">Remove</ConfirmButton></form>}
+                          {canRemove && <form action={paymentDelete}><input type="hidden" name="id" value={p.id} /><input type="hidden" name="back" value={here} /><ConfirmButton message="Remove this payment? The invoice will show the amount as owing again." className="inline-flex min-h-8 max-sm:min-h-11 items-center font-semibold text-ink-soft hover:text-red-700">Remove</ConfirmButton></form>}
                         </div>
                       )}
                     </li>

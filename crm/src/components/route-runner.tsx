@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Camera, Check, ChevronDown, ClipboardCheck, MapPin, Navigation, Phone, RotateCcw, SkipForward, TriangleAlert, Truck, WifiOff } from "lucide-react";
 import type { RunStop } from "@/server/runner";
+import { SKIP_LABEL } from "@/server/status/visit";
 
 type Action = { id: string; visitId: string; to: "EN_ROUTE" | "IN_PROGRESS" | "COMPLETED" | "SKIPPED" | "RETURN"; depthCm?: number | null; iceMeltApplied?: boolean | null; iceMeltBags?: number | null; billable?: boolean; skipReason?: string; skipNote?: string; lat?: number | null; lng?: number | null };
 const QKEY = "etc-run-queue", PKEY = "etc-run-autotext";
@@ -228,7 +229,8 @@ export function RouteRunner({ date, initial }: { date: string; initial: RunStop[
             <p className="mt-2 text-sm text-white/70">Pick why. The office sees the reason and your note.</p>
             <input value={skipNote} onChange={(e) => setSkipNote(e.target.value)} maxLength={500} placeholder="Note for the office (optional)" aria-label="Note for the office (optional)" className="mt-2 min-h-12 w-full rounded-xl border border-white/25 bg-white px-3 text-base text-night focus-visible:outline-sky" />
             <div className="mt-2 grid grid-cols-2 gap-2">
-              {[["ALREADY_CLEARED", "Already clear"], ["BLOCKED_BY_CAR", "Car in the way"], ["NO_ACCESS", "Can't get in"], ["CLIENT_CANCELLED", "Client cancelled"], ["OTHER", "Too big for the price"]].map(([k, l]) => (
+              {/* "Other" is the crew's way to say the job is bigger than its price: that wording stays theirs. */}
+              {([["ALREADY_CLEARED", SKIP_LABEL.ALREADY_CLEARED], ["BLOCKED_BY_CAR", SKIP_LABEL.BLOCKED_BY_CAR], ["NO_ACCESS", SKIP_LABEL.NO_ACCESS], ["CLIENT_CANCELLED", SKIP_LABEL.CLIENT_CANCELLED], ["OTHER", "Too big for the price"]] as const).map(([k, l]) => (
                 <button type="button" key={k} onClick={() => { act(cur, "SKIPPED", { skipReason: k, ...(skipNote.trim() ? { skipNote: skipNote.trim() } : {}) }); setSkipNote(""); }} className={`${tile} text-center leading-tight last:odd:col-span-2`}>{l}</button>
               ))}
             </div>

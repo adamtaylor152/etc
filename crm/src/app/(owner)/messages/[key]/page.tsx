@@ -153,7 +153,7 @@ function PhotoLinks({ messageKey, messageId, media, jobs, quotes, canLink, out }
       <Link href={href} className="hover:underline">Filed on {label}</Link>
       <form action={textPhotosLink}>
         <input type="hidden" name="key" value={messageKey} /><input type="hidden" name="messageId" value={messageId} /><input type="hidden" name="target" value={target} />
-        <button className="grid size-7 place-items-center rounded-full hover:bg-emerald-100" aria-label={`Remove from ${label}`} title={`Remove from ${label}`}><X className="size-3.5" aria-hidden /></button>
+        <button className="grid size-7 max-sm:size-11 place-items-center rounded-full hover:bg-emerald-100" aria-label={`Remove from ${label}`} title={`Remove from ${label}`}><X className="size-3.5" aria-hidden /></button>
       </form>
     </span>
   );
@@ -164,7 +164,7 @@ function PhotoLinks({ messageKey, messageId, media, jobs, quotes, canLink, out }
       {canLink ? (
         (jobs.length > 0 || quotes.length > 0) ? (
           <details className="relative">
-            <summary className="list-none inline-flex min-h-8 cursor-pointer items-center gap-1 rounded-full border border-line bg-white px-3 text-xs font-semibold text-navy hover:border-ink-faint/60 hover:bg-tint"><Plus className="size-3.5 text-ink-soft" aria-hidden />Add to a job or quote</summary>
+            <summary className="list-none inline-flex min-h-8 max-sm:min-h-11 cursor-pointer items-center gap-1 rounded-full border border-line bg-white px-3 text-xs font-semibold text-navy hover:border-ink-faint/60 hover:bg-tint"><Plus className="size-3.5 text-ink-soft" aria-hidden />Add to a job or quote</summary>
             <form action={textPhotosLink} className={`absolute z-10 mt-1 w-72 max-w-[80vw] space-y-2 rounded-xl border border-line bg-white p-3 text-sm shadow-lg ${out ? "right-0" : "left-0"}`}>
               <input type="hidden" name="key" value={messageKey} /><input type="hidden" name="messageId" value={messageId} />
               {media.length > 1 && (

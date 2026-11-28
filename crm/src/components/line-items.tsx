@@ -43,7 +43,7 @@ export function LineItems({ services, initial = [], label = "Line items", dated 
             <label className="block"><span className={mini}>Qty</span><input name="lineQty" type="number" step="0.25" min="0" value={r.qty} onChange={(e) => set(i, { qty: e.target.value })} aria-label="Quantity" className={`${inputCls} tabular-nums`} /></label>
             <label className="block"><span className={mini}>Unit price</span><input name="linePrice" type="number" step="0.01" min="0" value={r.price} onChange={(e) => set(i, { price: e.target.value })} placeholder="$" aria-label="Unit price" className={`${inputCls} tabular-nums`} /></label>
             <span className="self-end text-right text-sm font-semibold tabular-nums max-sm:pb-2.5 sm:mt-2.5 sm:self-start"><span className={mini}>Total</span>{fmt(Math.round((Number(r.qty) || 0) * (Number(r.price) || 0) * 100))}</span>
-            <button type="button" onClick={() => setRows(rows.length > 1 ? rows.filter((_, j) => j !== i) : [{ ...blank }])} aria-label="Remove line" className="grid size-9 place-items-center self-end rounded-lg text-ink-soft hover:bg-red-50 hover:text-red-700 max-sm:mb-0.5 sm:mt-0.5 sm:self-start"><Trash2 className="size-4" aria-hidden /></button>
+            <button type="button" onClick={() => setRows(rows.length > 1 ? rows.filter((_, j) => j !== i) : [{ ...blank }])} aria-label="Remove line" className="grid size-9 max-sm:size-11 place-items-center self-end rounded-lg text-ink-soft hover:bg-red-50 hover:text-red-700 max-sm:mb-0.5 sm:mt-0.5 sm:self-start"><Trash2 className="size-4" aria-hidden /></button>
           </div>
         ))}
       </div>

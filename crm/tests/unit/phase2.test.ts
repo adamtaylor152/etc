@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readdirSync, readFileSync } from "node:fs";
-import { EVENT_TITLE, eventTitle, mergeFeed, type FeedItem } from "@/server/activity";
+import { EVENT_TITLE, eventTitle, mergeFeed, reasonLabel, type FeedItem } from "@/server/activity";
+import { SKIP_LABEL, skipLabel } from "@/server/status/visit";
 import { ledger } from "@/server/billing/ledger";
 import { cleanContactPoints, numbersOf } from "@/server/clients";
 import { cdrToCall } from "@/server/ops/calls";
@@ -39,6 +40,15 @@ describe("activity merge", () => {
     expect(eventTitle("storm.cancelled")).toBe("Storm cancelled");
     expect(eventTitle("visit.return_added")).toBe("Return visit added");
     expect(eventTitle("visit.something_new")).toBe("Visit something new");
+  });
+  it("names a skip reason one way everywhere, and never shows a raw code", () => {
+    // Every reason the office form and the crew's route can store has a label.
+    for (const r of ["ALREADY_CLEARED", "BLOCKED_BY_CAR", "NO_ACCESS", "BELOW_TRIGGER", "CLIENT_CANCELLED", "WEATHER", "OTHER"]) expect(Object.keys(SKIP_LABEL)).toContain(r);
+    expect(skipLabel("BLOCKED_BY_CAR")).toBe("Car in the way");
+    expect(reasonLabel("BLOCKED_BY_CAR")).toBe("Car in the way");
+    expect(reasonLabel("SOME_OTHER_CODE")).toBe("some other code");
+    expect(reasonLabel("Client asked us to hold off")).toBe("Client asked us to hold off");
+    expect(skipLabel("Old free text")).toBe("Old free text");
   });
   it("has a label for every event the code logs", () => {
     const logged = new Set<string>();

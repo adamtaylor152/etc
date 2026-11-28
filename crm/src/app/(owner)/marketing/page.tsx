@@ -12,6 +12,7 @@ import { cad } from "@/server/money";
 import { clientName } from "@/server/queries";
 import { AUTOMATION_KEYS, AUTOMATIONS } from "@/server/ops/automations";
 import { parseSettings } from "@/server/settings";
+import { SKIP_LABEL } from "@/server/status/visit";
 import { saveMarketingSettings } from "./actions";
 
 export const metadata = { title: "Marketing" };
@@ -141,9 +142,9 @@ export default async function Marketing({ searchParams }: PageProps<"/marketing"
                   <H3>Skipped visits</H3>
                   <SwitchRow name="skipNotice" defaultChecked={s.skipNotice} label="Tell the client when a visit is skipped" description="By text and email, when it was skipped because:">
                     <div className="flex flex-wrap gap-x-5">
-                      {([["BLOCKED_BY_CAR", "a car was in the way"], ["NO_ACCESS", "we couldn’t get in"], ["WEATHER", "the weather"]] as const).map(([k, l]) => <label key={k} className="flex min-h-10 items-center gap-2"><input type="checkbox" name="skipNoticeReasons" value={k} defaultChecked={s.skipNoticeReasons.includes(k)} className="size-5" />{l}</label>)}
+                      {(["BLOCKED_BY_CAR", "NO_ACCESS", "WEATHER"] as const).map((k) => [k, SKIP_LABEL[k].toLowerCase()] as const).map(([k, l]) => <label key={k} className="flex min-h-10 items-center gap-2"><input type="checkbox" name="skipNoticeReasons" value={k} defaultChecked={s.skipNoticeReasons.includes(k)} className="size-5" />{l}</label>)}
                     </div>
-                    <p className="max-w-[70ch] text-xs text-ink-soft">Says what happened, that there&apos;s no charge, and what to do next. Never sent for “already clear”, “below trigger”, “client cancelled” or “other”. Goes 3 minutes after the skip; reopening the visit in that time stops it.</p>
+                    <p className="max-w-[70ch] text-xs text-ink-soft">Says what happened, that there&apos;s no charge, and what to do next. Never sent for “already cleared”, “below the trigger depth”, “client cancelled” or “other”. Goes 3 minutes after the skip; reopening the visit in that time stops it.</p>
                   </SwitchRow>
                 </div>
               </div>
