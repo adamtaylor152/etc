@@ -90,7 +90,7 @@ export async function claimReschedule(businessId: string, visit: { id: string; a
   return w && freeInWindow(await visitAvailability(businessId, visit, date, date), date, w) ? w : null;
 }
 
-/** What the client is told: "Monday, November 30, Early (6–11 am)" or "... at 10:00 am". */
+/** What the client is told: "Monday, November 30, Early (6–11 a.m.)" or "... at 10:00 a.m.". */
 export function slotText(slot: { date: string; start: number; window: { label: string; hint: string } | null }) {
   const day = new Date(`${slot.date}T12:00:00Z`).toLocaleDateString("en-CA", { weekday: "long", month: "long", day: "numeric", timeZone: "UTC" });
   return slot.window ? `${day}, ${slot.window.label} (${slot.window.hint})` : `${day} at ${fmtMin(slot.start)}`;

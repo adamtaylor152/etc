@@ -20,9 +20,10 @@ export function duration(min: number) {
 /** "9:15am" in Calgary time. */
 export const clock = (d: Date) => d.toLocaleTimeString("en-US", { timeZone: TZ, hour: "numeric", minute: "2-digit" }).replace(/\s/g, "").toLowerCase();
 
-/** A 30-minute window around an arrival, on the quarter hour, so we never promise a precise time: 9:22 -> "9:00-9:30am". */
+/** A 30-minute window around an arrival, on the quarter hour, so we never promise a precise time: 9:22 -> "9:00–9:30 a.m.". */
 export function etaWindow(arrival: Date) {
   const q = 15 * 60_000, mid = Math.round(arrival.getTime() / q) * q;
   const from = clock(new Date(mid - q)), to = clock(new Date(mid + q));
-  return `${from.slice(-2) === to.slice(-2) ? from.slice(0, -2) : from}-${to}`; // one am/pm when both ends share it
+  const dot = (t: string) => `${t.slice(0, -2)} ${t.slice(-2) === "am" ? "a.m." : "p.m."}`;
+  return `${from.slice(-2) === to.slice(-2) ? from.slice(0, -2) : dot(from)}–${dot(to)}`; // one a.m./p.m. when both ends share it
 }

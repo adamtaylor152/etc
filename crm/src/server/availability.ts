@@ -8,7 +8,7 @@ export type TimeOffRow = { userId: string | null; startDate: string; endDate: st
 export type Busy = { id: string; userIds: string[]; date: string; start: number | null; end: number | null; label: string; lat?: number | null; lng?: number | null };
 
 export const toMin = (hm: string) => { const [h, m] = hm.split(":").map(Number); return h * 60 + (m || 0); };
-export const fmtMin = (m: number) => `${Math.floor(m / 60) % 12 || 12}:${String(m % 60).padStart(2, "0")} ${m >= 720 ? "pm" : "am"}`;
+export const fmtMin = (m: number) => `${Math.floor(m / 60) % 12 || 12}:${String(m % 60).padStart(2, "0")} ${m >= 720 ? "p.m." : "a.m."}`;
 export const weekday = (date: string) => new Date(`${date}T12:00:00Z`).getUTCDay();
 
 /** Calgary-local date and minutes-from-midnight for an instant. */

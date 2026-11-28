@@ -54,7 +54,7 @@ describe("booking slots", () => {
   });
   it("tells the client the window, not the planned time", () => {
     expect(slotText({ date: MON, start: 540, window: { label: "Early", hint: "6–11 am" } })).toBe("Monday, December 7, Early (6–11 am)");
-    expect(slotText({ date: MON, start: 540, window: null })).toBe("Monday, December 7 at 9:00 am");
+    expect(slotText({ date: MON, start: 540, window: null })).toBe("Monday, December 7 at 9:00 a.m.");
   });
 });
 

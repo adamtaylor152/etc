@@ -71,7 +71,7 @@ export default async function AutomationPage({ params, searchParams }: PageProps
                   ? <button name="next" value="off" className={btn("danger")}>Switch off</button>
                   : <Button name="next" value="on">Switch on{dueNow ? ` (${dueNow} due now)` : ""}</Button>}
               </div>
-              <p className="text-xs text-ink-soft">Runs hourly between 9 am and 7 pm. Emails already in the outbox still go out after switching off.</p>
+              <p className="text-xs text-ink-soft">Runs hourly between 9 a.m. and 7 p.m. Emails already in the outbox still go out after switching off.</p>
             </div>
           </Card>
 

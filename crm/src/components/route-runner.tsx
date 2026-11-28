@@ -230,7 +230,7 @@ export function RouteRunner({ date, initial }: { date: string; initial: RunStop[
             <input value={skipNote} onChange={(e) => setSkipNote(e.target.value)} maxLength={500} placeholder="Note for the office (optional)" aria-label="Note for the office (optional)" className="mt-2 min-h-12 w-full rounded-xl border border-white/25 bg-white px-3 text-base text-night focus-visible:outline-sky" />
             <div className="mt-2 grid grid-cols-2 gap-2">
               {/* "Other" is the crew's way to say the job is bigger than its price: that wording stays theirs. */}
-              {([["ALREADY_CLEARED", SKIP_LABEL.ALREADY_CLEARED], ["BLOCKED_BY_CAR", SKIP_LABEL.BLOCKED_BY_CAR], ["NO_ACCESS", SKIP_LABEL.NO_ACCESS], ["CLIENT_CANCELLED", SKIP_LABEL.CLIENT_CANCELLED], ["OTHER", "Too big for the price"]] as const).map(([k, l]) => (
+              {([["ALREADY_CLEARED", SKIP_LABEL.ALREADY_CLEARED], ["BLOCKED_BY_CAR", SKIP_LABEL.BLOCKED_BY_CAR], ["NO_ACCESS", SKIP_LABEL.NO_ACCESS], ["CLIENT_CANCELLED", SKIP_LABEL.CLIENT_CANCELLED], ["OTHER", "Too big for the price"]] as const).filter(([k]) => k !== "ALREADY_CLEARED" || cur.snow).map(([k, l]) => (
                 <button type="button" key={k} onClick={() => { act(cur, "SKIPPED", { skipReason: k, ...(skipNote.trim() ? { skipNote: skipNote.trim() } : {}) }); setSkipNote(""); }} className={`${tile} text-center leading-tight last:odd:col-span-2`}>{l}</button>
               ))}
             </div>

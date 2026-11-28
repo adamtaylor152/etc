@@ -293,7 +293,7 @@ export default async function ClientPage({ params, searchParams }: PageProps<"/c
                       <a className={link} href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(p.formatted)}`} target="_blank" rel="noreferrer">{p.label ? `${p.label}: ` : ""}{p.formatted}</a>
                       <div className="mt-0.5 text-xs text-ink-soft">{[p.isDefault && "Main", p.community?.name ?? "No community", p.gateCode && `Gate ${p.gateCode}`, p.accessNotes, p.petNotes && `Pets: ${p.petNotes}`, siteFacts(p)].filter(Boolean).join(" · ")}</div>
                       <div className="mt-1 flex gap-4">
-                        <Link href={`/properties/${p.id}/edit`} className={`${quiet} hover:text-navy`}>Edit</Link>
+                        <Link href={`/properties/${p.id}/edit`} className={`${quiet} hover:text-navy max-sm:inline-flex max-sm:min-h-11 max-sm:items-center`}>Edit</Link>
                         {c.properties.length > 1 && <form action={propertyArchive}><input type="hidden" name="id" value={p.id} /><input type="hidden" name="archive" value="1" /><ConfirmButton message={`Remove ${p.formatted.split(",")[0]} from this client?`} className={`${quiet} hover:text-red-700`}>Remove</ConfirmButton></form>}
                       </div>
                     </div>

@@ -232,7 +232,7 @@ export const REPORTS: Record<string, Report> = {
     async run(businessId, r) {
       const pays = await db.payment.findMany({ where: { businessId, receivedAt: instants(r) }, include: { client: true, invoice: { select: { number: true } } }, orderBy: { receivedAt: "asc" } });
       return {
-        columns: [["Date", "text"], ["Client", "text"], ["Invoice", "text"], ["Method", "text"], ["Amount", "money"], ["Refunded", "money"], ["Net", "money"], ["Tip", "money"], ["Stripe fee", "money"]],
+        columns: [["Date", "text"], ["Client", "text"], ["Invoice", "text"], ["Method", "text"], ["Amount", "money"], ["Refunded", "money"], ["Net", "money"], ["Tip", "money"], ["Card fee", "money"]],
         rows: pays.map((p) => [day(p.receivedAt), clientName(p.client), `#${p.invoice.number}`, p.method, p.amountCents, p.refundedCents, p.amountCents - p.refundedCents, p.tipCents ?? 0, p.feeCents ?? 0]),
       };
     },
