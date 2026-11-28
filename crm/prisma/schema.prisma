@@ -809,6 +809,7 @@ model Invoice {
   taxCents                Int           @default(0)
   totalCents              Int           @default(0)
   amountPaidCents         Int           @default(0)
+  lateFeeAppliedAt        DateTime? // the one late fee this invoice can get (Settings: late fee)
   etransferRef            String
   sentAt                  DateTime?
   firstViewedAt           DateTime?
