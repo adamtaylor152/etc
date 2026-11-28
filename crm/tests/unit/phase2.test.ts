@@ -83,3 +83,19 @@ describe("job profit", () => {
     expect(profitOf(0, [], [{ amountCents: 500 }])).toMatchObject({ profitCents: -500, marginPct: null });
   });
 });
+
+import { missingRequired } from "@/server/ops/checklists";
+describe("checklists", () => {
+  const items = [
+    { id: "a", label: "Driveway", type: "CHECKBOX" as const, required: true, showClient: true },
+    { id: "b", label: "Ice melt", type: "YESNO" as const, required: true, showClient: true },
+    { id: "c", label: "Windows", type: "NUMBER" as const, required: true, showClient: true },
+    { id: "d", label: "After photo", type: "PHOTO" as const, required: true, showClient: false },
+    { id: "e", label: "Notes", type: "TEXT" as const, required: false, showClient: false },
+  ];
+  it("lists required items still missing, counting tagged photos", () => {
+    expect(missingRequired(items, {}, [])).toEqual(["Driveway", "Ice melt", "Windows", "After photo"]);
+    expect(missingRequired(items, { a: true, b: "no", c: 0 }, ["checklist:d"])).toEqual([]);
+    expect(missingRequired(items, { a: false, b: "maybe", c: "" }, ["checklist:x"])).toEqual(["Driveway", "Ice melt", "Windows", "After photo"]);
+  });
+});

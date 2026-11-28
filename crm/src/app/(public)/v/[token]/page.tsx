@@ -1,4 +1,5 @@
 // Visit report for the client: before & after photos from one visit (linked from the "all done" email).
+import type { Answers, ChecklistItem } from "@/server/ops/checklists";
 import { Card, Dl } from "@/components/ui";
 import { dateOnly, prettyDate, prettyDateTime } from "@/server/dates";
 import { db } from "@/server/db";
@@ -16,6 +17,9 @@ export default async function VisitReport({ params }: PageProps<"/v/[token]">) {
     include: { property: true, job: true, attachments: { where: { deletedAt: null, sharedWithClient: true }, orderBy: { createdAt: "asc" } } },
   });
   const group = (k: string) => v.attachments.filter((a) => a.kind === k);
+  const vc = await db.visitChecklist.findUnique({ where: { visitId: v.id } });
+  const shown = vc ? (vc.items as ChecklistItem[]).filter((i) => i.showClient && i.type !== "PHOTO") : [];
+  const answer = (i: ChecklistItem) => { const a = (vc!.answers as Answers)[i.id]; return i.type === "CHECKBOX" ? (a === true ? "✓ Done" : "—") : i.type === "YESNO" ? (a === "yes" ? "Yes" : a === "no" ? "No" : "—") : a == null || a === "" ? "—" : String(a); };
   return (
     <div className="space-y-4">
       <div>
@@ -30,6 +34,7 @@ export default async function VisitReport({ params }: PageProps<"/v/[token]">) {
           ["Ice melt", v.state === "COMPLETED" && v.iceMeltApplied ? "Yes" : null],
         ]} />
       </Card>
+      {shown.length > 0 && <Card title="What we did"><Dl rows={shown.map((i) => [i.label, answer(i)] as [string, string])} /></Card>}
       {[["BEFORE", "Before"], ["AFTER", "After"], ["PROOF", "More photos"], ["OTHER", "More photos"]].map(([k, label]) => group(k).length > 0 && (
         <Card key={k} title={label}>
           <div className="grid gap-2 sm:grid-cols-2">

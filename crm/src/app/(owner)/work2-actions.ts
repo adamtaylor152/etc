@@ -57,6 +57,7 @@ export async function jobCreateFull(f: FormData) {
       billingType: str(f, "billingType") === "FIXED_PRICE" ? "FIXED_PRICE" : "PER_VISIT",
       startAt: date && st && f.get("later") !== "on" ? fromLocalInput(`${date}T${st}`) : null, endAt: date && et && f.get("later") !== "on" ? fromLocalInput(`${date}T${et}`) : null,
       moreDates: f.getAll("moreDate").map(String).filter((d) => day.test(d)), assigneeIds: f.getAll("userId").map(String), requestId: str(f, "requestId") || null,
+      checklistTemplateId: str(f, "checklistTemplateId") === "none" ? null : str(f, "checklistTemplateId") || undefined,
     })).id;
   } catch (e) { fail(back, e); }
   revalidatePath("/", "layout");

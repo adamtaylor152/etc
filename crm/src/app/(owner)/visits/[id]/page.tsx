@@ -1,3 +1,4 @@
+import { VisitChecklistCard } from "@/components/visit-checklist";
 import { assignPeople } from "../../schedule-actions";
 import { personName, team } from "@/server/schedule";
 import { VisitTimer } from "@/components/visit-timer";
@@ -89,6 +90,7 @@ export default async function VisitPage({ params, searchParams }: PageProps<"/vi
       )}
 
 
+      <VisitChecklistCard businessId={v.businessId} visitId={v.id} editable={v.state !== "CANCELLED"} />
       <Card title="Time" className="my-4">
         <VisitTimer visitId={v.id} runningSince={running?.visitId === v.id ? running.startedAt.toISOString() : null} back={`/visits/${v.id}`} />
         {running && running.visitId !== v.id && <p className="mt-2 text-xs text-ink-soft">Your timer is running on another visit. Starting here stops that one.</p>}

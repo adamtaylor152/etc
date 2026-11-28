@@ -1,4 +1,5 @@
 // Job operations from the back office: new one-off jobs, every-snowfall plans, pause/close.
+import { defaultChecklistFor } from "./checklists";
 import { addDays, todayLocal, toDbDate } from "../dates";
 import { recurrenceDates, toRRule, type Repeat } from "../recurrence";
 import { db } from "../db";
@@ -13,7 +14,9 @@ export async function createOneOffJob(user: Actor, input: {
   billingType: "PER_VISIT" | "FIXED_PRICE";
   /** Jobber-style extras: a time on the first visit, more visit dates, who's going, and the request it came from. */
   startAt?: Date | null; endAt?: Date | null; moreDates?: string[]; assigneeIds?: string[]; requestId?: string | null;
+  checklistTemplateId?: string | null;
 }) {
+  const checklistTemplateId = input.checklistTemplateId === undefined ? await defaultChecklistFor(user.businessId, input.lines.map((l) => l.name)) : input.checklistTemplateId;
   const prop = await db.property.findFirstOrThrow({ where: { id: input.propertyId, clientId: input.clientId, businessId: user.businessId } });
   return db.$transaction(async (tx) => {
     const lines = input.lines.map((l, i) => ({ ...l, totalCents: Math.round(l.quantity * l.unitPriceCents), sortOrder: i, perVisit: input.billingType === "PER_VISIT" }));
@@ -23,7 +26,7 @@ export async function createOneOffJob(user: Actor, input: {
         kind: "ONE_OFF", title: input.title, instructions: input.instructions || null, billingType: input.billingType,
         invoiceSchedule: input.billingType === "PER_VISIT" ? "AFTER_EACH_VISIT" : "ON_COMPLETION",
         totalCents: input.billingType === "FIXED_PRICE" ? lines.reduce((a, l) => a + l.totalCents, 0) : null,
-        lineItems: { create: lines }, requestId: input.requestId || null,
+        lineItems: { create: lines }, requestId: input.requestId || null, checklistTemplateId,
       },
     });
     const assignees = { create: (input.assigneeIds ?? []).map((userId) => ({ userId })) };
