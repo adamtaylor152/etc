@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { parseCsv, toCsv } from "@/server/csv";
-import { CLIENT_REFS, mapClientRows, mergeContactPoints } from "@/server/ops/client-import";
+import { CLIENT_REFS, CLIENT_REFS_NOT_MOVED, mapClientRows, mergeContactPoints } from "@/server/ops/client-import";
 
 describe("csv", () => {
   it("reads quoted commas, quotes and newlines, and skips blank lines", () => {
@@ -34,7 +34,9 @@ describe("merge covers every table that points at a client", () => {
   it("lists each model with a clientId column", () => {
     const schema = readFileSync("prisma/schema.prisma", "utf8");
     const models = [...schema.matchAll(/^model (\w+) \{([\s\S]*?)^\}/gm)].filter((m) => /^\s+clientId\s/m.test(m[2])).map((m) => m[1][0].toLowerCase() + m[1].slice(1));
-    expect([...CLIENT_REFS].sort()).toEqual(models.sort());
+    expect([...CLIENT_REFS, ...CLIENT_REFS_NOT_MOVED].sort()).toEqual(models.sort());
+    // Link tokens are revoked, never handed to the kept client: an emailed link to the duplicate must not open the other account.
+    expect(CLIENT_REFS as readonly string[]).not.toContain("linkToken");
   });
 });
 

@@ -2,6 +2,7 @@
 // Crew can only add to a visit on their own route; jobs, requests and quotes are owner-only.
 import { currentUser } from "@/server/auth";
 import { db } from "@/server/db";
+import { cappedFormData, ONE_FILE_BODY } from "@/server/http";
 import { MediaError, saveImage } from "@/server/media";
 import { visitScope } from "@/server/runner";
 
@@ -10,7 +11,9 @@ const KINDS = ["BEFORE", "AFTER", "PROOF", "REQUEST_PHOTO", "OTHER"] as const;
 export async function POST(req: Request) {
   const user = await currentUser();
   if (!user) return Response.json({ error: "Sign in again" }, { status: 401 });
-  const form = await req.formData();
+  // Our pages send one (shrunk) photo per request; two full-size files' worth leaves room for a small batch.
+  const form = await cappedFormData(req, 2 * ONE_FILE_BODY);
+  if (!form) return Response.json({ error: "That upload is too big. Send fewer photos at a time." }, { status: 413 });
   const kind = KINDS.find((k) => k === form.get("kind")) ?? "OTHER";
   const visitId = String(form.get("visitId") ?? "") || null;
   const jobId = String(form.get("jobId") ?? "") || null;

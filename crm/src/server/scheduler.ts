@@ -11,6 +11,7 @@ import { syncTelnyxCalls } from "./ops/calls";
 import { db } from "./db";
 import { env } from "./env";
 import { sweepRateLimits } from "./http";
+import { sweepExpiredTokens } from "./tokens";
 import { reminderDue } from "./billing/invoice";
 import { addDays, dateOnly, todayLocal, toDbDate, TZ } from "./dates";
 import { forecast, snowByDay } from "./forecast";
@@ -84,6 +85,7 @@ async function hourly() {
   await automation("campaignsSent", async () => { await markScheduledSent(); });
   if (hour === 6) await automation("dailyDigest", dailyDigest);
   await automation("rateLimitSweep", () => sweepRateLimits());
+  if (hour === 4) await automation("linkTokenSweep", () => sweepExpiredTokens(db)); // once a day: links that expired
   await automation("opsAlerts", opsAlerts);
 }
 

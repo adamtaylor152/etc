@@ -33,6 +33,12 @@ export async function mintToken(db: Db, businessId: string, purpose: TokenPurpos
   return raw;
 }
 
+/**
+ * Daily sweep. Pages mint a fresh link on every view (only the hash is stored, so an old link can't be handed out
+ * again), which leaves rows behind; one that expired more than a day ago can never work again and is deleted.
+ */
+export const sweepExpiredTokens = (db: Db, now = Date.now()) => db.linkToken.deleteMany({ where: { expiresAt: { lt: new Date(now - DAY) } } });
+
 export type TokenProblem = "missing" | "wrong_purpose" | "revoked" | "expired" | "used_up";
 
 /** Pure check, unit-tested. */

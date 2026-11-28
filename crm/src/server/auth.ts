@@ -7,6 +7,7 @@ import { redirect } from "next/navigation";
 import { cache } from "react";
 import { db } from "./db";
 import { env } from "./env";
+import { safePath } from "./safe-path";
 import { newRawToken, sha256 } from "./tokens";
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -68,6 +69,4 @@ export async function signOut() {
 }
 
 /** Only allow in-app relative redirects. */
-export function safeNext(next: string | null | undefined) {
-  return next && next.startsWith("/") && !next.startsWith("//") ? next : "/";
-}
+export const safeNext = (next: string | null | undefined) => safePath(next, "/");

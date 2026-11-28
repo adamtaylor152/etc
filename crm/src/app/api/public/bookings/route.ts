@@ -50,13 +50,15 @@ export async function POST(req: Request) {
   }
   const res = await placeBooking(booking, data.slot, { businessId: bid, source: "BOOKING_FORM", ip: clientIp(req), userAgent: req.headers.get("user-agent") ?? undefined, raw: data, leadSource: leadSourceFromUtm(data.utm) ?? (typeof data.ref === "string" && data.ref ? "Referral" : null) });
   if (!res) return json(req, 409, { error: "Sorry, that time just filled up. Please pick another.", slotTaken: true });
-  if (data.smsOptIn === true && booking.phone) {
+  // Consent, texts and referral credit only for a client this booking created: typing an existing client's email
+  // must not opt them in to anything or earn a "new client" credit (they change those from their own client page).
+  if (res.clientCreated && data.smsOptIn === true && booking.phone) {
     const client = await db.client.update({ where: { id: res.clientId }, data: { smsOptIn: true } });
     await enqueueSms(db, { businessId: client.businessId, template: "sms.opt_in", client, props: {}, dedupeKey: `sms-optin:${client.id}` }); // once per client
     kickOutbox();
   }
-  if (data.offers === true) await db.client.updateMany({ where: { id: res.clientId, emailMarketingConsentAt: null }, data: { emailMarketingConsentAt: new Date(), emailMarketingConsentSource: "booking form" } });
-  if (typeof data.ref === "string") await recordReferral(await businessId(), res.clientId, data.ref.slice(0, 20)).catch((e) => console.error("referral", e));
+  if (res.clientCreated && data.offers === true) await db.client.updateMany({ where: { id: res.clientId, emailMarketingConsentAt: null }, data: { emailMarketingConsentAt: new Date(), emailMarketingConsentSource: "booking form" } });
+  if (typeof data.ref === "string") await recordReferral(bid, res.clientId, data.ref.slice(0, 20), res.clientCreated).catch((e) => console.error("referral", e));
   console.info(`booking ${res.number} saved`);
   return json(req, 201, { ok: true, id: res.number, estimate: booking.estimate, ...(res.uploadUrl ? { uploadUrl: res.uploadUrl } : {}) });
 }

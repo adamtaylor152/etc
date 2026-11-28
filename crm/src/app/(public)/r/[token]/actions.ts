@@ -1,6 +1,7 @@
 "use server";
 import { redirect } from "next/navigation";
 import { db } from "@/server/db";
+import { limited } from "@/server/http";
 import { leaveFeedback, rate } from "@/server/ops/marketing";
 import { peekToken } from "@/server/tokens";
 
@@ -21,6 +22,7 @@ export async function rateAction(f: FormData) {
 export async function feedbackAction(f: FormData) {
   const { token, reviewId } = await reviewFor(f);
   const text = String(f.get("feedback") ?? "").trim();
-  if (text) await leaveFeedback(reviewId, text);
+  // Each one pins a note on the client and emails the owners.
+  if (text && !(await limited(`review-feedback:${reviewId}`, 3, 3_600_000))) await leaveFeedback(reviewId, text);
   redirect(`/r/${token}?sent=1`);
 }

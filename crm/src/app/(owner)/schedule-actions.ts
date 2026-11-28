@@ -11,6 +11,7 @@ import { moveVisit, rescheduleVisitTimed, setVisitAssignees } from "@/server/ops
 import { TransitionError } from "@/server/status/visit";
 import { conflicts } from "@/server/availability";
 import { loadAvailability } from "@/server/schedule-data";
+import { safePath } from "@/server/safe-path";
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? "");
 const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -55,7 +56,7 @@ export async function assignPeople(f: FormData) {
   revalidatePath("/schedule");
   revalidatePath("/");
   const back = str(f, "back");
-  if (back.startsWith("/") && !back.startsWith("//")) redirect(back);
+  if (safePath(back, "")) redirect(back);
 }
 
 function taskInput(f: FormData): TaskInput {
@@ -76,7 +77,7 @@ const fail = (path: string, e: unknown) => {
   if (e instanceof TransitionError || e instanceof z.ZodError) redirect(`${path}${path.includes("?") ? "&" : "?"}error=${encodeURIComponent(e instanceof z.ZodError ? "Check the date and times" : e.message)}`);
   throw e;
 };
-const safe = (p: string, d: string) => (p.startsWith("/") && !p.startsWith("//") ? p : d);
+const safe = (p: string, d: string) => safePath(p, d);
 
 export async function taskSave(f: FormData) {
   const user = await requireOwner();

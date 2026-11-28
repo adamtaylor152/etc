@@ -15,11 +15,14 @@ describe("parseInterac", () => {
       amountCents: 3500, sender: "JANE SMITH", refs: ["ETC-1042"], message: "snow shovelling ETC-1042 thanks!", interacRef: "CAa1B2c3D4e5",
     });
   });
-  it("accepts sloppy references and thousands separators", () => {
-    const n = parseInterac("e-Transfer received", "From: Bob Jones\nAmount: $1,250.50\nMessage: invoice etc 77 and ETC#78");
+  it("reads thousands separators, and a reference only in the ETC-<number> form", () => {
+    const n = parseInterac("e-Transfer received", "From: Bob Jones\nAmount: $1,250.50\nMessage: invoices etc-77, ETC - 78 and Etc -79");
     expect(n.amountCents).toBe(125050);
-    expect(n.refs).toEqual(["ETC-77", "ETC-78"]);
+    expect(n.refs).toEqual(["ETC-77", "ETC-78", "ETC-79"]);
     expect(n.sender).toBe("Bob Jones");
+    // Ordinary words and near-misses are not references: they go to the owners to match by hand.
+    const refs = (message: string) => parseInterac("e-Transfer received", `From: Bob Jones\nAmount: $35.00\nMessage: ${message}`).refs;
+    expect(["walks etc 12", "ETC 1042", "ETC#78", "etc. 12 thanks", "fetc-12", "ETC-12a", "ETC--12", "ETC-1234567"].flatMap(refs)).toEqual([]);
   });
   it("copes with no message", () => {
     expect(parseInterac("INTERAC e-Transfer: AL B sent you money.", "AL B sent you $30.00 (CAD).").refs).toEqual([]);
@@ -41,6 +44,25 @@ describe("matchInvoice", () => {
   it("gives up when ambiguous or unknown", () => {
     expect(matchInvoice({ amountCents: 3500, sender: "Pat Nobody", refs: [], message: null }, open)).toBeNull();
     expect(matchInvoice({ amountCents: 3500, sender: null, refs: ["ETC-9"], message: null }, open)).toBeNull();
+  });
+  it("a reference alone is not enough: the amount must fit the invoice, or the sender must be the client", () => {
+    const n = (amountCents: number | null, sender: string | null) => ({ amountCents, sender, refs: ["ETC-1044"], message: null });
+    expect(matchInvoice(n(6000, "PAT NOBODY"), open)?.id).toBe("c"); // exact balance, from a spouse's account
+    expect(matchInvoice(n(2000, "JANE SMITH"), open)?.id).toBe("c"); // the client paying part
+    expect(matchInvoice(n(500, "PAT NOBODY"), open)).toBeNull();     // someone else's $5 with this invoice's number typed in
+    expect(matchInvoice(n(9000, "PAT NOBODY"), open)).toBeNull();
+    expect(matchInvoice(n(null, null), open)).toBeNull();
+    expect(matchInvoice(n(500, "SMITHSON"), open)).toBeNull();       // a whole last name, not part of one
+  });
+  it("a smaller amount fits only an invoice that takes part payments", () => {
+    const partial = [{ ...open[2], allowPartial: true }];
+    const n = (amountCents: number) => ({ amountCents, sender: "PAT NOBODY", refs: ["ETC-1044"], message: null });
+    expect(matchInvoice(n(2000), partial)?.id).toBe("c");
+    expect(matchInvoice(n(6001), partial)).toBeNull();
+    expect(matchInvoice(n(0), partial)).toBeNull();
+  });
+  it("does not fall through to the name match when the reference names another invoice", () => {
+    expect(matchInvoice({ amountCents: 6000, sender: "JANE SMITH", refs: ["ETC-1043"], message: null }, open)).toBeNull();
   });
 });
 

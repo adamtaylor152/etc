@@ -4,9 +4,10 @@ import { redirect } from "next/navigation";
 import { requireOwner } from "@/server/auth";
 import { addExpense, addTime, approveTime, deleteExpense, deleteTime, startTimer, stopEntry, stopTimer, unapproveTime, updateExpense, updateTime } from "@/server/ops/costing";
 import { TransitionError } from "@/server/status/visit";
+import { safePath } from "@/server/safe-path";
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? "");
-const back = (f: FormData) => { const p = str(f, "back"); return p.startsWith("/") && !p.startsWith("//") ? p : "/"; };
+const back = (f: FormData) => { const p = str(f, "back"); return safePath(p, "/"); };
 async function run(f: FormData, fn: () => Promise<unknown>) {
   try { await fn(); } catch (e) {
     if (e instanceof TransitionError) redirect(`${back(f)}${back(f).includes("?") ? "&" : "?"}error=${encodeURIComponent(e.message)}`);

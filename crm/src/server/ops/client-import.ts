@@ -1,5 +1,6 @@
 // Clients in and out as CSV, possible duplicates, and merging a duplicate into the client you keep.
 import { saveClient, type ClientInput } from "../clients";
+import { detachCard } from "../stripe";
 import { parseCsv } from "../csv";
 import { db } from "../db";
 import { clientName } from "../queries";
@@ -81,11 +82,16 @@ export async function possibleDuplicates(businessId: string, clientId: string) {
   });
 }
 
-/** Every table that points at a client. tests/unit/client-merge.test.ts fails if the schema gains one that isn't listed. */
+/** Every table that points at a client and moves with a merge. tests/unit/client-merge.test.ts fails if the schema gains one that isn't listed here or below. */
 export const CLIENT_REFS = [
-  "linkToken", "property", "request", "quote", "job", "invoice", "payment", "attachment", "note", "activityEvent", "emailMessage",
+  "property", "request", "quote", "job", "invoice", "payment", "attachment", "note", "activityEvent", "emailMessage",
   "textMessage", "clientContact", "callLog", "task", "reviewRequest", "clientCredit", "campaignRecipient", "autoPayAttempt",
 ] as const;
+/**
+ * Points at a client but is NOT moved: a link we emailed to the duplicate must never open the kept client's account.
+ * The duplicate's client-page links are revoked; its invoice / quote / visit links stay tied to their own document.
+ */
+export const CLIENT_REFS_NOT_MOVED = ["linkToken"] as const;
 
 type Points = { emails: unknown; phones: unknown; email: string; phone: string | null };
 /** Emails and phones of both, the kept client's first. Pure, unit-tested. */
@@ -104,9 +110,11 @@ export function mergeContactPoints(keep: Points, dup: Points) {
  */
 export async function mergeClients(user: Actor, keepId: string, dupId: string) {
   if (keepId === dupId) throw new TransitionError("Pick a different client to merge in");
-  await db.$transaction(async (tx) => {
+  const spareCard = await db.$transaction(async (tx) => {
     const [keep, dup] = await Promise.all([keepId, dupId].map((id) => tx.client.findFirstOrThrow({ where: { id, businessId: user.businessId } })));
     const where = { clientId: dup.id }, data = { clientId: keep.id };
+    await tx.linkToken.updateMany({ where: { clientId: dup.id, purpose: "CLIENT_HUB", revokedAt: null }, data: { revokedAt: new Date() } });
+    await tx.visitExtra.updateMany({ where: { addedByClientId: dup.id }, data: { addedByClientId: keep.id } }); // so they can still take back an add-on
     // Same campaign sent to both: keep one recipient row (unique per campaign + client).
     const mine = await tx.campaignRecipient.findMany({ where: { clientId: keep.id }, select: { campaignId: true } });
     await tx.campaignRecipient.deleteMany({ where: { clientId: dup.id, campaignId: { in: mine.map((m) => m.campaignId) } } });
@@ -139,5 +147,8 @@ export async function mergeClients(user: Actor, keepId: string, dupId: string) {
     });
     await tx.client.delete({ where: { id: dup.id } });
     await logActivity(tx, { businessId: user.businessId, actorType: "USER", actorUserId: user.id, type: "client.merged", entityType: "Client", entityId: keep.id, clientId: keep.id, data: { merged: clientName(dup), email: dup.email } });
+    return keep.cardPaymentMethodId && dup.cardPaymentMethodId !== keep.cardPaymentMethodId ? dup.cardPaymentMethodId : null;
   });
+  // Both had a card: the duplicate's is no longer on any client, so take it off Stripe too (after the merge is final).
+  if (spareCard) await detachCard(spareCard);
 }

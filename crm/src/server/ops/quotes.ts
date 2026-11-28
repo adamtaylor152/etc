@@ -1,7 +1,7 @@
 // Quotes (estimates): build -> send -> client approves / asks for changes -> convert to a job.
 // Photos the client sent with the request stay linked (requestId) and show on the quote and the job.
 import { createDepositInvoice } from "./invoices";
-import { addDays, todayLocal, toDbDate } from "../dates";
+import { addDays, dateOnly, todayLocal, toDbDate } from "../dates";
 import { db, type Tx } from "../db";
 import { z } from "zod";
 import { enqueue, enqueueSms, kickOutbox } from "../email/outbox";
@@ -9,7 +9,7 @@ import { env } from "../env";
 import { clientName } from "../queries";
 import { logActivity, nextNumber } from "../records";
 import { smsEnabled } from "../sms";
-import { assertQuoteTransition, optionLines, quoteDiscountCents, quoteEditable, quoteOptions, quoteTotal, quoteTotals, valuedOption, type QuoteDiscount, type QuoteLine, type QuoteOption } from "../status/quote";
+import { assertApprovable, assertQuoteTransition, optionLines, quoteDiscountCents, quoteEditable, quoteOptions, quoteTotal, quoteTotals, valuedOption, type QuoteDiscount, type QuoteLine, type QuoteOption } from "../status/quote";
 import { TransitionError } from "../status/visit";
 
 type Actor = { id: string; businessId: string };
@@ -130,7 +130,7 @@ async function notifyOwners(tx: Tx, businessId: string, title: string, body: str
 export async function approveQuote(quoteId: string, input: { name: string; selected: string[]; option?: string; ip: string | null }) {
   await db.$transaction(async (tx) => {
     const q = await tx.quote.findUniqueOrThrow({ where: { id: quoteId }, include: { lineItems: true, client: true } });
-    assertQuoteTransition(q.status, "APPROVED");
+    assertApprovable({ status: q.status, validUntil: dateOnly(q.validUntil) }, todayLocal()); // the public page hides Approve on an expired quote; a saved form must not get past it
     const options = quoteOptions(q.options);
     const option = options.find((o) => o.key === input.option);
     if (options.length && !option) throw new TransitionError("Choose one of the options first");

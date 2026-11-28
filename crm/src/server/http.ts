@@ -27,4 +27,26 @@ export async function limited(key: string, limit = 5, windowMs = 600_000, now = 
 /** Hourly sweep: windows are an hour at most, so anything a day old is long finished. */
 export const sweepRateLimits = (now = Date.now()) => db.rateLimit.deleteMany({ where: { windowStart: { lt: new Date(now - 86_400_000) } } });
 
+/**
+ * `req.formData()` with a size cap: it would otherwise buffer whatever is sent, in memory. Null = over `maxBytes`
+ * (refuse with 413). The declared Content-Length is checked first, then the bytes actually read, so a body sent
+ * without a length (chunked) is capped too.
+ */
+export async function cappedFormData(req: Request, maxBytes: number): Promise<FormData | null> {
+  if (Number(req.headers.get("content-length") ?? 0) > maxBytes || !req.body) return null;
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  const reader = req.body.getReader();
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > maxBytes) { await reader.cancel().catch(() => {}); return null; }
+    chunks.push(value);
+  }
+  return new Response(Buffer.concat(chunks), { headers: { "content-type": req.headers.get("content-type") ?? "" } }).formData();
+}
+/** One file at the 25 MB photo/file limit (src/server/media.ts) plus the rest of the form. */
+export const ONE_FILE_BODY = 26 * 1024 * 1024;
+
 export const PUBLIC_HEADERS = { "Cache-Control": "no-store", "Referrer-Policy": "no-referrer", "X-Robots-Tag": "noindex" };

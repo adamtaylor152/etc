@@ -37,6 +37,7 @@ async function tellOwners(businessId: string, title: string, body: string, path:
 /** Client pauses (away for a while) or resumes their every-snowfall plan. */
 export async function hubPausePlan(f: FormData) {
   const { token, client } = await hubClient(f);
+  if (await tooFast(client.id)) redirect(back(token, "Too many changes at once. Try again in a few minutes.")); // each one emails the owners
   const job = await db.job.findFirst({ where: { id: String(f.get("jobId")), clientId: client.id, kind: "SNOW_PLAN", closedAt: null } });
   if (!job) redirect(`/hub/${token}`);
   const pause = f.get("pause") === "1";
@@ -50,7 +51,7 @@ export async function hubPausePlan(f: FormData) {
 
 const back = (token: string, error: string) => `/hub/${token}?error=${encodeURIComponent(error)}`;
 /** Per client, not per IP: the token is who they are. */
-const tooFast = (clientId: string) => limited(`hub:${clientId}`, 20);
+const tooFast = (clientId: string) => limited(`hub-change:${clientId}`, 20);
 
 /** Structured order from the hub's order page: the same validation and booking pipeline as the public form, for this
  *  token's client only. A picked address must be one of theirs; who they are never comes from the form. */
