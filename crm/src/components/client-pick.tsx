@@ -13,10 +13,11 @@ export async function ClientPick({ businessId, base, keep = {}, q, title }: { bu
     include: { properties: { where: { archivedAt: null }, take: 1, orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }] } },
     orderBy: term ? { firstName: "asc" } : { createdAt: "desc" }, take: 30,
   });
+  const list = base.replace(/\/new$/, ""); // "/invoices/new" -> back to "/invoices"
   const qs = (extra: Record<string, string>) => new URLSearchParams({ ...keep, ...extra }).toString();
   return (
     <>
-      <DetailHeader title={title} sub="Who is this for? Pick a client, or add a new one." />
+      <DetailHeader back={{ href: list, label: list[1].toUpperCase() + list.slice(2) }} title={title} sub="Who is this for? Pick a client, or add a new one." />
       <section className="max-w-2xl rounded-xl border border-line bg-white shadow-card">
         <form action={base} role="search" className="flex flex-wrap gap-2 border-b border-line p-3">
           {Object.entries(keep).map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
