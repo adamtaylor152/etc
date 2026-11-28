@@ -6,6 +6,7 @@ import type { Prisma } from "@/generated/prisma/client";
 import { requireOwner } from "@/server/auth";
 import { toDbDate } from "@/server/dates";
 import { db } from "@/server/db";
+import * as routes from "@/server/ops/routes";
 import { SETTING_LABELS, SettingsSchema } from "@/server/settings";
 
 const s = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
@@ -50,6 +51,24 @@ export async function saveAutomations(f: FormData) {
   await db.business.update({ where: { id: biz.id }, data: { settings: next as Prisma.InputJsonValue } });
   revalidatePath("/", "layout");
   redirect("/settings?saved=automations");
+}
+
+/** Route settings that aren't on/off switches (Settings › Route). */
+export async function saveRouteSettings(f: FormData) {
+  const user = await requireOwner();
+  const biz = await db.business.findUniqueOrThrow({ where: { id: user.businessId } });
+  const next = SettingsSchema.parse({ ...(biz.settings as object), serviceMinutes: s(f, "serviceMinutes") || undefined });
+  await db.business.update({ where: { id: biz.id }, data: { settings: next as Prisma.InputJsonValue } });
+  revalidatePath("/", "layout");
+  redirect("/settings/route?saved=1");
+}
+
+/** The order routes visit communities in: `ids` is the community codes, first to last. */
+export async function saveCommunityOrder(f: FormData) {
+  const user = await requireOwner();
+  await routes.saveCommunityOrder(user, z.array(z.string().min(1).max(10)).max(500).parse(s(f, "ids").split(",").filter(Boolean)));
+  revalidatePath("/", "layout");
+  redirect("/settings/route?saved=1");
 }
 
 export async function saveSeason(f: FormData) {

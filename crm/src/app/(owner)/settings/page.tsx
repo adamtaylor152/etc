@@ -112,7 +112,8 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
 
         <Card title="Service area">
           <p className="text-sm">{area.map((a) => a.community.name).join(", ")}</p>
-          <p className="mt-2 text-xs text-ink-soft">Routes visit communities in this order (Evergreen first). Addresses outside it still work; they land under &quot;No community&quot; until pinned.</p>
+          <p className="mt-2 text-xs text-ink-soft">Routes visit communities in this order. Addresses outside it still work; they land under &quot;No community&quot; until pinned.</p>
+          <Link href="/settings/route" className="mt-2 inline-block text-sm font-semibold text-blue">Change the order &amp; stop times</Link>
         </Card>
       </div>
     </>

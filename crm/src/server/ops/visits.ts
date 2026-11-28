@@ -132,9 +132,8 @@ async function scheduleTx(user: Actor, visitId: string, date: string | null, not
 
 export async function addVisit(user: Actor, jobId: string, date: string | null) {
   const job = await db.job.findFirstOrThrow({ where: { id: jobId, businessId: user.businessId } });
-  const prop = await db.property.findUniqueOrThrow({ where: { id: job.propertyId } });
   return db.visit.create({
-    data: { businessId: user.businessId, jobId, propertyId: job.propertyId, scheduledDate: date ? toDbDate(date) : null, source: "MANUAL", routeSort: prop.routeSort },
+    data: { businessId: user.businessId, jobId, propertyId: job.propertyId, scheduledDate: date ? toDbDate(date) : null, source: "MANUAL" },
   });
 }
 

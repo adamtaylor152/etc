@@ -19,14 +19,13 @@ type Actor = { id: string; businessId: string };
 async function generate(tx: Tx, ev: SnowEvent & { season: { defaultTriggerCm: number } }, cm: number, push: number, day: string) {
   const plans = await tx.job.findMany({
     where: { businessId: ev.businessId, kind: "SNOW_PLAN", seasonId: ev.seasonId, closedAt: null, planPausedAt: null, sizeHoldAt: null }, // held = waiting on a new-price OK
-    include: { property: { select: { routeSort: true } } },
   });
   const hit = plansTriggered(plans, cm, ev.season.defaultTriggerCm);
   const res = await tx.visit.createMany({
     skipDuplicates: true,
     data: hit.map((p) => ({
       businessId: ev.businessId, jobId: p.id, propertyId: p.propertyId, snowEventId: ev.id, pushNumber: push,
-      scheduledDate: toDbDate(day), anytime: true, source: "SNOW_EVENT" as const, routeSort: p.property.routeSort,
+      scheduledDate: toDbDate(day), anytime: true, source: "SNOW_EVENT" as const,
       iceMeltApplied: p.iceMelt || null,
     })),
   });
