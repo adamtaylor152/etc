@@ -70,8 +70,9 @@ export async function saveClient(user: Actor, raw: unknown, clientId?: string) {
   const id = await db.$transaction(async (tx) => {
     let id = clientId;
     if (id) {
-      await tx.client.findFirstOrThrow({ where: { id, businessId: user.businessId } });
-      await tx.client.update({ where: { id }, data });
+      const old = await tx.client.findFirstOrThrow({ where: { id, businessId: user.businessId } });
+      // A corrected address gets a fresh start: the bounce flag belonged to the old one.
+      await tx.client.update({ where: { id }, data: { ...data, ...(old.email.toLowerCase() !== data.email.toLowerCase() ? { emailBouncedAt: null } : {}) } });
     } else {
       id = (await tx.client.create({ data: { ...data, businessId: user.businessId, source: "MANUAL" } })).id;
       await logActivity(tx, { businessId: user.businessId, actorType: "USER", actorUserId: user.id, type: "client.created", entityType: "Client", entityId: id, clientId: id });

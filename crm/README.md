@@ -162,4 +162,6 @@ What texting does:
 pnpm tsx scripts/mint-hub-link.ts client@example.com   # print a client-hub link
 ```
 
+**Bounced email:** a client is flagged (and reminders and campaigns stop) when the mail server refuses their address at send time. To also catch bounces that arrive later, forward the mailbox that receives bounce reports for `MAIL_FROM` to the same Cloudflare Email Worker as `pay@`; a report only counts if it quotes the id of an email the CRM sent.
+
 **Backups:** turn on Coolify's scheduled Postgres backups (daily, keep 14), and copy that directory off the box (for example, rclone to B2 or R2). Take a manual dump before every schema migration.
