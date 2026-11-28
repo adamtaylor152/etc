@@ -118,7 +118,7 @@ export default async function NewJob({ searchParams }: PageProps<"/jobs/new">) {
                 </div>
               )}
             </fieldset>
-            <LineItems services={services.map((sv) => ({ id: sv.id, name: sv.name, unitPriceCents: sv.unitPriceCents }))}
+            <LineItems services={services.map((sv) => ({ id: sv.id, name: sv.name, description: sv.description, unitPriceCents: sv.unitPriceCents }))}
               initial={(request?.services ?? []).filter((x) => x !== "Snow shovelling").map((name) => ({ name, price: (() => { const sv = services.find((x) => (x.bookingLabel ?? x.name) === name); return sv?.unitPriceCents != null ? String(sv.unitPriceCents / 100) : ""; })() }))} />
             {checklists.length > 0 && (
               <Field label="Visit checklist" hint="Blank = automatic from the services above (if one has a checklist)">

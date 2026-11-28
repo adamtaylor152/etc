@@ -3,7 +3,7 @@
 import { createBooking } from "@/server/booking/create";
 import { bookAssessment, claimSlot, slotText } from "@/server/booking/slots";
 import { recordReferral } from "@/server/ops/marketing";
-import { BookingError, validate } from "@/server/booking/validate";
+import { BookingError, bookingLabels, validate } from "@/server/booking/validate";
 import { todayLocal } from "@/server/dates";
 import { businessId, db } from "@/server/db";
 import { enqueueSms, kickOutbox } from "@/server/email/outbox";
@@ -38,15 +38,17 @@ export async function POST(req: Request) {
   if (data.website) return json(req, 201, { ok: true }); // honeypot humans never see; pretend it worked
   if (limited(clientIp(req))) return json(req, 429, { error: `Too many bookings from here. Please call ${env.phone}.` });
 
+  const bid = await businessId();
   let booking;
   try {
-    booking = validate(data, todayLocal());
+    // What can be booked is whatever the price book says is active + bookable.
+    const services = await db.service.findMany({ where: { businessId: bid, active: true, bookable: true }, select: { name: true, bookingLabel: true } });
+    booking = validate(data, todayLocal(), bookingLabels(services));
   } catch (e) {
     if (e instanceof BookingError) return json(req, 400, { error: e.message.charAt(0).toUpperCase() + e.message.slice(1) + "." });
     throw e;
   }
   // A picked time books the on-site assessment for quote services (snow shovelling is "anytime" and needs none).
-  const bid = await businessId();
   const quoted = booking.services.some((s) => s !== "Snow shovelling");
   const slot = quoted && data.slot ? await claimSlot(bid, data.slot) : null;
   if (quoted && data.slot && !slot) return json(req, 409, { error: "Sorry, that time just filled up. Please pick another.", slotTaken: true });

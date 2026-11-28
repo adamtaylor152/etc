@@ -71,7 +71,7 @@ export default async function QuotePage({ params, searchParams }: PageProps<"/qu
               <form action={quoteUpdate} className="space-y-4">
                 {hidden}
                 <Field label="Title"><Input name="title" defaultValue={q.title ?? ""} required /></Field>
-                <QuoteLinesEditor lines={q.lineItems.map((l) => ({ ...l, quantity: Number(l.quantity) }))} suggestions={services.map((s) => s.name)} />
+                <QuoteLinesEditor lines={q.lineItems.map((l) => ({ ...l, quantity: Number(l.quantity) }))} services={services.map((s) => ({ name: s.name, description: s.description, unitPriceCents: s.unitPriceCents }))} />
                 <div className="grid gap-3 sm:grid-cols-2">
                   <Field label="Discount ($)"><Input name="discount" type="number" step="0.01" min="0" defaultValue={q.discountCents / 100 || ""} /></Field>
                   <Field label="Good until"><Input name="validUntil" type="date" defaultValue={dateOnly(q.validUntil) ?? ""} /></Field>

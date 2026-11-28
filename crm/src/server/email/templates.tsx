@@ -106,8 +106,8 @@ async function invoiceData(invoiceId: string, businessId: string): Promise<Invoi
   return {
     name: clientName(inv.client), number: inv.number, subject: inv.subject ?? "Services", issued: prettyDate(dateOnly(inv.issuedOn) ?? todayLocal()),
     due: prettyDate(dateOnly(inv.dueOn) ?? todayLocal()),
-    lines: inv.lineItems.map((l) => ({ name: Number(l.quantity) !== 1 ? `${l.name} × ${Number(l.quantity)}` : l.name, date: prettyDate(dateOnly(l.serviceDate)), amount: money(l.totalCents) })),
-    total: money(inv.totalCents), paid: inv.amountPaidCents ? money(inv.amountPaidCents) : null, balance: money(Math.max(0, inv.totalCents - inv.amountPaidCents)),
+    lines: inv.lineItems.map((l) => ({ name: (Number(l.quantity) !== 1 ? `${l.name} × ${Number(l.quantity)}` : l.name) + (l.description ? ` (${l.description})` : ""), date: prettyDate(dateOnly(l.serviceDate)), amount: money(l.totalCents) })),
+    total: money(inv.totalCents), discount: inv.discountCents ? money(inv.discountCents) : null, message: inv.message, paid: inv.amountPaidCents ? money(inv.amountPaidCents) : null, balance: money(Math.max(0, inv.totalCents - inv.amountPaidCents)),
     taxNote: biz.taxRegistered ? (t.taxIncluded ? `Includes ${biz.taxName} of ${money(inv.taxCents)}` : `${biz.taxName} ${money(inv.taxCents)} included in total`) + (biz.taxNumber ? ` · ${biz.taxName} #${biz.taxNumber}` : "") : null,
     payUrl: `${env.appUrl}/i/${raw}`, etransferEmail: biz.etransferEmail || env.etransferEmail, etransferRef: inv.etransferRef,
     cardEnabled: stripeEnabled(), site: env.siteUrl, phone: env.phone,

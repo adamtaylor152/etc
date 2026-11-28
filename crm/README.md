@@ -45,7 +45,7 @@ pnpm typecheck && pnpm lint && pnpm build
 2. If the CRM is down or returns 5xx, the page re-posts to the Python `/api/bookings`, so a booking is never lost.
 3. To roll back, clear `CRM_BOOKING_URL` on the site.
 4. `POST /api/public/bookings` does the following:
-   - Validates with an exact port of the Python `validate()` and `estimate()`.
+   - Validates with a port of the Python `validate()` and `estimate()`; the services it accepts are the price book's active + bookable ones (Settings → Price book).
    - In one transaction, creates or matches the **client** (by email) and the **property** (by place id or address, with its community from the map pin).
    - Creates the **request**.
    - One-time shovelling becomes a **one-off job** with a visit. Every-snowfall becomes this season's **snow plan**. Anything else waits for a quote.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { billingEmail, dueDate, etransferRef, invoiceTotals, invoiceView, reminderDue, statusAfterPayments } from "@/server/billing/invoice";
+import { billingEmail, draftEditProblem, dueDate, etransferRef, invoiceTotals, isCreditLine, invoiceView, reminderDue, statusAfterPayments } from "@/server/billing/invoice";
 
 const NOT_REG = { taxRegistered: false, taxRateBps: 500, pricesIncludeTax: true };
 describe("invoiceTotals", () => {
@@ -57,4 +57,24 @@ describe("billingEmail", () => {
     expect(billingEmail("a@x.ca", [{ isBilling: true, email: null }, { isBilling: false, email: "c@x.ca" }])).toBe("a@x.ca");
     expect(billingEmail("a@x.ca", [{ isBilling: true, email: "pay@x.ca" }])).toBe("pay@x.ca");
   });
+});
+
+describe("draft editing", () => {
+  it("credit lines are the negative ones", () => {
+    expect([3500, 0, -1000].map((totalCents) => isCreditLine({ totalCents }))).toEqual([false, false, true]);
+  });
+  it.each([
+    [[3500], 0, 0, 0, null],
+    [[3500, 0], 1000, 2500, 0, null], // a comped ($0) line is fine; the discount may take the rest
+    [[], 0, 0, 0, "Add at least one line"],
+    [[3500], 0, -1, 0, "Check the amounts"],
+    [[-100], 0, 0, 0, "Check the amounts"],
+    [[900], 1000, 0, 0, "The lines can't total less than the deposit or credit already applied to this invoice"],
+    [[3500], 1000, 2501, 0, "The discount is more than the invoice"],
+    [[3500], 0, 1000, 2500, null], // part-paid draft: the new total equals what's paid
+    [[3500], 0, 1001, 2500, "The total can't be less than what's already been paid"],
+  ] as const)("lines %j credit %i discount %i paid %i -> %s", (lines, credit, discount, paid, want) =>
+    expect(draftEditProblem([...lines], credit, discount, paid, NOT_REG)).toBe(want));
+  it("tax on top counts toward what's been paid", () =>
+    expect(draftEditProblem([10000], 0, 0, 10500, { taxRegistered: true, taxRateBps: 500, pricesIncludeTax: false })).toBeNull());
 });

@@ -1,3 +1,4 @@
+import { ButtonLink } from "@/components/ui";
 import { requireOwner } from "@/server/auth";
 import { clientTagsBulk } from "../client-actions";
 import { ListPage, listHref, sortRows } from "@/components/list-page";
@@ -47,7 +48,8 @@ export default async function Clients({ searchParams }: PageProps<"/clients">) {
   const dot = { lead: "bg-blue", active: "bg-emerald-600", archived: "bg-ink-soft/50" };
   return (
     <ListPage
-      title="Clients" base="/clients" params={params} newHref="/clients/new" newLabel="New client" searchPlaceholder="Search name, phone, email, address, tag"
+      title="Clients" base="/clients" params={params} newHref="/clients/new" newLabel="New client"
+      actions={<><ButtonLink href="/clients/import">Import</ButtonLink><a href="/api/export/clients" className="inline-flex min-h-10 items-center rounded-lg border border-line bg-white px-4 text-sm font-semibold hover:bg-tint">Export</a></>} searchPlaceholder="Search name, phone, email, address, tag"
       overview={(["active", "lead", "archived"] as const).map((s) => ({ label: s === "lead" ? "Leads" : s === "active" ? "Active" : "Archived", count: clients.filter((c) => statusOf(c) === s).length, dot: dot[s], active: status === s, href: listHref("/clients", params, { status: s }) }))}
       metrics={[
         { label: "New leads", value: clients.filter((c) => c.createdAt >= since30 && statusOf(c) === "lead").length, sub: "past 30 days", href: listHref("/clients", {}, { status: "lead" }) },

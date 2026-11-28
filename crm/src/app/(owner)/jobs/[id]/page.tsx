@@ -10,7 +10,7 @@ import { Gallery } from "@/components/gallery";
 import { PhotoUploader } from "@/components/photo-uploader";
 import { JobBadge, VisitBadge } from "@/components/status";
 import { RecordPanel } from "@/components/record-panel";
-import { Button, Card, Dl, Empty, Input, PageHeader } from "@/components/ui";
+import { Button, ButtonLink, Card, Dl, Empty, Input, PageHeader } from "@/components/ui";
 import { dateOnly, prettyDate, todayLocal } from "@/server/dates";
 import { businessId, db } from "@/server/db";
 import { money } from "@/server/money";
@@ -67,13 +67,14 @@ export default async function JobPage({ params, searchParams }: PageProps<"/jobs
       <PageHeader
         title={<>Job #{job.number}: {job.title} <JobBadge s={row.status} /></>}
         sub={<><Link className="font-semibold text-blue" href={`/clients/${job.clientId}`}>{clientName(row.client)}</Link> · {job.property.formatted}</>}
-        actions={
+        actions={<>
+          <ButtonLink href={`${here}/edit`}>Edit</ButtonLink>
           <form action={jobClose}>
             <input type="hidden" name="id" value={job.id} /><input type="hidden" name="back" value={here} />
             <input type="hidden" name="closed" value={closed ? "0" : "1"} />
             <Button variant="secondary">{closed ? "Reopen job" : plan ? "End plan" : "Close job"}</Button>
           </form>
-        }
+        </>}
       />
       <div className="grid gap-5 lg:grid-cols-3">
         <div className="space-y-5 lg:col-span-2">
@@ -131,7 +132,7 @@ export default async function JobPage({ params, searchParams }: PageProps<"/jobs
               <table className="w-full text-sm">
                 <tbody className="divide-y divide-line">
                   {job.lineItems.map((l) => (
-                    <tr key={l.id}><td className="py-2">{l.name}{!l.perVisit && <span className="ml-1 text-xs text-ink-soft">(once)</span>}</td><td className="py-2 text-right text-ink-soft">{String(l.quantity)} ×</td><td className="py-2 text-right font-semibold">{money(l.unitPriceCents)}</td></tr>
+                    <tr key={l.id}><td className="py-2">{l.name}{!l.perVisit && <span className="ml-1 text-xs text-ink-soft">(once)</span>}{l.description && <span className="block text-xs text-ink-soft">{l.description}</span>}</td><td className="py-2 text-right text-ink-soft">{String(l.quantity)} ×</td><td className="py-2 text-right font-semibold">{money(l.unitPriceCents)}</td></tr>
                   ))}
                 </tbody>
               </table>

@@ -20,7 +20,25 @@ export function invoiceTotals(lineTotals: number[], discountCents: number, tax: 
   return { subtotalCents, discountCents, taxCents, totalCents: net + taxCents, taxIncluded: false };
 }
 
-export const TERMS_DAYS: Record<PaymentTerms, number> = { DUE_ON_RECEIPT: 0, NET_7: 7, NET_15: 15, NET_30: 30 };
+/** Credit lines (negative: "Less deposit", account credits) stand for a deposit or credit used once, so the draft editor leaves them alone. */
+export const isCreditLine = (l: { totalCents: number }) => l.totalCents < 0;
+
+/**
+ * Why an edited draft can't be saved, or null. `lineTotals` are the editable lines, `creditCents` what the fixed credit
+ * lines take off: the lines must still cover the credits (or that money would vanish), then the discount, then what's been paid.
+ */
+export function draftEditProblem(lineTotals: number[], creditCents: number, discountCents: number, paidCents: number, tax: TaxSettings): string | null {
+  if (!lineTotals.length) return "Add at least one line";
+  if (lineTotals.some((c) => !Number.isInteger(c) || c < 0) || !Number.isInteger(discountCents) || discountCents < 0) return "Check the amounts";
+  const subtotal = lineTotals.reduce((a, b) => a + b, 0) - creditCents;
+  if (subtotal < 0) return "The lines can't total less than the deposit or credit already applied to this invoice";
+  if (discountCents > subtotal) return "The discount is more than the invoice";
+  if (invoiceTotals([subtotal], discountCents, tax).totalCents < paidCents) return "The total can't be less than what's already been paid";
+  return null;
+}
+
+export const TERMS_LABEL: Record<PaymentTerms, string> = { DUE_ON_RECEIPT: "On receipt", NET_7: "7 days", NET_15: "15 days", NET_30: "30 days" };
+export const TERMS_DAYS:Record<PaymentTerms, number> = { DUE_ON_RECEIPT: 0, NET_7: 7, NET_15: 15, NET_30: 30 };
 export const dueDate = (issuedOn: string, terms: PaymentTerms) => addDays(issuedOn, TERMS_DAYS[terms]);
 
 /** Status after payments change. Draft/void/bad debt are only changed by explicit actions, except a draft paid in full. */

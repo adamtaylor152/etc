@@ -3,9 +3,10 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireOwner } from "@/server/auth";
+import { toDbDate } from "@/server/dates";
 import { db } from "@/server/db";
 import { kickOutbox } from "@/server/email/outbox";
-import { billingRun, deletePayment, invoiceFixedJob, invoiceUnbilled, markSent, recordPayment, sendInvoice, setBadDebt, voidInvoice } from "@/server/ops/invoices";
+import { billingRun, deletePayment, invoiceFixedJob, invoiceUnbilled, markSent, recordPayment, sendInvoice, setBadDebt, updateDraftInvoice, voidInvoice } from "@/server/ops/invoices";
 import { TransitionError } from "@/server/status/visit";
 import { mintToken } from "@/server/tokens";
 
@@ -40,6 +41,27 @@ export async function invoiceSend(f: FormData) {
   await guard(f, () => sendInvoice(user, str(f, "id")));
   revalidatePath("/", "layout");
   redirect(`${back(f)}${back(f).includes("?") ? "&" : "?"}sent=1`);
+}
+
+/** Save a draft's lines (lineId[] / lineName[] / lineDesc[] / lineQty[] / linePrice[] / lineDate[]), discount, terms and message. */
+export async function invoiceUpdate(f: FormData) {
+  const user = await requireOwner();
+  const id = str(f, "id");
+  await guard(f, () => {
+    const [ids, names, descs, qtys, prices, dates] = ["lineId", "lineName", "lineDesc", "lineQty", "linePrice", "lineDate"].map((k) => f.getAll(k).map(String));
+    const dollars = z.coerce.number().min(0).max(100_000);
+    // A row with no name is a removed (or never filled) line.
+    const lines = names.map((name, i) => ({ i, name })).filter((r) => r.name.trim()).map(({ i, name }) => ({
+      id: ids[i] || undefined, name, description: descs[i]?.trim().slice(0, 500), quantity: z.coerce.number().positive().max(10_000).parse(qtys[i]),
+      unitPriceCents: Math.round(dollars.parse(prices[i] || 0) * 100), serviceDate: /^\d{4}-\d{2}-\d{2}$/.test(dates[i] ?? "") ? toDbDate(dates[i]) : null,
+    }));
+    return updateDraftInvoice(user, id, {
+      lines, discountCents: Math.round(dollars.parse(str(f, "discount") || 0) * 100),
+      paymentTerms: z.enum(["DUE_ON_RECEIPT", "NET_7", "NET_15", "NET_30"]).parse(str(f, "paymentTerms")), message: str(f, "message").slice(0, 2000),
+    });
+  });
+  revalidatePath("/", "layout");
+  redirect(`/invoices/${id}`);
 }
 
 export async function invoiceMarkSent(f: FormData) {
@@ -88,10 +110,14 @@ export async function runBilling(f: FormData) {
   redirect(`/billing?made=${n}`);
 }
 
-export async function sendAllDrafts(f: FormData) {
+/** Billing run: send the ticked drafts (id[]). */
+export async function sendDrafts(f: FormData) {
   const user = await requireOwner();
-  const drafts = await db.invoice.findMany({ where: { businessId: user.businessId, status: "DRAFT" }, select: { id: true } });
-  await guard(f, async () => { for (const d of drafts) await sendInvoice(user, d.id); });
+  const drafts = await db.invoice.findMany({ where: { businessId: user.businessId, status: "DRAFT", id: { in: f.getAll("id").map(String) } }, select: { id: true }, orderBy: { number: "asc" } });
+  await guard(f, async () => {
+    if (!drafts.length) throw new TransitionError("Tick at least one draft to send");
+    for (const d of drafts) await sendInvoice(user, d.id);
+  });
   kickOutbox();
   revalidatePath("/", "layout");
   redirect(`/billing?sent=${drafts.length}`);
