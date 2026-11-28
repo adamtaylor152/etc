@@ -22,7 +22,7 @@ const Action = z.object({
   visitId: z.string().min(1), to: z.enum(["EN_ROUTE", "IN_PROGRESS", "COMPLETED", "SKIPPED"]),
   depthCm: z.number().int().min(0).max(200).nullish(), iceMeltApplied: z.boolean().nullish(),
   skipReason: z.enum(["ALREADY_CLEARED", "BLOCKED_BY_CAR", "NO_ACCESS", "BELOW_TRIGGER", "CLIENT_CANCELLED", "WEATHER", "OTHER"]).nullish(),
-  lat: z.number().nullish(), lng: z.number().nullish(),
+  skipNote: z.string().max(500).nullish(), lat: z.number().nullish(), lng: z.number().nullish(),
 });
 const ORDER: VisitState[] = ["SCHEDULED", "EN_ROUTE", "IN_PROGRESS", "COMPLETED"];
 
@@ -40,7 +40,7 @@ export async function POST(req: Request) {
   try {
     await transitionVisit(user, v.id, a.data.to, {
       depthCm: a.data.depthCm ?? undefined, iceMeltApplied: a.data.iceMeltApplied ?? undefined,
-      skipReason: (a.data.skipReason ?? undefined) as SkipReason | undefined, lat: a.data.lat ?? null, lng: a.data.lng ?? null,
+      skipReason: (a.data.skipReason ?? undefined) as SkipReason | undefined, skipNote: a.data.skipNote ?? undefined, lat: a.data.lat ?? null, lng: a.data.lng ?? null,
     });
   } catch (e) {
     if (e instanceof TransitionError) return Response.json({ error: e.message }, { status: 409 });

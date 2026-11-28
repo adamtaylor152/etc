@@ -1,7 +1,7 @@
 import { requireOwner } from "@/server/auth";
 import Link from "next/link";
 import { Card, Empty, PageHeader } from "@/components/ui";
-import { prettyDateTime, todayLocal } from "@/server/dates";
+import { fromLocalInput, prettyDateTime, todayLocal } from "@/server/dates";
 import { businessId, db } from "@/server/db";
 import { money } from "@/server/money";
 import { clientName } from "@/server/queries";
@@ -15,11 +15,12 @@ export default async function Payments() {
   const toMatch = await db.unmatchedPayment.count({ where: { businessId: bid, status: "OPEN" } });
   const payments = await db.payment.findMany({ where: { businessId: bid }, include: { client: true, invoice: true }, orderBy: { receivedAt: "desc" }, take: 300 });
   const year = todayLocal().slice(0, 4);
-  const thisYear = payments.filter((p) => p.receivedAt.toISOString().startsWith(year));
-  const byMethod = Object.entries(thisYear.reduce<Record<string, number>>((a, p) => ({ ...a, [p.method]: (a[p.method] ?? 0) + p.amountCents - p.refundedCents }), {}));
+  // Totals come from the database, not from the 300 rows listed below.
+  const sums = await db.payment.groupBy({ by: ["method"], where: { businessId: bid, receivedAt: { gte: fromLocalInput(`${year}-01-01T00:00`)!, lt: fromLocalInput(`${Number(year) + 1}-01-01T00:00`)! } }, _sum: { amountCents: true, refundedCents: true } });
+  const byMethod = sums.map((s) => [s.method, (s._sum.amountCents ?? 0) - (s._sum.refundedCents ?? 0)] as const).filter(([, c]) => c !== 0);
   return (
     <>
-      <PageHeader title="Payments" sub={`${money(thisYear.reduce((a, p) => a + p.amountCents - p.refundedCents, 0))} received in ${year}`}
+      <PageHeader title="Payments" sub={`${money(byMethod.reduce((a, [, c]) => a + c, 0))} received in ${year}`}
         actions={<>{toMatch > 0 && <Link href="/payments/unmatched" className="inline-flex min-h-11 items-center rounded-full border-2 border-amber-300 bg-amber-50 px-5 text-sm font-semibold text-amber-900">{toMatch} to match</Link>}<a href={`/api/export/payments?from=${year}-01-01&to=${year}-12-31`} className="inline-flex min-h-11 items-center rounded-full border-2 border-line bg-white px-5 text-sm font-semibold">Download {year} CSV</a></>} />
       {byMethod.length > 0 && (
         <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">

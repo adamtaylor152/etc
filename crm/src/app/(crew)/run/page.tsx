@@ -1,5 +1,6 @@
 // Route runner: my stops today, one at a time. Add it to the home screen for storm days.
 import Link from "next/link";
+import { DatePick } from "@/components/auto-submit";
 import { RouteRunner } from "@/components/route-runner";
 import { requireUser } from "@/server/auth";
 import { todayLocal } from "@/server/dates";
@@ -18,6 +19,7 @@ export default async function Run({ searchParams }: PageProps<"/run">) {
     <>
       <div className="mx-auto mb-3 flex max-w-lg items-center justify-between">
         <h1 className="font-display text-2xl font-bold">My route</h1>
+        <DatePick date={date} who={who === "all" ? "all" : undefined} />
         {owner && <span className="flex gap-1 rounded-lg bg-white p-1 text-xs font-semibold shadow-card">
           <Link href={`/run?date=${date}`} className={`rounded-md px-2 py-1 ${who !== "all" ? "bg-navy text-white" : "text-ink-soft"}`}>Mine</Link>
           <Link href={`/run?date=${date}&who=all`} className={`rounded-md px-2 py-1 ${who === "all" ? "bg-navy text-white" : "text-ink-soft"}`}>Everyone</Link>
