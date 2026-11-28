@@ -131,3 +131,18 @@ describe("deposits", () => {
     expect(depositCredit(30000, [])).toEqual([]);
   });
 });
+
+import { decodeAlloc, encodeAlloc, splitRefund } from "@/server/stripe";
+describe("stripe pay-all", () => {
+  it("round-trips the per-invoice split through metadata and ignores junk", () => {
+    const a = [{ invoiceId: "inv_a", cents: 3500 }, { invoiceId: "inv_b", cents: 6000 }];
+    expect(decodeAlloc(encodeAlloc(a))).toEqual(a);
+    expect(decodeAlloc("x:1.5,y:,z:200")).toEqual([{ invoiceId: "z", cents: 200 }]);
+    expect(encodeAlloc(Array.from({ length: 10 }, (_, i) => ({ invoiceId: `c${"x".repeat(24)}${i}`, cents: 999999 }))).length).toBeLessThan(500);
+  });
+  it("spreads a refund newest-first and only adds what's new", () => {
+    const rows = [{ id: "a", amountCents: 3500, refundedCents: 0 }, { id: "b", amountCents: 6000, refundedCents: 0 }];
+    expect(splitRefund(rows, 7000)).toEqual([{ id: "b", refundedCents: 6000 }, { id: "a", refundedCents: 1000 }]);
+    expect(splitRefund([{ id: "a", amountCents: 3500, refundedCents: 1000 }], 1000)).toEqual([]);
+  });
+});

@@ -141,6 +141,9 @@ export async function markSent(user: Actor, invoiceId: string) {
   await db.invoice.update({ where: { id: inv.id }, data: { status: "AWAITING_PAYMENT", issuedOn: toDbDate(today), dueOn: toDbDate(dueDate(today, inv.paymentTerms)), sentAt: new Date() } });
 }
 
+/** Re-derive paid amount and status after a payment or refund changes. */
+export const recomputeInvoice = (invoiceId: string) => recompute(db, invoiceId);
+
 async function recompute(tx: Tx, invoiceId: string) {
   const inv = await tx.invoice.findUniqueOrThrow({ where: { id: invoiceId } });
   const agg = await tx.payment.aggregate({ where: { invoiceId }, _sum: { amountCents: true, refundedCents: true } });

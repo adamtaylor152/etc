@@ -6,6 +6,7 @@ import { env } from "@/server/env";
 import { logActivity, nextNumber } from "@/server/records";
 import { renewPlan } from "@/server/ops/jobs";
 import { peekToken } from "@/server/tokens";
+import { checkoutForInvoices, stripeEnabled } from "@/server/stripe";
 
 async function hubClient(f: FormData) {
   const token = String(f.get("t") ?? "");
@@ -68,4 +69,21 @@ export async function hubSetTexts(f: FormData) {
   const on = f.get("on") === "1";
   await db.client.update({ where: { id: client.id }, data: { smsOptIn: on } });
   redirect(`/hub/${token}?texts=${on ? "on" : "off"}`);
+}
+
+/** "Pay all" from the hub: one card checkout covering every open invoice (oldest first, up to 10). */
+export async function hubPayAll(f: FormData) {
+  const { token, client } = await hubClient(f);
+  if (!stripeEnabled()) redirect(`/hub/${token}`);
+  const open = await db.invoice.findMany({ where: { clientId: client.id, status: "AWAITING_PAYMENT" }, orderBy: { number: "asc" } });
+  const list = open.map((i) => ({ id: i.id, number: i.number, balanceCents: i.totalCents - i.amountPaidCents })).filter((i) => i.balanceCents >= 50);
+  if (!list.length) redirect(`/hub/${token}`);
+  let url: string | null = null;
+  try {
+    const s = await checkoutForInvoices({ businessId: client.businessId, clientId: client.id, email: client.email, invoices: list, successUrl: `${env.appUrl}/hub/${token}?paid=1`, cancelUrl: `${env.appUrl}/hub/${token}` });
+    url = s.url;
+  } catch (e) {
+    console.error("pay-all checkout failed", e);
+  }
+  redirect(url ?? `/hub/${token}?error=${encodeURIComponent("Card payments are having trouble. Try again, or pay by e-Transfer.")}`);
 }
