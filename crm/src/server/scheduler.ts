@@ -8,6 +8,7 @@ import { sendReviewRequests } from "./ops/marketing";
 import { syncTelnyxCalls } from "./ops/calls";
 import { db } from "./db";
 import { env } from "./env";
+import { sweepRateLimits } from "./http";
 import { reminderDue } from "./billing/invoice";
 import { addDays, dateOnly, todayLocal, toDbDate, TZ } from "./dates";
 import { forecast, snowByDay } from "./forecast";
@@ -50,21 +51,35 @@ const LOCK_HOURLY = 724_001;
 const LOCK_CALLS = 724_002;
 let lastCallSync = 0;
 
+/**
+ * Run one automation on its own: a failure is logged and recorded, and the rest of the hour's work still happens.
+ * Each success or failure is stamped in AutomationRun, which /api/healthz reports, so a job that keeps failing shows up.
+ */
+export async function automation(name: string, fn: () => Promise<unknown>) {
+  let data: { lastOkAt: Date } | { lastFailAt: Date; lastError: string };
+  try { await fn(); data = { lastOkAt: new Date() }; } catch (e) {
+    console.error(`automation ${name} failed`, e);
+    data = { lastFailAt: new Date(), lastError: String(e instanceof Error ? e.message : e).slice(0, 500) };
+  }
+  await db.automationRun.upsert({ where: { name }, create: { name, ...data }, update: data }).catch((e) => console.error(`automation ${name}: could not record the run`, e));
+}
+
 /** Hourly automations. Each one is idempotent (dedupe keys / state checks), so a missed or doubled run is harmless. */
 async function hourly() {
   const hour = Number(new Intl.DateTimeFormat("en-CA", { timeZone: TZ, hour: "numeric", hourCycle: "h23" }).format(new Date()));
-  if (hour >= 8 && hour < 20) await invoiceReminders(); // no reminder emails at night
-  if (hour >= 7 && hour < 22) await snowAlert();
-  if (hour >= 9 && hour < 19) await quoteFollowUps();
-  for (const b of await db.business.findMany({ select: { id: true } })) await generateRecurringVisits(b.id);
-  if (hour === 7) await monthlyInvoices();
-  if (hour >= 7 && hour < 20) await invoiceSeasonalInstalments(); // due instalments of seasonal snow plans; emails the client
-  if (hour >= 7 && hour < 20) await invoiceRecurringPeriods(); // recurring jobs on a fixed monthly price: a draft per month due
-  if (hour >= 8 && hour < 20) await runAutoPay().catch((e) => console.error("auto-pay run failed", e)); // saved cards: charge due invoices, retry failed ones
-  if (hour >= 6 && hour < 22) await visitReminders(hour);
-  if (hour >= 10 && hour < 18) await reviewRequests();
-  if (hour === 6) await dailyDigest();
-  await opsAlerts();
+  if (hour >= 8 && hour < 20) await automation("invoiceReminders", invoiceReminders); // no reminder emails at night
+  if (hour >= 7 && hour < 22) await automation("snowAlert", snowAlert);
+  if (hour >= 9 && hour < 19) await automation("quoteFollowUps", () => quoteFollowUps());
+  await automation("recurringVisits", async () => { for (const b of await db.business.findMany({ select: { id: true } })) await generateRecurringVisits(b.id); });
+  if (hour === 7) await automation("monthlyInvoices", monthlyInvoices);
+  if (hour >= 7 && hour < 20) await automation("seasonalInstalments", invoiceSeasonalInstalments); // due instalments of seasonal snow plans; emails the client
+  if (hour >= 7 && hour < 20) await automation("recurringInvoices", invoiceRecurringPeriods); // recurring jobs on a fixed monthly price: a draft per month due
+  if (hour >= 8 && hour < 20) await automation("autoPay", runAutoPay); // saved cards: charge due invoices, retry failed ones
+  if (hour >= 6 && hour < 22) await automation("visitReminders", () => visitReminders(hour));
+  if (hour >= 10 && hour < 18) await automation("reviewRequests", reviewRequests);
+  if (hour === 6) await automation("dailyDigest", dailyDigest);
+  await automation("rateLimitSweep", () => sweepRateLimits());
+  await automation("opsAlerts", opsAlerts);
 }
 
 /** Texts failing: email the owners (once a day). Emails failing can't be emailed: the outside monitor catches those. */

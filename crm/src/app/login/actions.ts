@@ -12,7 +12,7 @@ export async function requestLogin(form: FormData) {
   const h = await headers();
   const ip = h.get("cf-connecting-ip") ?? h.get("x-forwarded-for")?.split(",").pop()?.trim() ?? "?";
   // Same answer whether or not the email is an owner, so the page never reveals who has access.
-  if (email && !limited(`login:${email}`, 5, 900_000) && !limited(`login-ip:${ip}`, 20, 900_000)) {
+  if (email && !(await limited(`login:${email}`, 5, 900_000)) && !(await limited(`login-ip:${ip}`, 20, 900_000))) {
     const bid = await businessId();
     const user = await db.user.findFirst({ where: { businessId: bid, email, active: true } });
     if (user) {

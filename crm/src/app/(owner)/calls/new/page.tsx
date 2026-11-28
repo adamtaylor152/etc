@@ -1,5 +1,6 @@
 // Log a phone call by hand (calls to 403-656-8200 are also logged automatically from Telnyx).
 import { requireOwner } from "@/server/auth";
+import { ClientSelect } from "@/components/client-select";
 import { DetailHeader } from "@/components/detail-header";
 import { Field, Input, Textarea } from "@/components/ui";
 import { toLocalInput } from "@/server/dates";
@@ -14,7 +15,7 @@ export default async function NewCall({ searchParams }: PageProps<"/calls/new">)
   const sp = await searchParams;
   const bid = await businessId();
   const pre = typeof sp.client === "string" ? sp.client : "";
-  const clients = await db.client.findMany({ where: { businessId: bid, archivedAt: null }, orderBy: [{ firstName: "asc" }, { lastName: "asc" }], take: 3000 });
+  const client = pre ? await db.client.findFirst({ where: { id: pre, businessId: bid } }) : null;
   const back = typeof sp.back === "string" ? sp.back : pre ? `/clients/${pre}?tab=activity` : "/activity";
   return (
     <>
@@ -23,10 +24,7 @@ export default async function NewCall({ searchParams }: PageProps<"/calls/new">)
         <input type="hidden" name="back" value={back} />
         {typeof sp.error === "string" && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-medium text-red-800">{sp.error}</p>}
         <Field label="Client">
-          <select name="clientId" defaultValue={pre} className="min-h-10 w-full rounded-lg border border-line bg-white px-3">
-            <option value="">Not a client yet (enter the number below)</option>
-            {clients.map((c) => <option key={c.id} value={c.id}>{clientName(c)}{c.phone ? ` · ${c.phone}` : ""}</option>)}
-          </select>
+          <ClientSelect initial={client && { id: client.id, name: clientName(client) }} none="Not a client yet (enter the number below)" />
         </Field>
         <Field label="Phone number (if not a client)"><Input name="number" type="tel" placeholder="403-555-0101" /></Field>
         <div className="grid gap-3 sm:grid-cols-3">

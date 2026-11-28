@@ -1410,3 +1410,18 @@ model TimeOff {
 
   @@index([businessId, startDate])
 }
+
+/** Durable rate limiting (src/server/http.ts): one fixed window per key. Old rows are swept by the hourly scheduler. */
+model RateLimit {
+  key         String   @id
+  windowStart DateTime
+  count       Int
+}
+
+/** When each hourly automation last worked or failed (src/server/scheduler.ts), so /api/healthz shows a silently failing one. */
+model AutomationRun {
+  name       String    @id
+  lastOkAt   DateTime?
+  lastFailAt DateTime?
+  lastError  String?
+}

@@ -93,7 +93,7 @@ describe("driveway size", () => {
   });
 });
 
-import { verdict } from "@/server/health";
+import { automationReport, verdict } from "@/server/health";
 
 describe("health verdict", () => {
   const ok = { dbOk: true, cronEnabled: true, lastTickMs: 30_000, upMs: 3_600_000, emailStuck: 0, emailFailed: 0, smsFailed: 0 };
@@ -110,5 +110,20 @@ describe("health verdict", () => {
     expect(verdict({ ...ok, emailStuck: 1 })).toMatchObject({ up: true, checks: { emails: false } });
     expect(verdict({ ...ok, emailFailed: 1 }).checks.emails).toBe(true);
     expect(verdict({ ...ok, smsFailed: 3 }).checks.texts).toBe(false);
+  });
+  it("reports each automation's last good run, and flags one whose latest run failed", () => {
+    const now = Date.UTC(2026, 10, 28, 12), ago = (min: number) => new Date(now - min * 60_000);
+    const r = automationReport([
+      { name: "autoPay", lastOkAt: ago(90), lastFailAt: ago(30) }, // worked, then failed
+      { name: "invoiceReminders", lastOkAt: ago(30), lastFailAt: ago(90) }, // failed, then recovered
+      { name: "quoteFollowUps", lastOkAt: null, lastFailAt: ago(5) }, // never worked
+      { name: "visitReminders", lastOkAt: ago(600), lastFailAt: null }, // overnight: old but not failing
+    ], now);
+    expect(r.automations).toEqual({
+      autoPay: { lastGoodMinutesAgo: 90, failing: true }, invoiceReminders: { lastGoodMinutesAgo: 30, failing: false },
+      quoteFollowUps: { lastGoodMinutesAgo: null, failing: true }, visitReminders: { lastGoodMinutesAgo: 600, failing: false },
+    });
+    expect(r.allGood).toBe(false);
+    expect(automationReport([], now)).toEqual({ automations: {}, allGood: true });
   });
 });

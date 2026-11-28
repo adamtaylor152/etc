@@ -47,7 +47,7 @@ export async function pickNewTime(f: FormData) {
   const { token, v } = await visitFor(f);
   const [date, key] = String(f.get("slot") ?? "").split("|");
   const on = (await getSettings(db, v.businessId)).clientReschedule;
-  if (!on || v.state !== "SCHEDULED" || v.job.kind === "SNOW_PLAN" || limited(`resched:${v.id}`, 5, 3_600_000)) redirect(`/c/${token}`);
+  if (!on || v.state !== "SCHEDULED" || v.job.kind === "SNOW_PLAN" || await limited(`resched:${v.id}`, 5, 3_600_000)) redirect(`/c/${token}`);
   const w = await claimReschedule(v.businessId, v, date, key ?? "");
   if (!w) redirect(`/c/${token}?done=taken`);
   await db.$transaction(async (tx) => {

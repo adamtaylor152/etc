@@ -1,5 +1,6 @@
 import { requireOwner } from "@/server/auth";
 import Link from "next/link";
+import { Pager, pageOf } from "@/components/list-page";
 import { Card, Empty, PageHeader } from "@/components/ui";
 import { fromLocalInput, prettyDateTime, todayLocal } from "@/server/dates";
 import { businessId, db } from "@/server/db";
@@ -9,13 +10,15 @@ import { clientName } from "@/server/queries";
 export const metadata = { title: "Payments" };
 const METHOD: Record<string, string> = { CASH: "Cash", ETRANSFER: "e-Transfer", CARD: "Card", CHEQUE: "Cheque", OTHER: "Other" };
 
-export default async function Payments() {
+export default async function Payments({ searchParams }: PageProps<"/payments">) {
   await requireOwner();
+  const sp = await searchParams;
   const bid = await businessId();
   const toMatch = await db.unmatchedPayment.count({ where: { businessId: bid, status: "OPEN" } });
-  const payments = await db.payment.findMany({ where: { businessId: bid }, include: { client: true, invoice: true }, orderBy: { receivedAt: "desc" }, take: 300 });
+  const at = pageOf(typeof sp.page === "string" ? sp.page : undefined, await db.payment.count({ where: { businessId: bid } }));
+  const payments = await db.payment.findMany({ where: { businessId: bid }, include: { client: true, invoice: true }, orderBy: [{ receivedAt: "desc" }, { id: "desc" }], skip: at.skip, take: at.take });
   const year = todayLocal().slice(0, 4);
-  // Totals come from the database, not from the 300 rows listed below.
+  // Totals come from the database, not from the page of rows listed below.
   const sums = await db.payment.groupBy({ by: ["method"], where: { businessId: bid, receivedAt: { gte: fromLocalInput(`${year}-01-01T00:00`)!, lt: fromLocalInput(`${Number(year) + 1}-01-01T00:00`)! } }, _sum: { amountCents: true, refundedCents: true } });
   const byMethod = sums.map((s) => [s.method, (s._sum.amountCents ?? 0) - (s._sum.refundedCents ?? 0)] as const).filter(([, c]) => c !== 0);
   return (
@@ -40,6 +43,7 @@ export default async function Payments() {
             ))}
           </ul>
         ) : <Empty>No payments yet.</Empty>}
+        <Pager base="/payments" params={{}} at={at} />
       </Card>
     </>
   );

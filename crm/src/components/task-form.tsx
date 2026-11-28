@@ -4,6 +4,7 @@ import type { Win } from "@/server/windows";
 import { taskDelete, taskSave } from "@/app/(owner)/schedule-actions";
 import { REPEATS } from "@/server/ops/tasks";
 import type { Person } from "@/server/schedule";
+import { ClientSelect } from "./client-select";
 import { ConfirmButton } from "./confirm-button";
 import { Field, Input, Textarea } from "./ui";
 
@@ -12,7 +13,7 @@ export type TaskDefaults = {
   allDay: boolean; repeat: string; assigneeIds: string[]; series: boolean;
 };
 
-export function TaskForm({ d, clients, team, back, error, windows }: { windows?: Win[]; d: TaskDefaults; clients: { id: string; name: string }[]; team: Person[]; back: string; error?: string }) {
+export function TaskForm({ d, client, team, back, error, windows }: { windows?: Win[]; d: TaskDefaults; client?: { id: string; name: string } | null; team: Person[]; back: string; error?: string }) {
   const sel = "min-h-10 w-full rounded-lg border border-line bg-white px-3";
   return (
     <div className="max-w-2xl space-y-3">
@@ -28,7 +29,7 @@ export function TaskForm({ d, clients, team, back, error, windows }: { windows?:
         <Field label="Title"><Input name="title" required defaultValue={d.title} placeholder="Pick up salt, call back Jane, day off…" /></Field>
         <Field label="Instructions"><Textarea name="instructions" rows={3} defaultValue={d.instructions} /></Field>
         <Field label="Client (optional)">
-          <select name="clientId" defaultValue={d.clientId} className={sel}><option value="">No client</option>{clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
+          <ClientSelect initial={client} />
         </Field>
         <div className="grid gap-3 sm:grid-cols-3">
           <Field label="Date"><Input name="date" type="date" defaultValue={d.date} /></Field>

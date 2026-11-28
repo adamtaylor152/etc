@@ -1,5 +1,6 @@
-// Health. Plain: for the outside monitor (.github/workflows/monitor.yml): 503 = down (database or scheduler); email/text
-// trouble shows as ok:false with 200. ?live=1: database only, for the container HEALTHCHECK, so a stalled scheduler
+// Health. Plain: for the outside monitor (.github/workflows/monitor.yml): 503 = down (database or scheduler); email, text
+// or automation trouble shows as ok:false with 200. `automations` lists each hourly job: minutes since it last worked
+// and whether its latest run failed. ?live=1: database only, for the container HEALTHCHECK, so a stalled scheduler
 // never makes the proxy stop sending traffic to an otherwise working site. Booleans and counts only.
 import { db } from "@/server/db";
 import { health } from "@/server/health";
@@ -11,5 +12,5 @@ export async function GET(req: Request) {
     try { await db.$queryRaw`SELECT 1`; return Response.json({ ok: true }); } catch { return Response.json({ ok: false }, { status: 503 }); }
   }
   const h = await health();
-  return Response.json({ ok: h.up && h.checks.emails && h.checks.texts, ...h }, { status: h.up ? 200 : 503, headers: { "Cache-Control": "no-store" } });
+  return Response.json({ ok: h.up && h.checks.emails && h.checks.texts && h.checks.automations, ...h }, { status: h.up ? 200 : 503, headers: { "Cache-Control": "no-store" } });
 }
