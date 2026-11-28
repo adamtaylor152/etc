@@ -42,7 +42,7 @@ export default async function Team({ searchParams }: PageProps<"/settings/team">
       <legend className="mb-1 block text-sm font-semibold">Colour on the schedule</legend>
       <div className="flex min-h-10 flex-wrap items-center gap-1.5">
         {[...new Set([...COLORS, current])].map((c) => (
-          <label key={c} title={COLOR_NAMES[c] ?? c} className="relative grid size-9 cursor-pointer place-items-center rounded-full">
+          <label key={c} title={COLOR_NAMES[c] ?? c} className="relative grid size-9 cursor-pointer place-items-center rounded-full max-sm:size-11">
             <input type="radio" name="color" value={c} defaultChecked={c === current} className="peer sr-only" />
             <span aria-hidden className="size-6 rounded-full ring-offset-2 ring-offset-white peer-checked:ring-2 peer-checked:ring-navy peer-focus-visible:ring-2 peer-focus-visible:ring-blue" style={{ background: c }} />
             <span className="sr-only">{COLOR_NAMES[c] ?? c}</span>

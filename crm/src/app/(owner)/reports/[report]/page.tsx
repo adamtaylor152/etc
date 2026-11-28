@@ -47,7 +47,9 @@ export default async function ReportPage({ params, searchParams }: PageProps<"/r
   const sums = totals(t);
   const qs = def.ranged ? `?from=${r.from}&to=${r.to}` : picked?.season ? `?season=${picked.season.id}` : "";
   // Stored codes read as words on screen ("AWAITING_PAYMENT" -> "Awaiting payment"); the CSV keeps the raw values.
-  const words = (v: string) => (v === "ETRANSFER" ? "e-Transfer" : /^[A-Z]{4,}(_[A-Z]+)*$/.test(v) ? v[0] + v.slice(1).toLowerCase().replaceAll("_", " ") : v);
+  const words = (v: string) => (v === "ETRANSFER" ? "e-Transfer" : v === "ONE_OFF" ? "One-off"
+    : /^\d{4}-\d{2}-\d{2}$/.test(v) ? new Date(`${v}T12:00:00Z`).toLocaleDateString("en-CA", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })
+    : /^([A-Z]{4,}|[A-Z]+(_[A-Z]+)+)$/.test(v) ? v[0] + v.slice(1).toLowerCase().replaceAll("_", " ") : v);
   const show = (v: string | number | null, k: Kind) => (v == null ? "" : k === "money" ? cad(v as number) : k === "num" ? (v as number).toLocaleString("en-CA") : words(String(v)));
   const cell = (k: Kind) => (k === "text" ? "text-left" : "whitespace-nowrap text-right tabular-nums");
   // Dates, numbers and short labels keep to one line; anything longer may wrap, so a nine-column report fits a laptop.

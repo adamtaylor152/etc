@@ -50,9 +50,9 @@ describe("route times", () => {
   });
   it("tells clients a 30-minute window that always contains the estimate", () => {
     // Calgary is UTC-6 in July whatever the tzdata says about winter.
-    expect(etaWindow(new Date("2027-07-15T15:22:00Z"))).toBe("9:00-9:30am");
-    expect(etaWindow(new Date("2027-07-15T15:29:00Z"))).toBe("9:15-9:45am");
-    expect(etaWindow(new Date("2027-07-15T17:50:00Z"))).toBe("11:30am-12:00pm");
+    expect(etaWindow(new Date("2027-07-15T15:22:00Z"))).toBe("9:00–9:30 a.m.");
+    expect(etaWindow(new Date("2027-07-15T15:29:00Z"))).toBe("9:15–9:45 a.m.");
+    expect(etaWindow(new Date("2027-07-15T17:50:00Z"))).toBe("11:30 a.m.–12:00 p.m.");
   });
 });
 

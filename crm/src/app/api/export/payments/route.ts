@@ -18,7 +18,7 @@ export async function GET(req: Request) {
     },
     include: { client: true, invoice: true }, orderBy: { receivedAt: "asc" },
   });
-  const rows = [["Date", "Client", "Invoice", "Method", "Amount", "Refunded", "Tip", "Stripe fee", "Reference", "Note"]];
+  const rows = [["Date", "Client", "Invoice", "Method", "Amount", "Refunded", "Tip", "Card fee", "Reference", "Note"]];
   for (const p of payments) {
     rows.push([
       p.receivedAt.toLocaleDateString("en-CA", { timeZone: TZ }), clientName(p.client), `#${p.invoice.number}`, p.method,

@@ -35,8 +35,8 @@ describe("isConfirm", () => {
 describe("arrival windows", () => {
   it("default to the four standard windows and describe themselves", () => {
     expect(SettingsSchema.parse({}).arrivalWindows).toEqual(WINDOWS);
-    expect(WINDOWS.map(windowHint)).toEqual(["3–6 am", "6–11 am", "10 am–5 pm", "5–10 pm"]);
-    expect(windowHint({ from: "08:30", to: "12:00" })).toBe("8:30 am–12 pm");
+    expect(WINDOWS.map(windowHint)).toEqual(["3–6 a.m.", "6–11 a.m.", "10 a.m.–5 p.m.", "5–10 p.m."]);
+    expect(windowHint({ from: "08:30", to: "12:00" })).toBe("8:30 a.m.–12 p.m.");
   });
   it("reject a window that ends before it starts", () => {
     expect(SettingsSchema.safeParse({ arrivalWindows: [{ key: "x", label: "X", from: "12:00", to: "09:00" }] }).success).toBe(false);

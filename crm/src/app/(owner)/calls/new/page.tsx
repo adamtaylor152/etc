@@ -20,7 +20,7 @@ export default async function NewCall({ searchParams }: PageProps<"/calls/new">)
   const back = typeof sp.back === "string" ? sp.back : pre ? `/clients/${pre}?tab=activity` : "/activity";
   return (
     <>
-      <DetailHeader back={{ href: back, label: "Back" }} title="Log a call" sub="Calls to 403-656-8200 show up on their own within a few minutes. Use this for calls from your cell or to add notes." />
+      <DetailHeader back={{ href: back, label: "Back" }} title="Log a call" sub="Calls to (403) 656-8200 show up on their own within a few minutes. Use this for calls from your cell or to add notes." />
       <div className="max-w-xl">
         <Flash error={sp.error} />
         <Card>

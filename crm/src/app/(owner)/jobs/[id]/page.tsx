@@ -231,7 +231,7 @@ export default async function JobPage({ params, searchParams }: PageProps<"/jobs
                     {instalments.map((i) => (
                       <li key={i.n} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 py-2 tabular-nums">
                         <span>{prettyDate(i.dueOn)} · <span className="font-semibold">{cad(i.amountCents)}</span></span>
-                        {i.invoice ? <Link href={`/invoices/${i.invoice.id}`} className="font-semibold text-blue hover:text-blue-deep">Invoice #{i.invoice.number} · {i.invoice.status === "PAID" ? "Paid" : i.invoice.status === "VOID" ? "Void" : "Unpaid"}</Link>
+                        {i.invoice ? <Link href={`/invoices/${i.invoice.id}`} className="font-semibold text-blue hover:text-blue-deep max-sm:inline-flex max-sm:min-h-11 max-sm:items-center">Invoice #{i.invoice.number} · {i.invoice.status === "PAID" ? "Paid" : i.invoice.status === "VOID" ? "Void" : "Unpaid"}</Link>
                           : <span className="text-ink-soft">{closed ? "Not invoiced (plan ended)" : i.dueOn <= today ? "Invoicing within the hour" : "Not due yet"}</span>}
                       </li>
                     ))}

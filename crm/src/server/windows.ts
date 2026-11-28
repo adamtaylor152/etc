@@ -8,9 +8,9 @@ export const WINDOWS: Win[] = [
   { key: "evening", label: "Evening", from: "17:00", to: "22:00" },
 ];
 const clock = (hm: string) => { const [h, m] = hm.split(":").map(Number); return `${h % 12 || 12}${m ? `:${String(m).padStart(2, "0")}` : ""}`; };
-/** "6–11 am", "10 am–5 pm". Pure, unit-tested. */
+/** "6–11 a.m.", "10 a.m.–5 p.m.". Pure, unit-tested. */
 export function windowHint(w: Pick<Win, "from" | "to">) {
-  const ap = (hm: string) => (Number(hm.slice(0, 2)) < 12 ? "am" : "pm");
+  const ap = (hm: string) => (Number(hm.slice(0, 2)) < 12 ? "a.m." : "p.m.");
   return ap(w.from) === ap(w.to) ? `${clock(w.from)}–${clock(w.to)} ${ap(w.to)}` : `${clock(w.from)} ${ap(w.from)}–${clock(w.to)} ${ap(w.to)}`;
 }
 export const withHints = (ws: Win[]) => ws.map((w) => ({ ...w, hint: windowHint(w) }));

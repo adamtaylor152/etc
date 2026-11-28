@@ -19,7 +19,7 @@ const first = (n: string) => n.trim().split(" ")[0] || "there";
 const worded = (key: SmsKey, vars: Record<string, string>) => ({ key, vars });
 
 /**
- * ", arriving around 9:00-9:30am" for a visit the crew just set off to, or "" when we can't say honestly: only with
+ * ", arriving around 9:00–9:30 a.m." for a visit the crew just set off to, or "" when we can't say honestly: only with
  * real road times (never the straight-line guess), from where the crew last finished today (else their start point).
  */
 async function arrival(v: { id: string; businessId: string; enRouteAt: Date | null; scheduledDate: Date | null; property: { lat: number | null; lng: number | null }; assignees: { userId: string }[] }) {

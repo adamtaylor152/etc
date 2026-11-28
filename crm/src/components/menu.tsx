@@ -36,7 +36,7 @@ export function Menu({ label = "More", items, primary = false, align = "right", 
         {icon === "dots" ? <MoreHorizontal className="size-4" aria-hidden /> : <>{label}<ChevronDown className={`-mr-1 size-4 transition-transform ${open ? "rotate-180" : ""}`} aria-hidden /></>}
       </button>
       {open && (
-        <div role="menu" className={`absolute top-full z-30 mt-1.5 min-w-56 max-w-[calc(100vw-2rem)] rounded-xl border border-line bg-white p-1 text-navy shadow-lift ${side === "right" ? "right-0" : "left-0"}`}>
+        <div role="menu" className={`absolute top-full z-30 mt-1.5 min-w-56 max-w-[calc(100vw-2rem)] sm:whitespace-nowrap rounded-xl border border-line bg-white p-1 text-navy shadow-lift ${side === "right" ? "right-0" : "left-0"}`}>
           {items.map((it, i) => {
             if ("divider" in it) return <hr key={i} className="-mx-1 my-1 border-line-soft" />;
             const tone = it.danger ? " text-red-700 hover:bg-red-50" : " hover:bg-tint";

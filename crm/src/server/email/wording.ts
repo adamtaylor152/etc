@@ -18,7 +18,7 @@ export const VAR_HELP: Record<string, string> = {
   invoice_number: "the invoice number", invoice_subject: "what the invoice is for", balance: "what is still owing", due_date: "the due date",
   amount: "the amount", payment_method: "how it was paid", card: "the saved card (“Visa ending 4242”)", decline_reason: "why the bank said no",
   period: "the dates the statement covers", season: "the snow season", price: "the price", old_price: "the price before",
-  link: "the link this text is for", arrival: "“, arriving around 9:00-9:30am” when we know, otherwise nothing",
+  link: "the link this text is for", arrival: "“, arriving around 9:00–9:30 a.m.” when we know, otherwise nothing",
 };
 export type Wording = { subject?: string | null; intro?: string | null; closing?: string | null };
 export const COMMON_VARS = ["first_name", "business_name", "business_phone"] as const;
@@ -70,7 +70,7 @@ const SAMPLE = { first_name: "Sam", business_name: "etc.", business_phone: "403-
 
 /** Client texts with wording the owner can change; `text` is the built-in wording. Campaign, team and opt-in texts are not here. */
 export const SMS_META = {
-  "sms.on_my_way": { group: "Visits", label: "On our way", trigger: "The crew taps On my way.", vars: ["address", "arrival"], required: [FROM, STOP], sample: { ...SAMPLE, arrival: ", arriving around 9:00-9:30am" },
+  "sms.on_my_way": { group: "Visits", label: "On our way", trigger: "The crew taps On my way.", vars: ["address", "arrival"], required: [FROM, STOP], sample: { ...SAMPLE, arrival: ", arriving around 9:00–9:30 a.m." },
     text: "Hi {{first_name}}, the etc. crew is on the way to {{address}}{{arrival}}. No need to be home. - etc. (Reply STOP to opt out)" },
   "sms.visit_done": { group: "Visits", label: "All done", trigger: "A visit is marked done.", vars: ["address", "link"], required: [LINK, FROM], sample: SAMPLE,
     text: "All done at {{address}}! Before & after photos: {{link}} - etc." },

@@ -91,7 +91,7 @@ export function SmsEditor({ k, saved }: { k: SmsKey; saved: string | null }) {
           {body.trim() && final.added.length > 0 && <p className="rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-sm font-medium text-amber-950">This text has to say {final.added.join(" and ")}, so we&apos;ll add it to the end.</p>}
           <div className="rounded-lg bg-tint p-3">
             <p className="mb-2 text-xs font-medium text-ink-soft">What the client gets</p>
-            <p className="ml-auto w-fit max-w-[22rem] whitespace-pre-line break-words rounded-2xl rounded-br-md bg-blue px-3.5 py-2 text-[15px] leading-snug text-white">{body.trim() ? sample : fill(meta.text, meta.sample)}</p>
+            <p className="ml-auto w-fit max-w-[min(22rem,100%)] whitespace-pre-line [overflow-wrap:anywhere] rounded-2xl rounded-br-md bg-blue px-3.5 py-2 text-[15px] leading-snug text-white">{body.trim() ? sample : fill(meta.text, meta.sample)}</p>
             <p className={`mt-2 text-xs ${sample.length > 300 ? "font-semibold text-red-700" : "text-ink-soft"}`}>
               {sample.length} characters · {seg.parts} text{seg.parts === 1 ? "" : "s"} per send{seg.unicode ? " (emoji or special characters make texts shorter)" : ""}, with a made-up name and address. Real ones can be longer.
               {sample.length > 300 && " Texts over 300 characters are cut off."}
