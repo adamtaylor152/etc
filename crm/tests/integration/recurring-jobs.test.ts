@@ -72,9 +72,9 @@ describe("recurring jobs", () => {
     await updateRecurrence(owner, job.id, { freq: "WEEKLY", byDay: [], startsOn: today, endsOn: null });
     expect((await db.visit.findUniqueOrThrow({ where: { id: first.id } })).lineOverrides).toEqual(extra);
 
-    const charged = async (id: string) => (await db.visitCharge.findMany({ where: { visitId: id }, orderBy: { createdAt: "asc" } })).map((c) => c.totalCents);
+    const charged = async (id: string) => (await db.visitCharge.findMany({ where: { visitId: id }, orderBy: { createdAt: "asc" } })).map((c) => c.totalCents).sort((x, y) => y - x); // written together = same timestamp, so compare amounts, not order
     await transitionVisit(owner, first.id, "COMPLETED");
-    expect(await charged(first.id)).toEqual([2500, 1000, 1500]);
+    expect(await charged(first.id)).toEqual([2500, 1500, 1000]);
     await expect(setVisitLines(owner, first.id, lines)).rejects.toThrow(/Reopen/);
     // Reopen, drop the override, complete again: charged once, from the job's lines.
     await transitionVisit(owner, first.id, "SCHEDULED");
